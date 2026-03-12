@@ -57,7 +57,8 @@ const Orders = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
-    const [dateFilter, setDateFilter] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -125,13 +126,20 @@ const Orders = () => {
         const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
 
         let matchesDate = true;
-        if (dateFilter && o.createdAt) {
-            const orderDate = new Date(o.createdAt.toMillis()).toISOString().split('T')[0];
-            matchesDate = orderDate === dateFilter;
+        if (o.createdAt) {
+            const orderTimestamp = o.createdAt.toMillis();
+            if (startDate) {
+                const start = new Date(startDate).setHours(0, 0, 0, 0);
+                if (orderTimestamp < start) matchesDate = false;
+            }
+            if (endDate && matchesDate) {
+                const end = new Date(endDate).setHours(23, 59, 59, 999);
+                if (orderTimestamp > end) matchesDate = false;
+            }
         }
 
         return matchesSearch && matchesStatus && matchesDate;
-    }), [orders, searchTerm, statusFilter, dateFilter]);
+    }), [orders, searchTerm, statusFilter, startDate, endDate]);
 
     const stats = useMemo(() => ({
         totalCount: orders.length,
@@ -250,34 +258,58 @@ const Orders = () => {
                 </div>
             </div>
 
-            <div className="table-filters" style={{ marginBottom: '20px' }}>
-                <div className="search-box">
+            <div className="table-filters" style={{ marginBottom: '25px', gap: '15px', alignItems: 'flex-end' }}>
+                <div className="search-box" style={{ flex: 2 }}>
                     <Search size={18} />
                     <input type="text" placeholder="ID, Нэр, Утас..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <div className="filter-group">
-                    <Filter size={18} />
-                    <select className="form-select" style={{ width: '160px', padding: '8px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                        <option value="all">Бүх төлөв</option>
-                        {Object.entries(STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
-                    </select>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                        <input
-                            type="date"
-                            className="form-input"
-                            style={{ width: '160px', padding: '8px 12px', paddingLeft: '35px' }}
-                            value={dateFilter}
-                            onChange={(e) => setDateFilter(e.target.value)}
-                        />
-                        <Calendar size={16} style={{ position: 'absolute', left: '12px', opacity: 0.5 }} />
-                        {dateFilter && (
-                            <button
-                                onClick={() => setDateFilter('')}
-                                style={{ position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}
-                            >
-                                <X size={14} />
-                            </button>
-                        )}
+                <div className="filter-group" style={{ flex: 3, display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <div className="filter-item">
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Төлөв</label>
+                        <div style={{ position: 'relative' }}>
+                            <select className="form-select" style={{ width: '150px', padding: '10px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                                <option value="all">Бүх төлөв</option>
+                                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="filter-item">
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Хугацаа (Эхлэх - Дуусах)</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="date"
+                                    className="form-input"
+                                    style={{ width: '150px', padding: '10px 12px', paddingLeft: '35px' }}
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                />
+                                <Calendar size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                            </div>
+                            <span style={{ color: '#999' }}>-</span>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    type="date"
+                                    className="form-input"
+                                    style={{ width: '150px', padding: '10px 12px', paddingLeft: '35px' }}
+                                    value={endDate}
+                                    min={startDate}
+                                    max={startDate ? new Date(new Date(startDate).setFullYear(new Date(startDate).getFullYear() + 1)).toISOString().split('T')[0] : undefined}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                />
+                                <Calendar size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                            </div>
+                            {(startDate || endDate) && (
+                                <button
+                                    className="btn-text-only"
+                                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                                    style={{ color: '#DC2626', fontSize: '0.8rem', fontWeight: 600, padding: '5px' }}
+                                >
+                                    Арилгах
+                                </button>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

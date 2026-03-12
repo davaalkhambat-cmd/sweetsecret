@@ -2844,7 +2844,26 @@ tbody tr:last-child td {
 
 .table-filters {
   display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filter-group {
+  display: flex;
   gap: 1rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filter-item label {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  letter-spacing: 0.5px;
 }
 
 .table-filters .search-box {
