@@ -11,7 +11,7 @@ import {
     signOut,
     updateProfile,
 } from 'firebase/auth';
-import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES, DEFAULT_ROLES } from '../config/roles';
 

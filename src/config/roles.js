@@ -193,8 +193,8 @@ export const isStaffRole = (roleKey) => {
 /**
  * Role-ийн дэлгэрэнгүй мэдээллийг авна
  */
-export const getRoleInfo = (roleKey) => {
-    return ROLES[roleKey] || ROLES.customer;
+export const getRoleInfo = (roleKey, rolesSource = ROLES) => {
+    return rolesSource[roleKey] || rolesSource.customer;
 };
 
 /**

@@ -9,8 +9,8 @@ const AdminLayout = () => {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const navigate = useNavigate();
-    const { user, userProfile, role, logout } = useAuth();
-    const roleInfo = getRoleInfo(role);
+    const { user, userProfile, role, roleInfo, logout } = useAuth();
+    const displayRoleInfo = roleInfo || { label: 'Ажилтан', color: '#6B7280', icon: '👤' };
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -43,9 +43,9 @@ const AdminLayout = () => {
                                 </span>
                                 <span
                                     className="header-role-tag"
-                                    style={{ background: roleInfo.color + '18', color: roleInfo.color }}
+                                    style={{ background: displayRoleInfo.color + '18', color: displayRoleInfo.color }}
                                 >
-                                    {roleInfo.icon} {roleInfo.label}
+                                    {displayRoleInfo.icon} {displayRoleInfo.label}
                                 </span>
                             </div>
                             <div className="avatar"><User size={20} /></div>
