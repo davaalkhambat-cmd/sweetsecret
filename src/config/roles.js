@@ -32,7 +32,7 @@ export const PERMISSIONS = {
 };
 
 // ─── Role Definitions ───────────────────────────────────────────
-export const ROLES = {
+export const DEFAULT_ROLES = {
     admin: {
         key: 'admin',
         label: 'Админ',
@@ -104,6 +104,8 @@ export const ROLES = {
         permissions: [],
     },
 };
+
+export const ROLES = DEFAULT_ROLES;
 
 // Staff-д хамрагдах role-үүд — эдгээр нь admin хэсэгт нэвтрэх боломжтой
 export const STAFF_ROLES = ['admin', 'manager', 'marketing_manager', 'sales', 'cashier'];

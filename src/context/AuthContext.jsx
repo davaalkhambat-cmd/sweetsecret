@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
-import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES } from '../config/roles';
+import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES, DEFAULT_ROLES } from '../config/roles';
 
 const AuthContext = createContext(null);
 
@@ -46,6 +46,7 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
     const [userProfile, setUserProfile] = useState(null);
+    const [roles, setRoles] = useState(DEFAULT_ROLES);
 
     const syncUserProfile = async (firebaseUser, options = {}) => {
         if (!firebaseUser?.uid) return;
@@ -112,28 +113,50 @@ export const AuthProvider = ({ children }) => {
             setLoading(false);
         });
 
+        let unsubscribeRoles = onSnapshot(
+            collection(db, 'role_definitions'),
+            (snapshot) => {
+                const dynamicRoles = {};
+                snapshot.docs.forEach((docSnap) => {
+                    const data = docSnap.data();
+                    dynamicRoles[data.key] = data;
+                });
+                setRoles({ ...DEFAULT_ROLES, ...dynamicRoles });
+            },
+            (error) => {
+                console.error('Roles fetch failed:', error);
+                setRoles(DEFAULT_ROLES);
+            }
+        );
+
         return () => {
             unsubscribeProfile();
             unsubscribe();
+            unsubscribeRoles();
         };
     }, []);
 
     const userRole = userProfile?.role || 'customer';
-    const isStaff = isStaffRole(userRole);
-    const isAdmin = ['admin', 'manager'].includes(userRole);
-    const roleInfo = getRoleInfo(userRole);
+    const roleData = roles[userRole] || roles.customer;
+    const isStaff = STAFF_ROLES.includes(userRole) || (roleData && roleData.key !== 'customer');
+    const isAdmin = userRole === 'admin' || (roleData && roleData.permissions.includes('manage_staff_roles'));
 
     const hasPermission = useCallback(
-        (permission) => roleHasPermission(userRole, permission),
-        [userRole]
+        (permission) => {
+            const currentRoleData = roles[userRole];
+            if (!currentRoleData) return false;
+            return currentRoleData.permissions.includes(permission);
+        },
+        [userRole, roles]
     );
 
     const value = useMemo(
         () => ({
             user,
             userProfile,
+            roles,
             role: userRole,
-            roleInfo,
+            roleInfo: roleData,
             isAdmin,
             isStaff,
             hasPermission,

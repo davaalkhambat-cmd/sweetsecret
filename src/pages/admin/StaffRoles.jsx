@@ -5,6 +5,7 @@ import {
     onSnapshot,
     updateDoc,
     serverTimestamp,
+    setDoc,
 } from 'firebase/firestore';
 import {
     Search,
@@ -19,17 +20,14 @@ import {
     Eye,
     EyeOff,
     Info,
+    Plus,
+    Palette,
 } from 'lucide-react';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import {
-    ROLES,
-    STAFF_ROLES,
     PERMISSIONS,
-    getAssignableRoles,
-    getRoleInfo,
-    roleHasPermission,
-    ADMIN_MENU,
+    STAFF_ROLES,
 } from '../../config/roles';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -86,7 +84,7 @@ const PERMISSION_LABELS = {
 
 // ─── Main Component ─────────────────────────────────────────────
 const StaffRoles = () => {
-    const { user: currentUser, role: currentRole, isAdmin } = useAuth();
+    const { user: currentUser, roles, isAdmin } = useAuth();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
@@ -97,6 +95,16 @@ const StaffRoles = () => {
     const [confirmDialog, setConfirmDialog] = useState(null);
     const [selectedRoleInfo, setSelectedRoleInfo] = useState(null);
     const [activeTab, setActiveTab] = useState('staff'); // 'staff' | 'roles'
+    const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+    const [newRole, setNewRole] = useState({
+        key: '',
+        label: '',
+        labelEn: '',
+        description: '',
+        color: '#2563EB',
+        icon: '👤',
+        permissions: []
+    });
 
     // Firestore listener
     useEffect(() => {
@@ -165,7 +173,7 @@ const StaffRoles = () => {
     }, [users, staffUsers]);
 
     // ─── Role Change ────────────────────────────────────────────
-    const handleRoleChange = (targetUser, newRole) => {
+    const handleRoleChange = (targetUser, newRoleKey) => {
         // Prevent self-demotion
         if (targetUser.id === currentUser?.uid) {
             setErrorMessage('Та өөрийнхөө эрхийг өөрчлөх боломжгүй!');
@@ -173,10 +181,10 @@ const StaffRoles = () => {
             return;
         }
 
-        const roleInfo = getRoleInfo(newRole);
+        const roleInfo = roles[newRoleKey] || roles.customer;
         setConfirmDialog({
             targetUser,
-            newRole,
+            newRole: newRoleKey,
             roleInfo,
             message: `"${targetUser.displayName || targetUser.email}" хэрэглэгчийн эрхийг "${roleInfo.label}" болгох уу?`,
         });
@@ -198,7 +206,7 @@ const StaffRoles = () => {
                 roleUpdatedBy: currentUser?.uid || 'unknown',
                 roleUpdatedAt: serverTimestamp(),
             });
-            const roleInfo = getRoleInfo(newRole);
+            const roleInfo = roles[newRole] || roles.customer;
             setSuccessMessage(
                 `✅ "${targetUser.displayName || targetUser.email}" → ${roleInfo.icon} ${roleInfo.label} болгосон`
             );
@@ -212,7 +220,58 @@ const StaffRoles = () => {
         }
     };
 
-    const assignableRoles = getAssignableRoles();
+    const assignableRoles = useMemo(() =>
+        Object.values(roles).filter(r => r.key !== 'customer'),
+        [roles]);
+
+    const handleCreateRole = async (e) => {
+        e.preventDefault();
+        if (!newRole.key || !newRole.label) {
+            setErrorMessage('Ролийн нэр болон түлхүүр үгийг заавал оруулна уу.');
+            return;
+        }
+
+        // Check if key already exists
+        if (roles[newRole.key]) {
+            setErrorMessage('Энэ түлхүүр үг аль хэдийн ашиглагдсан байна.');
+            return;
+        }
+
+        try {
+            await setDoc(doc(db, 'role_definitions', newRole.key), {
+                ...newRole,
+                createdAt: serverTimestamp()
+            });
+            setSuccessMessage(`✅ "${newRole.label}" роль амжилттай үүсгэгдлээ.`);
+            setIsRoleModalOpen(false);
+            setNewRole({
+                key: '',
+                label: '',
+                labelEn: '',
+                description: '',
+                color: '#2563EB',
+                icon: '👤',
+                permissions: []
+            });
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (error) {
+            console.error('Error creating role:', error);
+            setErrorMessage('Роль үүсгэхэд алдаа гарлаа.');
+        }
+    };
+
+    const togglePermission = (perm) => {
+        setNewRole(prev => {
+            const current = [...prev.permissions];
+            const index = current.indexOf(perm);
+            if (index > -1) {
+                current.splice(index, 1);
+            } else {
+                current.push(perm);
+            }
+            return { ...prev, permissions: current };
+        });
+    };
 
     return (
         <div className="admin-page staff-roles-page">
@@ -310,9 +369,22 @@ const StaffRoles = () => {
             {/* Roles Tab Content */}
             {activeTab === 'roles' && (
                 <div className="roles-overview">
+                    <div className="roles-tab-header">
+                        <div className="roles-tab-info">
+                            <h3>Бүх ролийн жагсаалт</h3>
+                            <p>Системд бүртгэлтэй нийт {Object.keys(roles).length - 1} роль байна.</p>
+                        </div>
+                        {isAdmin && (
+                            <button className="staff-btn-primary" onClick={() => setIsRoleModalOpen(true)}>
+                                <Plus size={18} />
+                                Эрх нэмэх
+                            </button>
+                        )}
+                    </div>
+
                     {/* Role Cards */}
                     <div className="roles-card-grid">
-                        {Object.values(ROLES)
+                        {Object.values(roles)
                             .filter((r) => r.key !== 'customer')
                             .map((role) => (
                                 <div
@@ -397,7 +469,7 @@ const StaffRoles = () => {
                                 <thead>
                                     <tr>
                                         <th>Эрх</th>
-                                        {Object.values(ROLES)
+                                        {Object.values(roles)
                                             .filter((r) => r.key !== 'customer')
                                             .map((role) => (
                                                 <th key={role.key} style={{ color: role.color }}>
@@ -410,7 +482,7 @@ const StaffRoles = () => {
                                     {Object.values(PERMISSIONS).map((perm) => (
                                         <tr key={perm}>
                                             <td>{PERMISSION_LABELS[perm] || perm}</td>
-                                            {Object.values(ROLES)
+                                            {Object.values(roles)
                                                 .filter((r) => r.key !== 'customer')
                                                 .map((role) => (
                                                     <td key={`${role.key}-${perm}`}>
@@ -457,12 +529,12 @@ const StaffRoles = () => {
                             {activeTab === 'staff'
                                 ? STAFF_ROLES.map((r) => (
                                     <option key={r} value={r}>
-                                        {getRoleInfo(r).label}
+                                        {(roles[r] || { label: r }).label}
                                     </option>
                                 ))
-                                : Object.keys(ROLES).map((r) => (
+                                : Object.keys(roles).map((r) => (
                                     <option key={r} value={r}>
-                                        {getRoleInfo(r).label}
+                                        {(roles[r] || { label: r }).label}
                                     </option>
                                 ))}
                         </select>
@@ -492,7 +564,7 @@ const StaffRoles = () => {
                                     </tr>
                                 ) : filteredUsers.length ? (
                                     filteredUsers.map((u) => {
-                                        const info = getRoleInfo(u.role);
+                                        const info = roles[u.role] || roles.customer;
                                         const isSelf = u.id === currentUser?.uid;
                                         const isUpdating = updatingUid === u.id;
 
@@ -546,7 +618,7 @@ const StaffRoles = () => {
                                                             value={u.role}
                                                             onChange={(e) => handleRoleChange(u, e.target.value)}
                                                         >
-                                                            {Object.values(ROLES).map((r) => (
+                                                            {Object.values(roles).map((r) => (
                                                                 <option key={r.key} value={r.key}>
                                                                     {r.icon} {r.label}
                                                                 </option>
@@ -580,7 +652,7 @@ const StaffRoles = () => {
                         <div className="staff-confirm-meta">
                             <div className="staff-confirm-from">
                                 <span>Одоогийн:</span>
-                                <strong>{getRoleInfo(confirmDialog.targetUser.role).label}</strong>
+                                <strong>{(roles[confirmDialog.targetUser.role] || roles.customer).label}</strong>
                             </div>
                             <span className="staff-confirm-arrow">→</span>
                             <div className="staff-confirm-to">
@@ -603,6 +675,132 @@ const StaffRoles = () => {
                                 Баталгаажуулах
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Create Role Modal */}
+            {isRoleModalOpen && (
+                <div className="staff-confirm-overlay" onClick={() => setIsRoleModalOpen(false)}>
+                    <div className="staff-role-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div>
+                                <h3>Шинэ роль үүсгэх</h3>
+                                <p>Ажилтанд оноох шинэ эрхийн түвшин тохируулна.</p>
+                            </div>
+                            <button className="close-btn" onClick={() => setIsRoleModalOpen(false)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateRole}>
+                            <div className="role-form-grid">
+                                <div className="form-group-full">
+                                    <label>Түлхүүр үг (Key) — *Заавал, Англи хэл дээр, жишээ: manager*</label>
+                                    <input
+                                        type="text"
+                                        placeholder="жишээ: logistics"
+                                        value={newRole.key}
+                                        onChange={e => setNewRole({ ...newRole, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Ролийн нэр (Mongolian)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="жишээ: Түгээгч"
+                                        value={newRole.label}
+                                        onChange={e => setNewRole({ ...newRole, label: e.target.value })}
+                                        required
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>English Label</label>
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. Delivery"
+                                        value={newRole.labelEn}
+                                        onChange={e => setNewRole({ ...newRole, labelEn: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="form-group-full">
+                                    <label>Тайлбар</label>
+                                    <textarea
+                                        rows="2"
+                                        placeholder="Энэ эрхтэй хэрэглэгч юу хийх боломжтой вэ..."
+                                        value={newRole.description}
+                                        onChange={e => setNewRole({ ...newRole, description: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Icon</label>
+                                    <div className="icon-selector">
+                                        <input
+                                            type="text"
+                                            value={newRole.icon}
+                                            onChange={e => setNewRole({ ...newRole, icon: e.target.value })}
+                                            style={{ fontSize: '1.5rem', width: '60px', textAlign: 'center' }}
+                                        />
+                                        <span className="hint">Emoji ашиглаж болно</span>
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Өнгө (Color)</label>
+                                    <div className="color-selector">
+                                        <input
+                                            type="color"
+                                            value={newRole.color}
+                                            onChange={e => setNewRole({ ...newRole, color: e.target.value })}
+                                        />
+                                        <input
+                                            type="text"
+                                            value={newRole.color}
+                                            onChange={e => setNewRole({ ...newRole, color: e.target.value })}
+                                            style={{ textTransform: 'uppercase' }}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="permissions-selector-section">
+                                <h4>Зөвшөөрлүүд оноох:</h4>
+                                <div className="perm-groups-grid">
+                                    {PERMISSION_GROUPS.map(group => (
+                                        <div key={group.title} className="perm-group-box">
+                                            <span className="group-title">{group.title}</span>
+                                            <div className="perm-check-list">
+                                                {group.permissions.map(perm => (
+                                                    <label key={perm} className="perm-label">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={newRole.permissions.includes(perm)}
+                                                            onChange={() => togglePermission(perm)}
+                                                        />
+                                                        <span>{PERMISSION_LABELS[perm]}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button type="button" className="btn-cancel" onClick={() => setIsRoleModalOpen(false)}>
+                                    Болих
+                                </button>
+                                <button type="submit" className="btn-save">
+                                    <ShieldCheck size={18} />
+                                    Роль үүсгэх
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
