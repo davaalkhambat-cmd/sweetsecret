@@ -691,24 +691,106 @@ const Orders = () => {
                         <div className="order-details-content">
                             <div className="delivery-info-section" style={{ borderTop: 'none', paddingTop: 0 }}>
                                 <div>
-                                    <h4 style={{ marginBottom: '10px' }}>Хэрэглэгчийн мэдээлэл</h4>
-                                    <p><User size={14} /> {selectedOrder.customerName || 'Зочин'}</p>
-                                    <p><Phone size={14} /> {selectedOrder.phoneNumber || '-'}</p>
-                                    <p><MapPin size={14} /> {selectedOrder.address?.fullAddress || selectedOrder.deliveryAddress || 'Хаяггүй'}</p>
-                                    <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#666' }}>
-                                        <p><Tags size={14} /> Суваг: {selectedOrder.source || 'Veb sait'}</p>
-                                        <p><CreditCard size={14} /> Төлбөр: {PAYMENT_METHODS.find(m => m.key === selectedOrder.paymentMethod)?.label || selectedOrder.paymentMethod || 'Тодорхойгүй'}</p>
+                                    <h4 style={{ marginBottom: '15px', color: '#374151', fontSize: '1.1rem' }}>Хэрэглэгчийн мэдээлэл</h4>
+                                    <div className="customer-info-detail-box">
+                                        <div className="detail-row">
+                                            <User size={16} className="detail-icon" />
+                                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                                <strong style={{ fontSize: '1rem' }}>{selectedOrder.customerName || 'Зочин'}</strong>
+                                                {(() => {
+                                                    const userDoc = users.find(u => u.uid === selectedOrder.userId || u.phoneNumber === selectedOrder.phoneNumber || u.email === selectedOrder.email);
+                                                    return renderMembershipTier(getMembershipTier(userDoc));
+                                                })()}
+                                                {(() => {
+                                                    const sameCustomerOrders = orders.filter(o =>
+                                                        (o.userId && o.userId === selectedOrder.userId) ||
+                                                        (o.phoneNumber && o.phoneNumber === selectedOrder.phoneNumber) ||
+                                                        (o.email && o.email === selectedOrder.email && o.email !== '')
+                                                    );
+                                                    const isFirst = sameCustomerOrders.length === 1 && sameCustomerOrders[0].id === selectedOrder.id;
+                                                    if (isFirst) {
+                                                        return (
+                                                            <div className="first-order-badge" title="Шинэ хэрэглэгч">
+                                                                <Star size={12} fill="#EAB308" />
+                                                                <span>Шинэ</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </div>
+                                        </div>
+                                        <div className="detail-row">
+                                            <Phone size={16} className="detail-icon" />
+                                            <span>{selectedOrder.phoneNumber || '-'}</span>
+                                        </div>
+                                        <div className="detail-row">
+                                            <MapPin size={16} className="detail-icon" />
+                                            <span>{selectedOrder.address?.fullAddress || selectedOrder.deliveryAddress || 'Хаяггүй'}</span>
+                                        </div>
+                                        <div className="detail-meta-group">
+                                            <div className="meta-pill"><Tags size={14} /> {SOURCE_OPTIONS.find(s => s.key === selectedOrder.source)?.label || selectedOrder.source || 'Veb sait'}</div>
+                                            <div className="meta-pill"><CreditCard size={14} /> {PAYMENT_METHODS.find(m => m.key === selectedOrder.paymentMethod)?.label || selectedOrder.paymentMethod || 'Данс'}</div>
+                                        </div>
                                     </div>
                                 </div>
-                                <div style={{ textAlign: 'right' }}><h4>Төлөв өөрчлөх</h4><div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '10px' }}>{Object.entries(STATUS_CONFIG).map(([key, cfg]) => <div key={key} className={`status-step ${selectedOrder.status === key ? 'active' : ''}`} onClick={() => handleUpdateStatus(selectedOrder.id, key)}>{cfg.icon}<span>{cfg.label}</span></div>)}</div></div>
+                                <div className="status-change-panel">
+                                    <h4>Төлөв өөрчлөх</h4>
+                                    <div className="status-vertical-steps">
+                                        {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+                                            <div
+                                                key={key}
+                                                className={`status-step-modern ${selectedOrder.status === key ? 'active' : ''}`}
+                                                onClick={() => handleUpdateStatus(selectedOrder.id, key)}
+                                            >
+                                                <div className="step-icon-wrap">{cfg.icon}</div>
+                                                <span>{cfg.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="order-items-listing" style={{ marginTop: '20px' }}>
+
+                            <div className="order-items-listing-modern">
                                 <h4>Захиалсан бараанууд</h4>
-                                <div style={{ background: '#f8f9fa', borderRadius: '12px', padding: '15px' }}>
-                                    {(selectedOrder.items || []).map((item, idx) => (
-                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}><span>{item.name} x {item.quantity}</span><strong>₮{(item.price * item.quantity).toLocaleString()}</strong></div>
-                                    ))}
-                                    <div style={{ textAlign: 'right', marginTop: '15px', fontSize: '1.2rem' }}><span style={{ fontSize: '0.9rem', color: '#666' }}>Төлөх дүн: </span><strong>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</strong></div>
+                                <div className="items-table-container">
+                                    <div className="items-list-header">
+                                        <span>Барааны нэр</span>
+                                        <span>Тоо</span>
+                                        <span>Үнэ</span>
+                                        <span style={{ textAlign: 'right' }}>Нийт</span>
+                                    </div>
+                                    <div className="items-scroll-area">
+                                        {(selectedOrder.items || []).map((item, idx) => (
+                                            <div key={idx} className="item-row-modern">
+                                                <span className="i-name">{item.name}</span>
+                                                <span className="i-qty">{item.quantity} ш</span>
+                                                <span className="i-price">₮{item.price.toLocaleString()}</span>
+                                                <span className="i-total">₮{(item.price * item.quantity).toLocaleString()}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="order-details-summary">
+                                        <div className="summary-line">
+                                            <span>Нийт үнийн дүн:</span>
+                                            <strong>₮{calculateSubtotal(selectedOrder.items || []).toLocaleString()}</strong>
+                                        </div>
+                                        <div className="summary-line">
+                                            <span>Хүргэлт:</span>
+                                            <strong>+ ₮{(selectedOrder.deliveryFee || 0).toLocaleString()}</strong>
+                                        </div>
+                                        {(Number(selectedOrder.discount) > 0) && (
+                                            <div className="summary-line discount">
+                                                <span>Хөнгөлөлт {selectedOrder.discountType === 'percent' ? `(${selectedOrder.discount}%)` : ''}:</span>
+                                                <strong>- ₮{getDiscountAmount(selectedOrder.items || [], selectedOrder.discount, selectedOrder.discountType).toLocaleString()}</strong>
+                                            </div>
+                                        )}
+                                        <div className="final-total-line">
+                                            <span>Төлөх дүн:</span>
+                                            <strong>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</strong>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
