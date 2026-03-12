@@ -27,6 +27,7 @@ import {
     MessageCircle,
     Wallet,
     CreditCard,
+    Star,
 } from 'lucide-react';
 import {
     collection,
@@ -54,6 +55,7 @@ const Orders = () => {
     const { user: currentUser, isAdmin } = useAuth();
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
+    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -118,7 +120,11 @@ const Orders = () => {
             setProducts(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
         });
 
-        return () => { unsubOrders(); unsubProducts(); };
+        const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+            setUsers(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
+        });
+
+        return () => { unsubOrders(); unsubProducts(); unsubUsers(); };
     }, []);
 
     const filteredOrders = useMemo(() => orders.filter(o => {
@@ -151,6 +157,39 @@ const Orders = () => {
         processingCount: orders.filter(o => o.status === 'processing').length,
         totalRevenue: orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
     }), [orders]);
+
+    const getMembershipTier = (userRecord) => {
+        if (!userRecord) return null;
+        const tier = userRecord.tier || userRecord.role === 'customer' ? 'Pink' : null;
+        // Simple logic if tier isn't explicitly set: Use Pink as default for customers
+        return userRecord.membershipTier || tier || 'Pink';
+    };
+
+    const renderMembershipTier = (tier) => {
+        if (!tier) return null;
+        const colors = {
+            'Pink': { bg: '#FFF1F2', text: '#FF85A1', border: '#FFE4E6' },
+            'Glow': { bg: '#FFFBEB', text: '#D97706', border: '#FEF3C7' },
+            'Rouge': { bg: '#FEF2F2', text: '#991B1B', border: '#FEE2E2' },
+            'Diamond': { bg: '#F8FAFC', text: '#0F172A', border: '#F1F5F9' }
+        };
+        const style = colors[tier] || colors['Pink'];
+        return (
+            <span style={{
+                fontSize: '10px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                background: style.bg,
+                color: style.text,
+                border: `1px solid ${style.border}`,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                marginLeft: '8px'
+            }}>
+                {tier}
+            </span>
+        );
+    };
 
     const handleUpdateStatus = async (orderId, newStatus) => {
         try {
@@ -357,7 +396,39 @@ const Orders = () => {
                             filteredOrders.map(order => (
                                 <tr key={order.id}>
                                     <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>#{order.id.slice(-6).toUpperCase()}</td>
-                                    <td><div className="customer-cell"><strong>{order.customerName || 'Зочин'}</strong><span className="email">{order.phoneNumber || order.email}</span></div></td>
+                                    <td>
+                                        <div className="customer-cell">
+                                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                <strong>{order.customerName || 'Зочин'}</strong>
+                                                {(() => {
+                                                    const userDoc = users.find(u => u.uid === order.userId || u.phoneNumber === order.phoneNumber || u.email === order.email);
+                                                    return renderMembershipTier(getMembershipTier(userDoc));
+                                                })()}
+                                                {(() => {
+                                                    // Determine if it's the first purchase
+                                                    // This is a heuristic: check if there are other orders with same identifier before this one's date
+                                                    const sameCustomerOrders = orders.filter(o =>
+                                                        (o.userId && o.userId === order.userId) ||
+                                                        (o.phoneNumber && o.phoneNumber === order.phoneNumber) ||
+                                                        (o.email && o.email === order.email && o.email !== '')
+                                                    );
+
+                                                    const isFirst = sameCustomerOrders.length === 1 && sameCustomerOrders[0].id === order.id;
+                                                    // Or better, if we have a flag, but if not, this works for demo
+                                                    if (isFirst) {
+                                                        return (
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '2px', marginLeft: '8px', color: '#EAB308' }} title="Шинэ хэрэглэгч">
+                                                                <Star size={12} fill="#EAB308" />
+                                                                <span style={{ fontSize: '10px', fontWeight: 600 }}>Шинэ</span>
+                                                            </div>
+                                                        );
+                                                    }
+                                                    return null;
+                                                })()}
+                                            </div>
+                                            <span className="email">{order.phoneNumber || order.email}</span>
+                                        </div>
+                                    </td>
                                     <td><strong>₮{(Number(order.totalAmount) || 0).toLocaleString()}</strong></td>
                                     <td><div className="date-cell"><Calendar size={14} style={{ marginRight: '5px', opacity: 0.6 }} />{order.createdAt ? new Date(order.createdAt.toMillis()).toLocaleDateString() : '-'}</div></td>
                                     <td>
