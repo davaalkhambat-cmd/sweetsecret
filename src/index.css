@@ -5286,7 +5286,7 @@ tbody tr:last-child td {
 
 .items-thead {
   display: grid;
-  grid-template-columns: 80px 2.5fr 1fr 0.8fr 1fr 40px;
+  grid-template-columns: 80px 2.8fr 1fr 0.7fr 1.1fr 40px;
   padding: 12px 10px;
   border-bottom: 1px solid #f1f5f9;
   color: #94a3b8;
@@ -5296,9 +5296,13 @@ tbody tr:last-child td {
   letter-spacing: 1px;
 }
 
+.items-thead span {
+  white-space: nowrap;
+}
+
 .item-row-new {
   display: grid;
-  grid-template-columns: 80px 2.5fr 1fr 0.8fr 1fr 40px;
+  grid-template-columns: 80px 2.8fr 1fr 0.7fr 1.1fr 40px;
   padding: 15px 10px;
   align-items: center;
   border-bottom: 1px solid #f1f5f9;

@@ -233,6 +233,13 @@ const Orders = () => {
         return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
     }, [products, productSearch]);
 
+    const getItemImage = (item) => {
+        if (item.image) return item.image;
+        // Fallback to searching in products list by id or name
+        const p = products.find(prod => prod.id === item.id || prod.name === item.name);
+        return p?.image || p?.images?.[0] || 'https://placehold.co/100x100?text=Beauty';
+    };
+
     const addProductToOrder = (prod) => {
         const existing = newOrder.items.find(i => i.id === prod.id);
         if (existing) {
@@ -722,15 +729,15 @@ const Orders = () => {
                                         <div className="items-thead">
                                             <span>Бүтээгдэхүүн</span>
                                             <span></span>
-                                            <span>Бүтээгдэхүүний код</span>
-                                            <span>Тоо ширхэг</span>
+                                            <span>Код</span>
+                                            <span>Тоо</span>
                                             <span>Үнэ</span>
                                             <span></span>
                                         </div>
                                         <div className="items-scroll-area-new">
                                             {(selectedOrder.items || []).map((item, idx) => (
                                                 <div key={idx} className="item-row-new">
-                                                    <img src={item.image || 'https://placehold.co/100x100?text=Beauty'} alt="" className="item-img-new" />
+                                                    <img src={getItemImage(item)} alt="" className="item-img-new" />
                                                     <span className="item-name-new">{item.name}</span>
                                                     <span className="item-code-new">{item.code || '-'}</span>
                                                     <span className="item-qty-new">{item.quantity}</span>
