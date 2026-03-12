@@ -79,13 +79,13 @@ const Orders = () => {
         paymentMethod: 'bank_transfer',
         deliveryFee: 5000,
         discount: 0,
-        source: 'facebook',
+        source: '',
     });
 
     const SOURCE_OPTIONS = [
         { key: 'facebook', label: 'Facebook', icon: <Facebook size={14} /> },
         { key: 'instagram', label: 'Instagram', icon: <Instagram size={14} /> },
-        { key: 'website', label: 'Veb sait', icon: <Globe size={14} /> },
+        { key: 'website', label: 'Веб сайт', icon: <Globe size={14} /> },
         { key: 'phone', label: 'Утас', icon: <Phone size={14} /> },
         { key: 'other', label: 'Бусад', icon: <MessageCircle size={14} /> },
     ];
@@ -176,6 +176,7 @@ const Orders = () => {
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
         if (newOrder.items.length === 0) return alert("Бараа сонгоно уу.");
+        if (!newOrder.source) return alert("Захиалгын суваг сонгоно уу.");
 
         try {
             const totalAmount = calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount);
@@ -191,7 +192,7 @@ const Orders = () => {
                 customerName: '', phoneNumber: '', email: '',
                 address: { zone: 'Улаанбаатар', city: 'Улаанбаатар', district: '', khoroo: '', fullAddress: '', additionalInfo: '' },
                 items: [], status: 'pending', deliveryType: 'delivery', paymentMethod: 'bank_transfer',
-                deliveryFee: 5000, discount: 0, source: 'facebook'
+                deliveryFee: 5000, discount: 0, source: ''
             });
         } catch (error) {
             console.error("Submit order error:", error);
@@ -305,13 +306,14 @@ const Orders = () => {
                                     <input className="form-input" type="tel" value={newOrder.phoneNumber} onChange={e => setNewOrder({ ...newOrder, phoneNumber: e.target.value })} required />
                                 </div>
                                 <div className="form-group-full">
-                                    <label>Захиалгын суваг (Source)</label>
+                                    <label>Захиалгын суваг сонгох *</label>
                                     <div className="source-selector-grid">
                                         {SOURCE_OPTIONS.map(opt => (
                                             <button
                                                 key={opt.key}
                                                 type="button"
                                                 className={`source-chip ${newOrder.source === opt.key ? 'active' : ''}`}
+                                                style={!newOrder.source ? { borderColor: '#ffa39e' } : {}}
                                                 onClick={() => setNewOrder({ ...newOrder, source: opt.key })}
                                             >
                                                 {opt.icon}
@@ -319,6 +321,7 @@ const Orders = () => {
                                             </button>
                                         ))}
                                     </div>
+                                    {!newOrder.source && <p style={{ fontSize: '0.75rem', color: '#ff4d4f', marginTop: '4px' }}>Захиалгын суваг сонгоно уу</p>}
                                 </div>
                             </div>
 
