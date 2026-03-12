@@ -57,6 +57,8 @@ const Orders = () => {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [sourceFilter, setSourceFilter] = useState('all');
+    const [paymentFilter, setPaymentFilter] = useState('all');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -124,6 +126,8 @@ const Orders = () => {
             (o.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (o.phoneNumber || '').includes(searchTerm);
         const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+        const matchesSource = sourceFilter === 'all' || o.source === sourceFilter;
+        const matchesPayment = paymentFilter === 'all' || o.paymentMethod === paymentFilter;
 
         let matchesDate = true;
         if (o.createdAt) {
@@ -138,8 +142,8 @@ const Orders = () => {
             }
         }
 
-        return matchesSearch && matchesStatus && matchesDate;
-    }), [orders, searchTerm, statusFilter, startDate, endDate]);
+        return matchesSearch && matchesStatus && matchesSource && matchesPayment && matchesDate;
+    }), [orders, searchTerm, statusFilter, sourceFilter, paymentFilter, startDate, endDate]);
 
     const stats = useMemo(() => ({
         totalCount: orders.length,
@@ -267,9 +271,29 @@ const Orders = () => {
                     <div className="filter-item">
                         <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Төлөв</label>
                         <div style={{ position: 'relative' }}>
-                            <select className="form-select" style={{ width: '150px', padding: '10px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                            <select className="form-select" style={{ width: '140px', padding: '10px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                                 <option value="all">Бүх төлөв</option>
                                 {Object.entries(STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="filter-item">
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Суваг</label>
+                        <div style={{ position: 'relative' }}>
+                            <select className="form-select" style={{ width: '140px', padding: '10px 12px' }} value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
+                                <option value="all">Бүх суваг</option>
+                                {SOURCE_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="filter-item">
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Төлбөр</label>
+                        <div style={{ position: 'relative' }}>
+                            <select className="form-select" style={{ width: '140px', padding: '10px 12px' }} value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)}>
+                                <option value="all">Бүх төлбөр</option>
+                                {PAYMENT_METHODS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                             </select>
                         </div>
                     </div>
@@ -300,10 +324,10 @@ const Orders = () => {
                                 />
                                 <Calendar size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
                             </div>
-                            {(startDate || endDate) && (
+                            {(startDate || endDate || statusFilter !== 'all' || sourceFilter !== 'all' || paymentFilter !== 'all') && (
                                 <button
                                     className="btn-text-only"
-                                    onClick={() => { setStartDate(''); setEndDate(''); }}
+                                    onClick={() => { setStartDate(''); setEndDate(''); setStatusFilter('all'); setSourceFilter('all'); setPaymentFilter('all'); }}
                                     style={{ color: '#DC2626', fontSize: '0.8rem', fontWeight: 600, padding: '5px' }}
                                 >
                                     Арилгах
