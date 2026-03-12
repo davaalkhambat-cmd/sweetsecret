@@ -708,7 +708,7 @@ const Orders = () => {
                                     {(selectedOrder.items || []).map((item, idx) => (
                                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' }}><span>{item.name} x {item.quantity}</span><strong>₮{(item.price * item.quantity).toLocaleString()}</strong></div>
                                     ))}
-                                    <div style={{ textAlign: 'right', marginTop: '15px', fontSize: '1.2rem' }}><span style={{ fontSize: '0.9rem', color: '#666' }}>Нийт: </span><strong>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</strong></div>
+                                    <div style={{ textAlign: 'right', marginTop: '15px', fontSize: '1.2rem' }}><span style={{ fontSize: '0.9rem', color: '#666' }}>Төлөх дүн: </span><strong>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</strong></div>
                                 </div>
                             </div>
                         </div>
