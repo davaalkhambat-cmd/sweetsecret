@@ -227,6 +227,32 @@ const StaffRoles = () => {
         }
     };
 
+    const handleStatusChange = async (targetUser, newStatus) => {
+        if (targetUser.id === currentUser?.uid && newStatus !== 'active') {
+            if (!window.confirm('Та өөрийнхөө төлөвийг өөрчлөхдөө итгэлтэй байна уу?')) return;
+        }
+
+        setUpdatingUid(targetUser.id);
+        setErrorMessage('');
+        setSuccessMessage('');
+
+        try {
+            const userRef = doc(db, 'users', targetUser.id);
+            await updateDoc(userRef, {
+                status: newStatus,
+                updatedAt: serverTimestamp(),
+            });
+            setSuccessMessage(`✅ "${targetUser.displayName || targetUser.email}" төлөв "${newStatus}" боллоо.`);
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (error) {
+            console.error('Status update error:', error);
+            setErrorMessage('Төлөв өөрчлөхөд алдаа гарлаа.');
+            setTimeout(() => setErrorMessage(''), 4000);
+        } finally {
+            setUpdatingUid(null);
+        }
+    };
+
     const assignableRoles = useMemo(() =>
         Object.values(roles).filter(r => r.key !== 'customer'),
         [roles]);
@@ -650,9 +676,29 @@ const StaffRoles = () => {
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <span className={`status-pill ${u.status === 'active' ? 'active' : 'inactive'}`}>
-                                                        {u.status}
-                                                    </span>
+                                                    {!isAdmin ? (
+                                                        <span className={`status-pill ${u.status === 'active' ? 'active' : 'inactive'}`}>
+                                                            {u.status}
+                                                        </span>
+                                                    ) : (
+                                                        <select
+                                                            className={`form-select status-select ${u.status === 'active' ? 'active' : 'inactive'}`}
+                                                            style={{
+                                                                padding: '4px 8px',
+                                                                fontSize: '0.8rem',
+                                                                height: 'auto',
+                                                                width: '100px',
+                                                                borderRadius: '6px'
+                                                            }}
+                                                            value={u.status}
+                                                            onChange={(e) => handleStatusChange(u, e.target.value)}
+                                                            disabled={isUpdating}
+                                                        >
+                                                            <option value="active">active</option>
+                                                            <option value="inactive">inactive</option>
+                                                            <option value="invited">invited</option>
+                                                        </select>
+                                                    )}
                                                 </td>
                                                 <td>
                                                     {isUpdating ? (
