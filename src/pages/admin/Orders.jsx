@@ -115,6 +115,22 @@ const Orders = () => {
         { key: 'monpay', label: 'Monpay' },
     ];
 
+    const UB_LOCATIONS = {
+        'Баянгол': Array.from({ length: 25 }, (_, i) => `${i + 1}-р хороо`),
+        'Баянзүрх': Array.from({ length: 30 }, (_, i) => `${i + 1}-р хороо`),
+        'Сонгинохайрхан': Array.from({ length: 43 }, (_, i) => `${i + 1}-р хороо`),
+        'Сүхбаатар': Array.from({ length: 20 }, (_, i) => `${i + 1}-р хороо`),
+        'Хан-Уул': Array.from({ length: 21 }, (_, i) => `${i + 1}-р хороо`),
+        'Чингэлтэй': Array.from({ length: 19 }, (_, i) => `${i + 1}-р хороо`),
+        'Багануур': Array.from({ length: 5 }, (_, i) => `${i + 1}-р хороо`),
+        'Багахангай': Array.from({ length: 2 }, (_, i) => `${i + 1}-р хороо`),
+        'Налайх': Array.from({ length: 8 }, (_, i) => `${i + 1}-р хороо`),
+    };
+
+    const AIMAGS = [
+        'Архангай', 'Баян-Өлгий', 'Баянхонгор', 'Булган', 'Говь-Алтай', 'Говьсүмбэр', 'Дархан-Уул', 'Дорнод', 'Дорноговь', 'Дундговь', 'Завхан', 'Орхон', 'Өвөрхангай', 'Өмнөговь', 'Сүхбаатар', 'Сэлэнгэ', 'Төв', 'Увс', 'Ховд', 'Хөвсгөл', 'Хэнтий'
+    ];
+
     // Product Search State
     const [productSearch, setProductSearch] = useState('');
     const [isProductListOpen, setIsProductListOpen] = useState(false);
@@ -549,22 +565,78 @@ const Orders = () => {
                             <div className="address-grid">
                                 <div className="form-group-full">
                                     <label>Хүргэлтийн бүс</label>
-                                    <select className="form-select" value={newOrder.address.zone} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, zone: e.target.value } })}>
-                                        <option>Улаанбаатар</option>
-                                        <option>Орон нутаг</option>
+                                    <select
+                                        className="form-select"
+                                        value={newOrder.address.zone}
+                                        onChange={e => {
+                                            const newZone = e.target.value;
+                                            setNewOrder({
+                                                ...newOrder,
+                                                address: {
+                                                    ...newOrder.address,
+                                                    zone: newZone,
+                                                    city: newZone === 'Улаанбаатар' ? 'Улаанбаатар' : '',
+                                                    district: '',
+                                                    khoroo: ''
+                                                }
+                                            });
+                                        }}
+                                    >
+                                        <option value="Улаанбаатар">Улаанбаатар</option>
+                                        <option value="Орон нутаг">Орон нутаг</option>
                                     </select>
                                 </div>
                                 <div className="form-group">
                                     <label>Хот / Аймаг *</label>
-                                    <input className="form-input" type="text" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })} required />
+                                    {newOrder.address.zone === 'Улаанбаатар' ? (
+                                        <select className="form-select" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })}>
+                                            <option value="Улаанбаатар">Улаанбаатар</option>
+                                        </select>
+                                    ) : (
+                                        <select className="form-select" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })}>
+                                            <option value="">Аймаг сонгох</option>
+                                            {AIMAGS.map(a => <option key={a} value={a}>{a}</option>)}
+                                        </select>
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Сум / Дүүрэг *</label>
-                                    <input className="form-input" type="text" value={newOrder.address.district} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, district: e.target.value } })} placeholder="Сум/Дүүрэг сонгох" required />
+                                    {newOrder.address.city === 'Улаанбаатар' ? (
+                                        <select
+                                            className="form-select"
+                                            value={newOrder.address.district}
+                                            onChange={e => setNewOrder({
+                                                ...newOrder,
+                                                address: {
+                                                    ...newOrder.address,
+                                                    district: e.target.value,
+                                                    khoroo: '' // Reset khoroo when district changes
+                                                }
+                                            })}
+                                            required
+                                        >
+                                            <option value="">Дүүрэг сонгох</option>
+                                            {Object.keys(UB_LOCATIONS).map(d => <option key={d} value={d}>{d}</option>)}
+                                        </select>
+                                    ) : (
+                                        <input className="form-input" type="text" value={newOrder.address.district} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, district: e.target.value } })} placeholder="Сум/Дүүрэг оруулах" required />
+                                    )}
                                 </div>
                                 <div className="form-group">
                                     <label>Баг / Хороо *</label>
-                                    <input className="form-input" type="text" value={newOrder.address.khoroo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })} placeholder="Баг/Хороо сонгох" required />
+                                    {newOrder.address.city === 'Улаанбаатар' && newOrder.address.district ? (
+                                        <select
+                                            className="form-select"
+                                            value={newOrder.address.khoroo}
+                                            onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })}
+                                            required
+                                        >
+                                            <option value="">Хороо сонгох</option>
+                                            {UB_LOCATIONS[newOrder.address.district].map(k => <option key={k} value={k}>{k}</option>)}
+                                        </select>
+                                    ) : (
+                                        <input className="form-input" type="text" value={newOrder.address.khoroo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })} placeholder="Баг/Хороо оруулах" required />
+                                    )}
                                 </div>
                                 <div className="form-group-full">
                                     <label>Хүргэлтийн хаяг *</label>
