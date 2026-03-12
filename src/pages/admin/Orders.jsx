@@ -28,6 +28,9 @@ import {
     Wallet,
     CreditCard,
     Star,
+    ArrowLeft,
+    ArrowRight,
+    Mail,
     ShoppingBag,
     ShieldCheck,
 } from 'lucide-react';
@@ -241,8 +244,12 @@ const Orders = () => {
             setNewOrder({
                 ...newOrder,
                 items: [...newOrder.items, {
-                    id: prod.id, name: prod.name,
-                    price: prod.price || prod.salePrice, quantity: 1
+                    id: prod.id,
+                    name: prod.name,
+                    image: prod.image || prod.images?.[0] || '',
+                    code: prod.code || prod.sku || '',
+                    price: prod.price || prod.salePrice,
+                    quantity: 1
                 }]
             });
         }
@@ -683,20 +690,145 @@ const Orders = () => {
             {/* Order Details Modal (Previous Implementation Maintained) */}
             {isDetailsOpen && selectedOrder && (
                 <div className="staff-confirm-overlay" onClick={() => setIsDetailsOpen(false)}>
-                    <div className="staff-role-modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div><h3>Захиалгын дэлгэрэнгүй</h3><p>ID: #{selectedOrder.id}</p></div>
-                            <button className="close-btn" onClick={() => setIsDetailsOpen(false)}><X size={20} /></button>
+                    <div className="order-modal-new" onClick={e => e.stopPropagation()}>
+                        <div className="order-modal-header-new">
+                            <div className="order-header-left">
+                                <div className="order-header-id">
+                                    <button className="back-btn-new" onClick={() => setIsDetailsOpen(false)}><ArrowLeft size={20} /></button>
+                                    <h2>Захиалга #{selectedOrder.id.slice(-8).toUpperCase()}</h2>
+                                </div>
+                                <div className="order-header-badges">
+                                    <span className={`status-pill ${STATUS_CONFIG[selectedOrder.status]?.class || ''}`} style={{ margin: 0 }}>
+                                        {STATUS_CONFIG[selectedOrder.status]?.label || selectedOrder.status}
+                                    </span>
+                                    {selectedOrder.deliveryType === 'delivery' && (
+                                        <span className="status-pill shipped" style={{ margin: 0, background: '#FEF3C7', color: '#D97706', borderColor: '#FCD34D' }}>
+                                            Хүргэлт хүлээгдэж буй
+                                        </span>
+                                    )}
+                                    <div className="order-header-date">
+                                        <Calendar size={14} />
+                                        {selectedOrder.createdAt ? new Date(selectedOrder.createdAt.toMillis()).toLocaleString() : '-'}
+                                    </div>
+                                </div>
+                            </div>
+                            <button className="close-btn" onClick={() => setIsDetailsOpen(false)}><X size={24} /></button>
                         </div>
-                        <div className="order-details-content">
-                            <div className="delivery-info-section" style={{ borderTop: 'none', paddingTop: 0 }}>
-                                <div>
-                                    <h4 style={{ marginBottom: '15px', color: '#374151', fontSize: '1.1rem' }}>Хэрэглэгчийн мэдээлэл</h4>
-                                    <div className="customer-info-detail-box">
-                                        <div className="detail-row">
-                                            <User size={16} className="detail-icon" />
-                                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                                                <strong style={{ fontSize: '1rem' }}>{selectedOrder.customerName || 'Зочин'}</strong>
+
+                        <div className="order-modal-body-new">
+                            <div className="order-main-content">
+                                <div className="content-card">
+                                    <div className="items-table-new">
+                                        <div className="items-thead">
+                                            <span>Бүтээгдэхүүн</span>
+                                            <span></span>
+                                            <span>Бүтээгдэхүүний код</span>
+                                            <span>Тоо ширхэг</span>
+                                            <span>Үнэ</span>
+                                            <span></span>
+                                        </div>
+                                        <div className="items-scroll-area-new">
+                                            {(selectedOrder.items || []).map((item, idx) => (
+                                                <div key={idx} className="item-row-new">
+                                                    <img src={item.image || 'https://placehold.co/100x100?text=Beauty'} alt="" className="item-img-new" />
+                                                    <span className="item-name-new">{item.name}</span>
+                                                    <span className="item-code-new">{item.code || '-'}</span>
+                                                    <span className="item-qty-new">{item.quantity}</span>
+                                                    <span className="item-price-new">₮{item.price.toLocaleString()}</span>
+                                                    <ArrowRight size={16} style={{ color: '#cbd5e1' }} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className="pricing-breakdown-new">
+                                        <div className="pricing-line-item">
+                                            <span>Нийт үнийн дүн</span>
+                                            <strong>₮{calculateSubtotal(selectedOrder.items || []).toLocaleString()}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="content-card">
+                                    <div className="sidebar-section-title"><Wallet size={16} /> Борлуулалтын суваг</div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Суваг</span>
+                                        <span style={{ color: '#6366f1', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1' }}></div>
+                                            {SOURCE_OPTIONS.find(s => s.key === selectedOrder.source)?.label || selectedOrder.source || 'Website'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="content-card">
+                                    <div className="sidebar-section-title"><CreditCard size={16} /> Төлбөрийн мэдээлэл</div>
+                                    <div className="info-display-list">
+                                        <div className="info-display-item" style={{ justifyContent: 'space-between' }}>
+                                            <span>Төлбөрийн хэрэгсэл</span>
+                                            <span className="payment-method-badge">{PAYMENT_METHODS.find(m => m.key === selectedOrder.paymentMethod)?.label || selectedOrder.paymentMethod || 'Данс'}</span>
+                                        </div>
+                                        <div className="info-display-item" style={{ justifyContent: 'space-between' }}>
+                                            <span>Захиалгын үнийн дүн</span>
+                                            <span>₮{calculateSubtotal(selectedOrder.items || []).toLocaleString()}</span>
+                                        </div>
+                                        <div className="info-display-item" style={{ justifyContent: 'space-between' }}>
+                                            <span>Хүргэлтийн үнийн дүн</span>
+                                            <span>₮{(selectedOrder.deliveryFee || 0).toLocaleString()}</span>
+                                        </div>
+                                        {selectedOrder.discount > 0 && (
+                                            <div className="info-display-item" style={{ justifyContent: 'space-between', color: '#DC2626' }}>
+                                                <span>Хөнгөлөлт {selectedOrder.discountType === 'percent' ? `(${selectedOrder.discount}%)` : ''}</span>
+                                                <span>- ₮{getDiscountAmount(selectedOrder.items || [], selectedOrder.discount, selectedOrder.discountType).toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        <div className="pricing-line-item final" style={{ paddingBottom: 0 }}>
+                                            <span>Нийт үнийн дүн</span>
+                                            <span>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="order-sidebar-content">
+                                <div className="sidebar-card">
+                                    <div className="status-dropdown-group">
+                                        <div className="modern-select-box">
+                                            <select
+                                                className="modern-select"
+                                                value={selectedOrder.status}
+                                                onChange={(e) => handleUpdateStatus(selectedOrder.id, e.target.value)}
+                                            >
+                                                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+                                                    <option key={key} value={key}>{cfg.label}</option>
+                                                ))}
+                                            </select>
+                                            <div className="status-icon-badge" style={{ background: '#10b981' }}>
+                                                <CheckCircle2 size={20} />
+                                            </div>
+                                        </div>
+
+                                        <div className="sidebar-section-title" style={{ marginTop: '10px', marginBottom: '8px' }}><Truck size={16} /> Хүргэлтийн төлөв</div>
+                                        <div className="modern-select-box">
+                                            <select className="modern-select" defaultValue="pending">
+                                                <option value="pending">Хүлээгдэж буй</option>
+                                                <option value="processing">Бэлтгэгдэж буй</option>
+                                                <option value="shipped">Хүргэлтэнд</option>
+                                                <option value="delivered">Хүргэгдсэн</option>
+                                            </select>
+                                            <div className="status-icon-badge" style={{ background: '#3b82f6' }}>
+                                                <Truck size={20} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="sidebar-card">
+                                    <div className="sidebar-section-title">Захиалагч</div>
+                                    <div className="info-display-list">
+                                        <div className="info-display-item">
+                                            <User size={16} />
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                <strong>{selectedOrder.customerName || 'Зочин'}</strong>
                                                 {(() => {
                                                     const userDoc = users.find(u => u.uid === selectedOrder.userId || u.phoneNumber === selectedOrder.phoneNumber || u.email === selectedOrder.email);
                                                     return renderMembershipTier(getMembershipTier(userDoc));
@@ -710,7 +842,7 @@ const Orders = () => {
                                                     const isFirst = sameCustomerOrders.length === 1 && sameCustomerOrders[0].id === selectedOrder.id;
                                                     if (isFirst) {
                                                         return (
-                                                            <div className="first-order-badge" title="Шинэ хэрэглэгч">
+                                                            <div className="first-order-badge" style={{ scale: '0.8' }}>
                                                                 <Star size={12} fill="#EAB308" />
                                                                 <span>Шинэ</span>
                                                             </div>
@@ -720,81 +852,39 @@ const Orders = () => {
                                                 })()}
                                             </div>
                                         </div>
-                                        <div className="detail-row">
-                                            <Phone size={16} className="detail-icon" />
+                                        <div className="info-display-item">
+                                            <Phone size={16} />
                                             <span>{selectedOrder.phoneNumber || '-'}</span>
                                         </div>
-                                        <div className="detail-row">
-                                            <MapPin size={16} className="detail-icon" />
-                                            <span>{selectedOrder.address?.fullAddress || selectedOrder.deliveryAddress || 'Хаяггүй'}</span>
-                                        </div>
-                                        <div className="detail-meta-group">
-                                            <div className="meta-pill"><Tags size={14} /> {SOURCE_OPTIONS.find(s => s.key === selectedOrder.source)?.label || selectedOrder.source || 'Veb sait'}</div>
-                                            <div className="meta-pill"><CreditCard size={14} /> {PAYMENT_METHODS.find(m => m.key === selectedOrder.paymentMethod)?.label || selectedOrder.paymentMethod || 'Данс'}</div>
+                                        <div className="info-display-item">
+                                            <Mail size={16} />
+                                            <span>{selectedOrder.email || 'Бүртгэлгүй'}</span>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="status-change-panel">
-                                    <h4>Төлөв өөрчлөх</h4>
-                                    <div className="status-vertical-steps">
-                                        {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
-                                            <div
-                                                key={key}
-                                                className={`status-step-modern ${selectedOrder.status === key ? 'active' : ''}`}
-                                                onClick={() => handleUpdateStatus(selectedOrder.id, key)}
-                                            >
-                                                <div className="step-icon-wrap">{cfg.icon}</div>
-                                                <span>{cfg.label}</span>
-                                            </div>
-                                        ))}
+
+                                <div className="sidebar-card">
+                                    <div className="sidebar-section-title">Хүргэлтийн хаяг</div>
+                                    <div className="info-display-list">
+                                        <div className="info-display-item" style={{ flexDirection: 'column', gap: '4px' }}>
+                                            <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Хүргэлтийн бүс: {selectedOrder.address?.zone || 'Улаанбаатар'}</span>
+                                            <span style={{ marginTop: '5px' }}>
+                                                {selectedOrder.address?.city} {selectedOrder.address?.district}-р хороо
+                                                <br />
+                                                {selectedOrder.address?.khoroo} {selectedOrder.address?.fullAddress}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="order-items-listing-modern">
-                                <h4>Захиалсан бараанууд</h4>
-                                <div className="items-table-container">
-                                    <div className="items-list-header">
-                                        <span>Барааны нэр</span>
-                                        <span>Тоо</span>
-                                        <span>Үнэ</span>
-                                        <span style={{ textAlign: 'right' }}>Нийт</span>
-                                    </div>
-                                    <div className="items-scroll-area">
-                                        {(selectedOrder.items || []).map((item, idx) => (
-                                            <div key={idx} className="item-row-modern">
-                                                <span className="i-name">{item.name}</span>
-                                                <span className="i-qty">{item.quantity} ш</span>
-                                                <span className="i-price">₮{item.price.toLocaleString()}</span>
-                                                <span className="i-total">₮{(item.price * item.quantity).toLocaleString()}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-
-                                    <div className="order-details-summary">
-                                        <div className="summary-line">
-                                            <span>Нийт үнийн дүн:</span>
-                                            <strong>₮{calculateSubtotal(selectedOrder.items || []).toLocaleString()}</strong>
-                                        </div>
-                                        <div className="summary-line">
-                                            <span>Хүргэлт:</span>
-                                            <strong>+ ₮{(selectedOrder.deliveryFee || 0).toLocaleString()}</strong>
-                                        </div>
-                                        {(Number(selectedOrder.discount) > 0) && (
-                                            <div className="summary-line discount">
-                                                <span>Хөнгөлөлт {selectedOrder.discountType === 'percent' ? `(${selectedOrder.discount}%)` : ''}:</span>
-                                                <strong>- ₮{getDiscountAmount(selectedOrder.items || [], selectedOrder.discount, selectedOrder.discountType).toLocaleString()}</strong>
-                                            </div>
-                                        )}
-                                        <div className="final-total-line">
-                                            <span>Төлөх дүн:</span>
-                                            <strong>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</strong>
-                                        </div>
-                                    </div>
+                                <div className="sidebar-card">
+                                    <div className="sidebar-section-title">Нэмэлт мэдээлэл</div>
+                                    <p style={{ fontSize: '0.9rem', color: '#64748b', margin: 0 }}>
+                                        {selectedOrder.address?.additionalInfo || 'Нэмэлт мэдээлэл байхгүй'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
-                        <div className="modal-actions"><button className="btn-cancel" onClick={() => setIsDetailsOpen(false)}>Хаах</button></div>
                     </div>
                 </div>
             )}
