@@ -1,0 +1,69 @@
+[
+    {
+        "id": 1,
+        "name": "Чийгшүүлэгч Серум",
+        "brand": "Drunk Elephant",
+        "price": 125000,
+        "category": "Арьс арчилгаа",
+        "badge": "Бестселлер",
+        "image": "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 2,
+        "name": "Уруулын Будаг (Улаан)",
+        "brand": "M.A.C",
+        "price": 65000,
+        "category": "Нүүр будалт",
+        "image": "https://images.unsplash.com/photo-1586495777744-4413f21062fa?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 3,
+        "name": "Цайруулах Үйлчилгээтэй Тос",
+        "brand": "Guerlain",
+        "price": 245000,
+        "category": "Арьс арчилгаа",
+        "badge": "Шинэ",
+        "image": "https://images.unsplash.com/photo-1617897903246-719242758050?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 4,
+        "name": "Шөнийн Үнэртэн",
+        "brand": "Tom Ford",
+        "price": 380000,
+        "category": "Үнэртэн",
+        "image": "https://images.unsplash.com/photo-1594035910387-fea47794261f?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 5,
+        "name": "Арьс Өнгө Засагч Кем",
+        "brand": "Fenty Beauty",
+        "price": 95000,
+        "category": "Нүүр будалт",
+        "image": "https://images.unsplash.com/photo-1599305090598-fe179d501227?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 6,
+        "name": "Цэвэрлэгч Тос",
+        "brand": "Tatcha",
+        "price": 88000,
+        "category": "Арьс арчилгаа",
+        "image": "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 7,
+        "name": "Хацрын Улаан",
+        "brand": "Rare Beauty",
+        "price": 75000,
+        "category": "Нүүр будалт",
+        "badge": "Трэнд",
+        "image": "https://images.unsplash.com/photo-1596462502278-27bfdc403348?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    },
+    {
+        "id": 8,
+        "name": "Үс Арчилгааны Охь",
+        "brand": "Olaplex",
+        "price": 145000,
+        "category": "Үс арчилгаа",
+        "image": "https://images.unsplash.com/photo-1535585209827-a15fcdbc4c2d?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80"
+    }
+]
