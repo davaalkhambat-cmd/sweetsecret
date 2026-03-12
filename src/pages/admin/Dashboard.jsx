@@ -121,6 +121,7 @@ const extractAddress = (data) =>
 const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
 const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatRate = (value) => `${value.toFixed(1)}%`;
+const formatMonthLabel = (date) => `${date.getMonth() + 1} сарын`;
 const formatPaymentLabel = (value) => {
     const normalized = String(value || '').toLowerCase();
     const labels = {
@@ -268,12 +269,25 @@ const Dashboard = () => {
 
     const deliveryAnalytics = useMemo(() => {
         const now = Date.now();
+        const nowDate = new Date(now);
         const dayMs = 24 * 60 * 60 * 1000;
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
+        const startOfMonth = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
+        const startOfPreviousMonth = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1);
+        const currentDayOfMonth = nowDate.getDate();
+        const comparablePreviousMonthEnd = new Date(
+            nowDate.getFullYear(),
+            nowDate.getMonth() - 1,
+            Math.min(
+                currentDayOfMonth,
+                new Date(nowDate.getFullYear(), nowDate.getMonth(), 0).getDate()
+            ) + 1
+        ).getTime();
         const todayStartMs = startOfToday.getTime();
+        const monthStartMs = startOfMonth.getTime();
+        const previousMonthStartMs = startOfPreviousMonth.getTime();
         const weekStartMs = now - 7 * dayMs;
-        const monthStartMs = now - 30 * dayMs;
         const previousWeekStartMs = now - 14 * dayMs;
         const mapRangeStartMs = now - rangeDays * dayMs;
 
@@ -282,10 +296,13 @@ const Dashboard = () => {
         const inRangeDeliveryOrders = deliveryOrders.filter((order) => order.createdAtMs >= mapRangeStartMs);
         const todaysDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= todayStartMs);
         const weekDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= weekStartMs);
+        const monthDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= monthStartMs);
+        const previousMonthComparableDeliveries = deliveryOrders.filter(
+            (order) => order.createdAtMs >= previousMonthStartMs && order.createdAtMs < comparablePreviousMonthEnd
+        );
         const previousWeekDeliveries = deliveryOrders.filter(
             (order) => order.createdAtMs >= previousWeekStartMs && order.createdAtMs < weekStartMs
         );
-        const monthDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= monthStartMs);
 
         const dayBuckets = Array.from({ length: 7 }, (_, index) => {
             const bucketDate = new Date(now - (6 - index) * dayMs);
@@ -389,16 +406,23 @@ const Dashboard = () => {
 
         const totalDeliveryOrders = deliveryOrders.length;
         const weeklyOrderCount = weekDeliveries.length;
+        const monthlyOrderCount = monthDeliveries.length;
         const averageDailyDeliveries = weeklyOrderCount / 7;
+        const averageDailyMonthDeliveries = monthlyOrderCount / Math.max(currentDayOfMonth, 1);
         const totalSalesRevenue =
             weekDeliveries.reduce((sum, order) => sum + order.total, 0) +
             offlineSales
                 .filter((sale) => sale.createdAtMs >= weekStartMs)
                 .reduce((sum, sale) => sum + sale.total, 0);
-        const averageOrderValue = weeklyOrderCount
-            ? weekDeliveries.reduce((sum, order) => sum + order.total, 0) / weeklyOrderCount
+        const monthRevenue = monthDeliveries.reduce((sum, order) => sum + order.total, 0);
+        const previousMonthComparableRevenue = previousMonthComparableDeliveries.reduce(
+            (sum, order) => sum + order.total,
+            0
+        );
+        const averageOrderValue = monthlyOrderCount
+            ? monthRevenue / monthlyOrderCount
             : 0;
-        const basketValues = weekDeliveries.map((order) => order.total);
+        const basketValues = monthDeliveries.map((order) => order.total);
         const peakHour = [...hourBuckets].sort((a, b) => b.count - a.count)[0];
         const peakDay = [...weekdayBuckets].sort((a, b) => b.count - a.count)[0];
         const topHours = [...hourBuckets]
@@ -451,6 +475,22 @@ const Dashboard = () => {
             .sort((a, b) => b.createdAtMs - a.createdAtMs)
             .slice(0, 6);
         const maxChartValue = Math.max(...dayBuckets.map((item) => item.total), 1);
+        const monthDailyBreakdown = Array.from({ length: currentDayOfMonth }, (_, index) => {
+            const bucketDate = new Date(nowDate.getFullYear(), nowDate.getMonth(), index + 1);
+            const label = `${bucketDate.getMonth() + 1}/${bucketDate.getDate()}`;
+            const dayStart = bucketDate.getTime();
+            const dayEnd = dayStart + dayMs;
+            const dayOrders = monthDeliveries.filter(
+                (order) => order.createdAtMs >= dayStart && order.createdAtMs < dayEnd
+            );
+
+            return {
+                key: `m-${index}`,
+                label,
+                orders: dayOrders.length,
+                total: dayOrders.reduce((sum, order) => sum + order.total, 0),
+            };
+        });
         const dailyBreakdown = dayBuckets.map((item) => ({
             ...item,
             orders: weekDeliveries.filter((order) => {
@@ -470,15 +510,25 @@ const Dashboard = () => {
             .join(', ');
 
         return {
+            meta: {
+                monthLabel: formatMonthLabel(nowDate),
+                monthTitle: `${formatMonthLabel(nowDate)} борлуулалтын мэдээлэл`,
+                monthRangeLabel: `${nowDate.getMonth() + 1}-р сарын 1-${currentDayOfMonth}`,
+                elapsedDays: currentDayOfMonth,
+            },
             totals: {
                 today: todaysDeliveries.length,
                 week: weeklyOrderCount,
-                month: monthDeliveries.length,
+                month: monthlyOrderCount,
                 revenue: deliveryRevenue,
+                monthRevenue,
                 averageOrderValue,
                 averageDailyDeliveries,
+                averageDailyMonthDeliveries,
                 wowOrdersGrowth: getGrowth(weeklyOrderCount, previousWeekDeliveries.length),
                 wowRevenueGrowth: getGrowth(deliveryRevenue, previousWeekRevenue),
+                monthOrdersGrowth: getGrowth(monthlyOrderCount, previousMonthComparableDeliveries.length),
+                monthRevenueGrowth: getGrowth(monthRevenue, previousMonthComparableRevenue),
             },
             quality: {
                 maxBasket: basketValues.length ? Math.max(...basketValues) : 0,
@@ -497,6 +547,7 @@ const Dashboard = () => {
                 })),
                 topHours,
                 dailyBreakdown,
+                monthDailyBreakdown,
             },
             performance: {
                 successRate: totalDeliveryOrders ? (completedCount / totalDeliveryOrders) * 100 : 0,
@@ -535,23 +586,23 @@ const Dashboard = () => {
 
     const heroStats = [
         {
-            title: '7 хоногийн хүргэлт',
-            value: deliveryAnalytics.totals.week.toLocaleString(),
-            change: formatPercent(deliveryAnalytics.totals.wowOrdersGrowth),
-            isUp: deliveryAnalytics.totals.wowOrdersGrowth >= 0,
+            title: `${deliveryAnalytics.meta.monthLabel} хүргэлт`,
+            value: deliveryAnalytics.totals.month.toLocaleString(),
+            change: formatPercent(deliveryAnalytics.totals.monthOrdersGrowth),
+            isUp: deliveryAnalytics.totals.monthOrdersGrowth >= 0,
             icon: <Truck size={22} color="#b45309" />,
         },
         {
-            title: '7 хоногийн орлого',
-            value: formatMoney(deliveryAnalytics.totals.revenue),
-            change: formatPercent(deliveryAnalytics.totals.wowRevenueGrowth),
-            isUp: deliveryAnalytics.totals.wowRevenueGrowth >= 0,
+            title: `${deliveryAnalytics.meta.monthLabel} орлого`,
+            value: formatMoney(deliveryAnalytics.totals.monthRevenue),
+            change: formatPercent(deliveryAnalytics.totals.monthRevenueGrowth),
+            isUp: deliveryAnalytics.totals.monthRevenueGrowth >= 0,
             icon: <CircleDollarSign size={22} color="#047857" />,
         },
         {
-            title: 'Дундаж сагсны дүн',
-            value: formatMoney(deliveryAnalytics.totals.averageOrderValue),
-            change: `${deliveryAnalytics.totals.averageDailyDeliveries.toFixed(1)} хүргэлт/өдөр`,
+            title: 'Өдрийн дундаж хүргэлт',
+            value: deliveryAnalytics.totals.averageDailyMonthDeliveries.toFixed(1),
+            change: `${deliveryAnalytics.meta.elapsedDays} хоногийн дундаж`,
             isUp: true,
             icon: <ShoppingBag size={22} color="#2563eb" />,
         },
@@ -590,8 +641,8 @@ const Dashboard = () => {
     return (
         <div className="dashboard-container">
             <div className="dashboard-header">
-                <h1>Delivery Decision Dashboard</h1>
-                <p>Өдөр тутмын гүйцэтгэл, 7 хоногийн тренд, стратегийн шийдвэрийг нэг дэлгэц дээр харуулна.</p>
+                <h1>{deliveryAnalytics.meta.monthTitle}</h1>
+                <p>{deliveryAnalytics.meta.monthRangeLabel}-ны delivery гүйцэтгэл, орлого, төлбөр, стратегийн дохиог нэг дэлгэц дээр харуулна.</p>
             </div>
 
             {errorMessage && (
@@ -632,15 +683,15 @@ const Dashboard = () => {
                         </div>
                         <div className="mini-kpi">
                             <span>Өдрийн дундаж хүргэлт</span>
-                            <strong>{deliveryAnalytics.totals.averageDailyDeliveries.toFixed(1)}</strong>
+                            <strong>{deliveryAnalytics.totals.averageDailyMonthDeliveries.toFixed(1)}</strong>
                         </div>
                         <div className="mini-kpi">
-                            <span>7 хоногийн хүргэлтийн тоо</span>
-                            <strong>{deliveryAnalytics.totals.week}</strong>
-                        </div>
-                        <div className="mini-kpi">
-                            <span>30 хоногийн хүргэлт</span>
+                            <span>{deliveryAnalytics.meta.monthLabel} хүргэлтийн тоо</span>
                             <strong>{deliveryAnalytics.totals.month}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>{deliveryAnalytics.meta.monthLabel} орлого</span>
+                            <strong>{formatMoney(deliveryAnalytics.totals.monthRevenue)}</strong>
                         </div>
                     </div>
                 </div>
@@ -907,8 +958,8 @@ const Dashboard = () => {
             <div className="section-card">
                 <div className="section-heading-row">
                     <div>
-                        <h3>7 хоногийн өдөр өдрийн хүргэлт</h3>
-                        <p>Өдөр бүрийн хүргэлтийн тоо болон дүн</p>
+                        <h3>{deliveryAnalytics.meta.monthLabel} өдөр өдрийн хүргэлт</h3>
+                        <p>{deliveryAnalytics.meta.monthRangeLabel}-ны хүргэлтийн тоо болон дүн</p>
                     </div>
                 </div>
                 <div className="daily-table-wrap">
@@ -922,12 +973,12 @@ const Dashboard = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {deliveryAnalytics.time.dailyBreakdown.map((day) => (
+                            {deliveryAnalytics.time.monthDailyBreakdown.map((day) => (
                                 <tr key={day.key}>
                                     <td>{day.label}</td>
                                     <td>{day.orders}</td>
                                     <td>{formatMoney(day.total)}</td>
-                                    <td>{deliveryAnalytics.totals.revenue > 0 ? formatRate((day.total / deliveryAnalytics.totals.revenue) * 100) : '0.0%'}</td>
+                                    <td>{deliveryAnalytics.totals.monthRevenue > 0 ? formatRate((day.total / deliveryAnalytics.totals.monthRevenue) * 100) : '0.0%'}</td>
                                 </tr>
                             ))}
                         </tbody>
