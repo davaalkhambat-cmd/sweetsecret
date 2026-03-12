@@ -244,16 +244,36 @@ const Orders = () => {
             <div className="table-container">
                 <table>
                     <thead>
-                        <tr><th>ID</th><th>Хэрэглэгч</th><th>Дүн</th><th>Огноо</th><th>Төлөв</th><th>Үйлдэл</th></tr>
+                        <tr>
+                            <th>ID</th>
+                            <th>Хэрэглэгч</th>
+                            <th>Дүн</th>
+                            <th>Огноо</th>
+                            <th>Суваг</th>
+                            <th>Төлбөр</th>
+                            <th>Төлөв</th>
+                            <th>Үйлдэл</th>
+                        </tr>
                     </thead>
                     <tbody>
-                        {loading ? <tr><td colSpan="6" style={{ textAlign: 'center', padding: '40px' }}>Уншиж байна...</td></tr> :
+                        {loading ? <tr><td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>Уншиж байна...</td></tr> :
                             filteredOrders.map(order => (
                                 <tr key={order.id}>
                                     <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>#{order.id.slice(-6).toUpperCase()}</td>
                                     <td><div className="customer-cell"><strong>{order.customerName || 'Зочин'}</strong><span className="email">{order.phoneNumber || order.email}</span></div></td>
                                     <td><strong>₮{(Number(order.totalAmount) || 0).toLocaleString()}</strong></td>
                                     <td><div className="date-cell"><Calendar size={14} style={{ marginRight: '5px', opacity: 0.6 }} />{order.createdAt ? new Date(order.createdAt.toMillis()).toLocaleDateString() : '-'}</div></td>
+                                    <td>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#666' }}>
+                                            {SOURCE_OPTIONS.find(s => s.key === order.source)?.icon}
+                                            <span>{SOURCE_OPTIONS.find(s => s.key === order.source)?.label || 'Veb sait'}</span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#444' }}>
+                                            {PAYMENT_METHODS.find(m => m.key === order.paymentMethod)?.label || 'Данс'}
+                                        </span>
+                                    </td>
                                     <td><span className={`status-pill ${STATUS_CONFIG[order.status]?.class || ''}`}>{STATUS_CONFIG[order.status]?.label || order.status}</span></td>
                                     <td className="actions-cell">
                                         <button className="action-icon view" onClick={() => { setSelectedOrder(order); setIsDetailsOpen(true); }}><Eye size={18} /></button>
