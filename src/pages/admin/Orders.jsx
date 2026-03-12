@@ -603,7 +603,7 @@ const Orders = () => {
 
                             <div className="pricing-summary-grid">
                                 <div className="pricing-field">
-                                    <label>Дэд дүн</label>
+                                    <label>Нийт үнийн дүн</label>
                                     <input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly />
                                 </div>
                                 <div className="pricing-field">
@@ -651,7 +651,7 @@ const Orders = () => {
                                 </div>
                                 <div className="order-summary-consolidated">
                                     <div className="summary-line">
-                                        <span>Дэд дүн:</span>
+                                        <span>Нийт үнийн дүн:</span>
                                         <strong>₮{calculateSubtotal(newOrder.items).toLocaleString()}</strong>
                                     </div>
                                     <div className="summary-line">
@@ -665,7 +665,7 @@ const Orders = () => {
                                         </div>
                                     )}
                                     <div className="final-total-box">
-                                        <span className="total-label">Нийт дүн:</span>
+                                        <span className="total-label">Төлөх дүн:</span>
                                         <span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType).toLocaleString()}</span>
                                     </div>
                                 </div>
