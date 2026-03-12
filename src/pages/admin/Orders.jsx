@@ -37,6 +37,7 @@ import {
     updateDoc,
     serverTimestamp,
     addDoc,
+    deleteDoc,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -50,12 +51,13 @@ const STATUS_CONFIG = {
 };
 
 const Orders = () => {
-    const { user: currentUser } = useAuth();
+    const { user: currentUser, isAdmin } = useAuth();
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
+    const [dateFilter, setDateFilter] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -121,8 +123,15 @@ const Orders = () => {
             (o.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (o.phoneNumber || '').includes(searchTerm);
         const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
-        return matchesSearch && matchesStatus;
-    }), [orders, searchTerm, statusFilter]);
+
+        let matchesDate = true;
+        if (dateFilter && o.createdAt) {
+            const orderDate = new Date(o.createdAt.toMillis()).toISOString().split('T')[0];
+            matchesDate = orderDate === dateFilter;
+        }
+
+        return matchesSearch && matchesStatus && matchesDate;
+    }), [orders, searchTerm, statusFilter, dateFilter]);
 
     const stats = useMemo(() => ({
         totalCount: orders.length,
@@ -142,6 +151,19 @@ const Orders = () => {
         } catch (error) {
             console.error("Update status error:", error);
             alert("Алдаа гарлаа.");
+        }
+    };
+
+    const handleDeleteOrder = async (orderId) => {
+        if (!isAdmin) return alert("Зөвхөн админ устгах эрхтэй.");
+        if (!window.confirm("Та энэ захиалгыг устгахдаа итгэлтэй байна уу?")) return;
+
+        try {
+            await deleteDoc(doc(db, 'orders', orderId));
+            alert("Захиалга амжилттай устгагдлаа.");
+        } catch (error) {
+            console.error("Delete order error:", error);
+            alert("Устгах үед алдаа гарлаа.");
         }
     };
 
@@ -235,10 +257,28 @@ const Orders = () => {
                 </div>
                 <div className="filter-group">
                     <Filter size={18} />
-                    <select className="form-select" style={{ width: '180px', padding: '8px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                    <select className="form-select" style={{ width: '160px', padding: '8px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
                         <option value="all">Бүх төлөв</option>
                         {Object.entries(STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
                     </select>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                            type="date"
+                            className="form-input"
+                            style={{ width: '160px', padding: '8px 12px', paddingLeft: '35px' }}
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value)}
+                        />
+                        <Calendar size={16} style={{ position: 'absolute', left: '12px', opacity: 0.5 }} />
+                        {dateFilter && (
+                            <button
+                                onClick={() => setDateFilter('')}
+                                style={{ position: 'absolute', right: '10px', background: 'none', border: 'none', cursor: 'pointer', color: '#999' }}
+                            >
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
 
@@ -277,7 +317,10 @@ const Orders = () => {
                                     </td>
                                     <td><span className={`status-pill ${STATUS_CONFIG[order.status]?.class || ''}`}>{STATUS_CONFIG[order.status]?.label || order.status}</span></td>
                                     <td className="actions-cell">
-                                        <button className="action-icon view" onClick={() => { setSelectedOrder(order); setIsDetailsOpen(true); }}><Eye size={18} /></button>
+                                        <button className="action-icon view" title="Харах" onClick={() => { setSelectedOrder(order); setIsDetailsOpen(true); }}><Eye size={18} /></button>
+                                        {isAdmin && (
+                                            <button className="action-icon delete" title="Устгах" onClick={() => handleDeleteOrder(order.id)} style={{ color: '#DC2626' }}><Trash2 size={18} /></button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
