@@ -260,6 +260,14 @@ const Orders = () => {
         return subtotal + (Number(fee) || 0) - discountValue;
     };
 
+    const getDiscountAmount = (items, discount, discountType) => {
+        const subtotal = calculateSubtotal(items);
+        if (discountType === 'percent') {
+            return (subtotal * (Number(discount) || 0)) / 100;
+        }
+        return Number(discount) || 0;
+    };
+
     // Number Formatting Helpers
     const formatNumberInput = (val) => {
         if (val === undefined || val === null || val === '') return '';
@@ -641,9 +649,25 @@ const Orders = () => {
                                         ))}
                                     </select>
                                 </div>
-                                <div className="final-total-box">
-                                    <span className="total-label">Нийт дүн:</span>
-                                    <span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType).toLocaleString()}</span>
+                                <div className="order-summary-consolidated">
+                                    <div className="summary-line">
+                                        <span>Дэд дүн:</span>
+                                        <strong>₮{calculateSubtotal(newOrder.items).toLocaleString()}</strong>
+                                    </div>
+                                    <div className="summary-line">
+                                        <span>Хүргэлт:</span>
+                                        <strong>+ ₮{newOrder.deliveryFee.toLocaleString()}</strong>
+                                    </div>
+                                    {newOrder.discount > 0 && (
+                                        <div className="summary-line discount">
+                                            <span>Хөнгөлөлт {newOrder.discountType === 'percent' ? `(${newOrder.discount}%)` : ''}:</span>
+                                            <strong>- ₮{getDiscountAmount(newOrder.items, newOrder.discount, newOrder.discountType).toLocaleString()}</strong>
+                                        </div>
+                                    )}
+                                    <div className="final-total-box">
+                                        <span className="total-label">Нийт дүн:</span>
+                                        <span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType).toLocaleString()}</span>
+                                    </div>
                                 </div>
                             </div>
 

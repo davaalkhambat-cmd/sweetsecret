@@ -4924,3 +4924,54 @@ tbody tr:last-child td {
   color: #dc2626 !important;
   border-color: #f87171 !important;
 }
+
+.order-summary-consolidated {
+  grid-column: span 2;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px dashed #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  width: 280px;
+  font-size: 0.95rem;
+  color: #6b7280;
+}
+
+.summary-line.discount {
+  color: #DC2626;
+}
+
+.summary-line strong {
+  color: #374151;
+}
+
+.summary-line.discount strong {
+  color: #DC2626;
+}
+
+.order-summary-consolidated .final-total-box {
+  border-top: 2px solid #2D2424;
+  margin-top: 10px;
+  padding-top: 10px;
+  width: 320px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.pricing-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  background: #f9fafb;
+  padding: 20px;
+  border-radius: 12px;
+  margin-top: 20px;
+}
