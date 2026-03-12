@@ -1693,6 +1693,36 @@ img {
   gap: 1.5rem;
 }
 
+.dashboard-filter-card {
+  padding-bottom: 1.2rem;
+}
+
+.dashboard-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.85rem;
+  align-items: end;
+}
+
+.dashboard-filter-input {
+  width: 100%;
+  min-height: 46px;
+}
+
+.dashboard-date-input {
+  border: 1px solid #dbe2ea;
+  border-radius: 10px;
+  padding: 0.7rem 0.85rem;
+  background: #fff;
+  font-size: 0.9rem;
+  color: #0f172a;
+}
+
+.dashboard-date-input:focus {
+  outline: 2px solid rgba(124, 58, 237, 0.12);
+  border-color: #a78bfa;
+}
+
 .stat-card {
   background-color: white;
   padding: 1.5rem;

@@ -25,6 +25,7 @@ const DEFAULT_CENTER = [47.9184, 106.9177];
 const RANGE_OPTIONS = [1, 7, 30];
 const WEEK_DAY_LABELS = ['Ня', 'Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя'];
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
+const MONTH_NAMES = ['1-р сар', '2-р сар', '3-р сар', '4-р сар', '5-р сар', '6-р сар', '7-р сар', '8-р сар', '9-р сар', '10-р сар', '11-р сар', '12-р сар'];
 
 const deliveryMarkerIcon = divIcon({
     className: 'delivery-marker-wrap',
@@ -121,7 +122,7 @@ const extractAddress = (data) =>
 const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
 const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatRate = (value) => `${value.toFixed(1)}%`;
-const formatMonthLabel = (date) => `${date.getMonth() + 1} сарын`;
+const formatMonthLabel = (date) => MONTH_NAMES[date.getMonth()];
 const formatPaymentLabel = (value) => {
     const normalized = String(value || '').toLowerCase();
     const labels = {
@@ -149,6 +150,22 @@ const getGrowth = (current, previous) => {
     return ((current - previous) / previous) * 100;
 };
 
+const toInputDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const parseInputDate = (value, endOfDay = false) => {
+    if (!value) return 0;
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return 0;
+    return endOfDay
+        ? new Date(year, month - 1, day, 23, 59, 59, 999).getTime()
+        : new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+};
+
 const normalizeStatus = (status) => {
     const normalized = String(status || '').toLowerCase();
     if (['completed', 'paid', 'delivered', 'fulfilled', 'хүргэгдсэн'].includes(normalized)) return 'completed';
@@ -168,12 +185,18 @@ const getOutcomeTimestamp = (data) =>
     );
 
 const Dashboard = () => {
+    const now = Date.now();
+    const todayDate = new Date(now);
     const [orders, setOrders] = useState([]);
     const [sales, setSales] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
     const [rangeDays, setRangeDays] = useState(7);
+    const [dateFilterMode, setDateFilterMode] = useState('current_month');
+    const [selectedMonth, setSelectedMonth] = useState(`${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`);
+    const [customFromDate, setCustomFromDate] = useState(toInputDate(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)));
+    const [customToDate, setCustomToDate] = useState(toInputDate(todayDate));
 
     useEffect(() => {
         const unsubscribers = [
@@ -268,37 +291,71 @@ const Dashboard = () => {
     }, []);
 
     const deliveryAnalytics = useMemo(() => {
-        const now = Date.now();
         const nowDate = new Date(now);
         const dayMs = 24 * 60 * 60 * 1000;
         const startOfToday = new Date();
         startOfToday.setHours(0, 0, 0, 0);
-        const startOfMonth = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
-        const startOfPreviousMonth = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1);
-        const currentDayOfMonth = nowDate.getDate();
-        const comparablePreviousMonthEnd = new Date(
-            nowDate.getFullYear(),
-            nowDate.getMonth() - 1,
-            Math.min(
-                currentDayOfMonth,
-                new Date(nowDate.getFullYear(), nowDate.getMonth(), 0).getDate()
-            ) + 1
-        ).getTime();
+        const currentMonthStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), 1);
         const todayStartMs = startOfToday.getTime();
-        const monthStartMs = startOfMonth.getTime();
-        const previousMonthStartMs = startOfPreviousMonth.getTime();
         const weekStartMs = now - 7 * dayMs;
         const previousWeekStartMs = now - 14 * dayMs;
         const mapRangeStartMs = now - rangeDays * dayMs;
+        let selectedStartMs = currentMonthStart.getTime();
+        let selectedEndMs = now;
+        let comparisonStartMs = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1).getTime();
+        let comparisonEndMs = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, nowDate.getDate(), 23, 59, 59, 999).getTime();
+        let selectedPeriodLabel = `${formatMonthLabel(nowDate)} 1-${nowDate.getDate()}`;
+        let selectedPeriodTitle = `${formatMonthLabel(nowDate)} борлуулалтын мэдээлэл`;
+        let selectedElapsedDays = nowDate.getDate();
+        let breakdownDays = nowDate.getDate();
+        let selectedMonthDisplay = formatMonthLabel(nowDate);
+
+        if (dateFilterMode === 'specific_month' && selectedMonth) {
+            const [year, month] = selectedMonth.split('-').map(Number);
+            const monthStart = new Date(year, month - 1, 1);
+            const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
+            const previousMonthStart = new Date(year, month - 2, 1);
+            const previousMonthEnd = new Date(year, month - 1, 0, 23, 59, 59, 999);
+            selectedStartMs = monthStart.getTime();
+            selectedEndMs = monthEnd.getTime();
+            comparisonStartMs = previousMonthStart.getTime();
+            comparisonEndMs = previousMonthEnd.getTime();
+            selectedPeriodLabel = `${MONTH_NAMES[month - 1]}`;
+            selectedPeriodTitle = `${MONTH_NAMES[month - 1]} борлуулалтын мэдээлэл`;
+            selectedElapsedDays = new Date(year, month, 0).getDate();
+            breakdownDays = selectedElapsedDays;
+            selectedMonthDisplay = MONTH_NAMES[month - 1];
+        }
+
+        if (dateFilterMode === 'custom_range') {
+            const parsedFrom = parseInputDate(customFromDate, false);
+            const parsedTo = parseInputDate(customToDate, true);
+            const safeStart = parsedFrom || currentMonthStart.getTime();
+            const safeEnd = parsedTo && parsedTo >= safeStart ? parsedTo : now;
+            const selectedStartDate = new Date(safeStart);
+            const selectedEndDate = new Date(safeEnd);
+            const diffDays = Math.max(1, Math.ceil((safeEnd - safeStart + 1) / dayMs));
+            selectedStartMs = safeStart;
+            selectedEndMs = safeEnd;
+            comparisonStartMs = safeStart - diffDays * dayMs;
+            comparisonEndMs = safeStart - 1;
+            selectedPeriodLabel = `${selectedStartDate.getMonth() + 1}-р сарын ${selectedStartDate.getDate()} - ${selectedEndDate.getMonth() + 1}-р сарын ${selectedEndDate.getDate()}`;
+            selectedPeriodTitle = 'Сонгосон хугацааны борлуулалтын мэдээлэл';
+            selectedElapsedDays = diffDays;
+            breakdownDays = diffDays;
+            selectedMonthDisplay = `${selectedStartDate.getMonth() + 1}-р сар`;
+        }
 
         const deliveryOrders = orders.filter((order) => order.isDelivery);
         const offlineSales = sales.filter((sale) => sale.createdAtMs > 0);
         const inRangeDeliveryOrders = deliveryOrders.filter((order) => order.createdAtMs >= mapRangeStartMs);
         const todaysDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= todayStartMs);
         const weekDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= weekStartMs);
-        const monthDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= monthStartMs);
-        const previousMonthComparableDeliveries = deliveryOrders.filter(
-            (order) => order.createdAtMs >= previousMonthStartMs && order.createdAtMs < comparablePreviousMonthEnd
+        const selectedPeriodDeliveries = deliveryOrders.filter(
+            (order) => order.createdAtMs >= selectedStartMs && order.createdAtMs <= selectedEndMs
+        );
+        const comparisonPeriodDeliveries = deliveryOrders.filter(
+            (order) => order.createdAtMs >= comparisonStartMs && order.createdAtMs <= comparisonEndMs
         );
         const previousWeekDeliveries = deliveryOrders.filter(
             (order) => order.createdAtMs >= previousWeekStartMs && order.createdAtMs < weekStartMs
@@ -406,23 +463,23 @@ const Dashboard = () => {
 
         const totalDeliveryOrders = deliveryOrders.length;
         const weeklyOrderCount = weekDeliveries.length;
-        const monthlyOrderCount = monthDeliveries.length;
+        const selectedPeriodOrderCount = selectedPeriodDeliveries.length;
         const averageDailyDeliveries = weeklyOrderCount / 7;
-        const averageDailyMonthDeliveries = monthlyOrderCount / Math.max(currentDayOfMonth, 1);
+        const averageDailySelectedDeliveries = selectedPeriodOrderCount / Math.max(selectedElapsedDays, 1);
         const totalSalesRevenue =
             weekDeliveries.reduce((sum, order) => sum + order.total, 0) +
             offlineSales
                 .filter((sale) => sale.createdAtMs >= weekStartMs)
                 .reduce((sum, sale) => sum + sale.total, 0);
-        const monthRevenue = monthDeliveries.reduce((sum, order) => sum + order.total, 0);
-        const previousMonthComparableRevenue = previousMonthComparableDeliveries.reduce(
+        const selectedPeriodRevenue = selectedPeriodDeliveries.reduce((sum, order) => sum + order.total, 0);
+        const comparisonPeriodRevenue = comparisonPeriodDeliveries.reduce(
             (sum, order) => sum + order.total,
             0
         );
-        const averageOrderValue = monthlyOrderCount
-            ? monthRevenue / monthlyOrderCount
+        const averageOrderValue = selectedPeriodOrderCount
+            ? selectedPeriodRevenue / selectedPeriodOrderCount
             : 0;
-        const basketValues = monthDeliveries.map((order) => order.total);
+        const basketValues = selectedPeriodDeliveries.map((order) => order.total);
         const peakHour = [...hourBuckets].sort((a, b) => b.count - a.count)[0];
         const peakDay = [...weekdayBuckets].sort((a, b) => b.count - a.count)[0];
         const topHours = [...hourBuckets]
@@ -475,13 +532,15 @@ const Dashboard = () => {
             .sort((a, b) => b.createdAtMs - a.createdAtMs)
             .slice(0, 6);
         const maxChartValue = Math.max(...dayBuckets.map((item) => item.total), 1);
-        const monthDailyBreakdown = Array.from({ length: currentDayOfMonth }, (_, index) => {
-            const bucketDate = new Date(nowDate.getFullYear(), nowDate.getMonth(), index + 1);
+        const breakdownBaseDate = new Date(selectedStartMs);
+        breakdownBaseDate.setHours(0, 0, 0, 0);
+        const selectedDailyBreakdown = Array.from({ length: breakdownDays }, (_, index) => {
+            const bucketDate = new Date(breakdownBaseDate.getTime() + index * dayMs);
             const label = `${bucketDate.getMonth() + 1}/${bucketDate.getDate()}`;
             const dayStart = bucketDate.getTime();
             const dayEnd = dayStart + dayMs;
-            const dayOrders = monthDeliveries.filter(
-                (order) => order.createdAtMs >= dayStart && order.createdAtMs < dayEnd
+            const dayOrders = selectedPeriodDeliveries.filter(
+                (order) => order.createdAtMs >= dayStart && order.createdAtMs <= Math.min(dayEnd - 1, selectedEndMs)
             );
 
             return {
@@ -511,24 +570,24 @@ const Dashboard = () => {
 
         return {
             meta: {
-                monthLabel: formatMonthLabel(nowDate),
-                monthTitle: `${formatMonthLabel(nowDate)} борлуулалтын мэдээлэл`,
-                monthRangeLabel: `${nowDate.getMonth() + 1}-р сарын 1-${currentDayOfMonth}`,
-                elapsedDays: currentDayOfMonth,
+                monthLabel: selectedMonthDisplay,
+                monthTitle: selectedPeriodTitle,
+                monthRangeLabel: selectedPeriodLabel,
+                elapsedDays: selectedElapsedDays,
             },
             totals: {
                 today: todaysDeliveries.length,
                 week: weeklyOrderCount,
-                month: monthlyOrderCount,
+                month: selectedPeriodOrderCount,
                 revenue: deliveryRevenue,
-                monthRevenue,
+                monthRevenue: selectedPeriodRevenue,
                 averageOrderValue,
                 averageDailyDeliveries,
-                averageDailyMonthDeliveries,
+                averageDailyMonthDeliveries: averageDailySelectedDeliveries,
                 wowOrdersGrowth: getGrowth(weeklyOrderCount, previousWeekDeliveries.length),
                 wowRevenueGrowth: getGrowth(deliveryRevenue, previousWeekRevenue),
-                monthOrdersGrowth: getGrowth(monthlyOrderCount, previousMonthComparableDeliveries.length),
-                monthRevenueGrowth: getGrowth(monthRevenue, previousMonthComparableRevenue),
+                monthOrdersGrowth: getGrowth(selectedPeriodOrderCount, comparisonPeriodDeliveries.length),
+                monthRevenueGrowth: getGrowth(selectedPeriodRevenue, comparisonPeriodRevenue),
             },
             quality: {
                 maxBasket: basketValues.length ? Math.max(...basketValues) : 0,
@@ -547,7 +606,7 @@ const Dashboard = () => {
                 })),
                 topHours,
                 dailyBreakdown,
-                monthDailyBreakdown,
+                monthDailyBreakdown: selectedDailyBreakdown,
             },
             performance: {
                 successRate: totalDeliveryOrders ? (completedCount / totalDeliveryOrders) * 100 : 0,
@@ -582,7 +641,7 @@ const Dashboard = () => {
             },
             recentDeliveries,
         };
-    }, [orders, products, rangeDays, sales]);
+    }, [customFromDate, customToDate, dateFilterMode, now, orders, products, rangeDays, sales, selectedMonth]);
 
     const heroStats = [
         {
@@ -640,6 +699,52 @@ const Dashboard = () => {
 
     return (
         <div className="dashboard-container">
+            <div className="section-card dashboard-filter-card">
+                <div className="section-heading-row">
+                    <div>
+                        <h3>Хугацааны сонголт</h3>
+                        <p>Тухайн сар, он-сар, эсвэл өөрийн сонгосон хугацаагаар dashboard-ийг шүүнэ</p>
+                    </div>
+                </div>
+                <div className="dashboard-filter-grid">
+                    <select
+                        className="form-select dashboard-filter-input"
+                        value={dateFilterMode}
+                        onChange={(event) => setDateFilterMode(event.target.value)}
+                    >
+                        <option value="current_month">Тухайн сар</option>
+                        <option value="specific_month">Он, сар сонгох</option>
+                        <option value="custom_range">Тэднээс тэдний хооронд</option>
+                    </select>
+
+                    {dateFilterMode === 'specific_month' ? (
+                        <input
+                            className="dashboard-filter-input dashboard-date-input"
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(event) => setSelectedMonth(event.target.value)}
+                        />
+                    ) : null}
+
+                    {dateFilterMode === 'custom_range' ? (
+                        <>
+                            <input
+                                className="dashboard-filter-input dashboard-date-input"
+                                type="date"
+                                value={customFromDate}
+                                onChange={(event) => setCustomFromDate(event.target.value)}
+                            />
+                            <input
+                                className="dashboard-filter-input dashboard-date-input"
+                                type="date"
+                                value={customToDate}
+                                onChange={(event) => setCustomToDate(event.target.value)}
+                            />
+                        </>
+                    ) : null}
+                </div>
+            </div>
+
             <div className="dashboard-header">
                 <h1>{deliveryAnalytics.meta.monthTitle}</h1>
                 <p>{deliveryAnalytics.meta.monthRangeLabel}-ны delivery гүйцэтгэл, орлого, төлбөр, стратегийн дохиог нэг дэлгэц дээр харуулна.</p>
