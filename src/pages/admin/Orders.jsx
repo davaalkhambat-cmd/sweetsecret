@@ -14,6 +14,7 @@ import {
     Calendar,
     ChevronDown,
     MapPin,
+    User,
     Phone,
     Trash2,
     SearchIcon,
