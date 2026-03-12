@@ -177,8 +177,8 @@ export const roleHasPermission = (roleKey, permission) => {
 /**
  * Тухайн role-д зөвшөөрөгдсөн sidebar menu item-уудыг буцаана
  */
-export const getMenuForRole = (roleKey) => {
-    const role = ROLES[roleKey];
+export const getMenuForRole = (roleKey, rolesSource = ROLES) => {
+    const role = rolesSource[roleKey];
     if (!role) return [];
     return ADMIN_MENU.filter((item) => role.permissions.includes(item.requiredPermission));
 };

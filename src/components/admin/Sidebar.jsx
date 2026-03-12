@@ -26,10 +26,13 @@ const ICON_MAP = {
 };
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false }) => {
-    const { role } = useAuth();
-    const menuItems = getMenuForRole(role);
-    const roleInfo = getRoleInfo(role);
+    const { role, roles, roleInfo } = useAuth();
 
+    const menuItems = React.useMemo(() => {
+        return getMenuForRole(role, roles);
+    }, [role, roles]);
+
+    const displayRoleInfo = roleInfo || roles.customer;
     return (
         <aside className={`admin-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
             <div className="sidebar-header">
@@ -40,9 +43,9 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false })
             </div>
 
             {!isCollapsed && (
-                <div className="sidebar-role-badge" style={{ borderLeftColor: roleInfo.color }}>
-                    <span className="sidebar-role-icon">{roleInfo.icon}</span>
-                    <span className="sidebar-role-label">{roleInfo.label}</span>
+                <div className="sidebar-role-badge" style={{ borderLeftColor: displayRoleInfo.color }}>
+                    <span className="sidebar-role-icon">{displayRoleInfo.icon}</span>
+                    <span className="sidebar-role-label">{displayRoleInfo.label}</span>
                 </div>
             )}
 
