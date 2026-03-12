@@ -123,6 +123,9 @@ const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
 const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatRate = (value) => `${value.toFixed(1)}%`;
 const formatMonthLabel = (date) => MONTH_NAMES[date.getMonth()];
+const formatMonthPossessive = (date) => `${date.getMonth() + 1}-р сарын`;
+const formatShortDate = (date) =>
+    `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
 const formatPaymentLabel = (value) => {
     const normalized = String(value || '').toLowerCase();
     const labels = {
@@ -304,11 +307,12 @@ const Dashboard = () => {
         let selectedEndMs = now;
         let comparisonStartMs = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, 1).getTime();
         let comparisonEndMs = new Date(nowDate.getFullYear(), nowDate.getMonth() - 1, nowDate.getDate(), 23, 59, 59, 999).getTime();
-        let selectedPeriodLabel = `${formatMonthLabel(nowDate)} 1-${nowDate.getDate()}`;
-        let selectedPeriodTitle = `${formatMonthLabel(nowDate)} борлуулалтын мэдээлэл`;
+        let selectedPeriodLabel = `${formatMonthPossessive(nowDate)} 1-${nowDate.getDate()}`;
+        let selectedPeriodTitle = `${formatMonthPossessive(nowDate)} борлуулалтын мэдээлэл`;
         let selectedElapsedDays = nowDate.getDate();
         let breakdownDays = nowDate.getDate();
         let selectedMonthDisplay = formatMonthLabel(nowDate);
+        let activeFilterLabel = 'Тухайн сар';
 
         if (dateFilterMode === 'specific_month' && selectedMonth) {
             const [year, month] = selectedMonth.split('-').map(Number);
@@ -320,11 +324,12 @@ const Dashboard = () => {
             selectedEndMs = monthEnd.getTime();
             comparisonStartMs = previousMonthStart.getTime();
             comparisonEndMs = previousMonthEnd.getTime();
-            selectedPeriodLabel = `${MONTH_NAMES[month - 1]}`;
-            selectedPeriodTitle = `${MONTH_NAMES[month - 1]} борлуулалтын мэдээлэл`;
+            selectedPeriodLabel = `${month}-р сарын 1-${new Date(year, month, 0).getDate()}`;
+            selectedPeriodTitle = `${month}-р сарын борлуулалтын мэдээлэл`;
             selectedElapsedDays = new Date(year, month, 0).getDate();
             breakdownDays = selectedElapsedDays;
             selectedMonthDisplay = MONTH_NAMES[month - 1];
+            activeFilterLabel = 'Он, сар';
         }
 
         if (dateFilterMode === 'custom_range') {
@@ -339,11 +344,12 @@ const Dashboard = () => {
             selectedEndMs = safeEnd;
             comparisonStartMs = safeStart - diffDays * dayMs;
             comparisonEndMs = safeStart - 1;
-            selectedPeriodLabel = `${selectedStartDate.getMonth() + 1}-р сарын ${selectedStartDate.getDate()} - ${selectedEndDate.getMonth() + 1}-р сарын ${selectedEndDate.getDate()}`;
+            selectedPeriodLabel = `${formatShortDate(selectedStartDate)} - ${formatShortDate(selectedEndDate)}`;
             selectedPeriodTitle = 'Сонгосон хугацааны борлуулалтын мэдээлэл';
             selectedElapsedDays = diffDays;
             breakdownDays = diffDays;
             selectedMonthDisplay = `${selectedStartDate.getMonth() + 1}-р сар`;
+            activeFilterLabel = 'Хугацаа сонгох';
         }
 
         const deliveryOrders = orders.filter((order) => order.isDelivery);
@@ -574,6 +580,7 @@ const Dashboard = () => {
                 monthTitle: selectedPeriodTitle,
                 monthRangeLabel: selectedPeriodLabel,
                 elapsedDays: selectedElapsedDays,
+                activeFilterLabel,
             },
             totals: {
                 today: todaysDeliveries.length,
@@ -713,8 +720,8 @@ const Dashboard = () => {
                         onChange={(event) => setDateFilterMode(event.target.value)}
                     >
                         <option value="current_month">Тухайн сар</option>
-                        <option value="specific_month">Он, сар сонгох</option>
-                        <option value="custom_range">Тэднээс тэдний хооронд</option>
+                        <option value="specific_month">Он, сар</option>
+                        <option value="custom_range">Хугацаа сонгох</option>
                     </select>
 
                     {dateFilterMode === 'specific_month' ? (
@@ -742,6 +749,10 @@ const Dashboard = () => {
                             />
                         </>
                     ) : null}
+                </div>
+                <div className="dashboard-filter-summary">
+                    <span className="dashboard-filter-chip">{deliveryAnalytics.meta.activeFilterLabel}</span>
+                    <strong>{deliveryAnalytics.meta.monthRangeLabel}</strong>
                 </div>
             </div>
 

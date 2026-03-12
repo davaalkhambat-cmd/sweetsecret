@@ -1702,6 +1702,7 @@ img {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 0.85rem;
   align-items: end;
+  margin-bottom: 0.85rem;
 }
 
 .dashboard-filter-input {
@@ -1721,6 +1722,29 @@ img {
 .dashboard-date-input:focus {
   outline: 2px solid rgba(124, 58, 237, 0.12);
   border-color: #a78bfa;
+}
+
+.dashboard-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.dashboard-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.36rem 0.7rem;
+  border-radius: 999px;
+  background: #f3e8ff;
+  color: #6b21a8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.dashboard-filter-summary strong {
+  font-size: 0.9rem;
+  color: #334155;
 }
 
 .stat-card {
