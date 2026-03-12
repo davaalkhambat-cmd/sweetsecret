@@ -121,6 +121,20 @@ const extractAddress = (data) =>
 const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
 const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatRate = (value) => `${value.toFixed(1)}%`;
+const formatPaymentLabel = (value) => {
+    const normalized = String(value || '').toLowerCase();
+    const labels = {
+        bank_transfer: 'Данс',
+        qpay: 'QPay',
+        storepay: 'Storepay',
+        pocket: 'Pocket',
+        sono: 'Sono',
+        monpay: 'Monpay',
+        cash: 'Бэлэн',
+        cod: 'Хүргэлт дээр',
+    };
+    return labels[normalized] || (value ? String(value) : 'Тодорхойгүй');
+};
 const formatDuration = (minutes) => {
     if (!Number.isFinite(minutes) || minutes <= 0) return '-';
     if (minutes < 60) return `${Math.round(minutes)} мин`;
@@ -233,6 +247,10 @@ const Dashboard = () => {
                         snapshot.docs.map((docSnap) => ({
                             id: docSnap.id,
                             name: docSnap.data().name || 'Нэргүй бүтээгдэхүүн',
+                            image:
+                                docSnap.data().image ||
+                                docSnap.data().images?.[0] ||
+                                '',
                         }))
                     );
                     setLoading(false);
@@ -290,6 +308,7 @@ const Dashboard = () => {
         }));
 
         const districtMap = new Map();
+        const paymentMap = new Map();
         const productMap = new Map();
         const turnaroundMinutes = [];
         let completedCount = 0;
@@ -332,17 +351,34 @@ const Dashboard = () => {
                 districtMap.set(order.district, (districtMap.get(order.district) || 0) + 1);
             }
 
+            const paymentKey = formatPaymentLabel(order.paymentMethod);
+            const paymentExisting = paymentMap.get(paymentKey) || {
+                label: paymentKey,
+                count: 0,
+                amount: 0,
+            };
+            paymentExisting.count += 1;
+            paymentExisting.amount += order.total;
+            paymentMap.set(paymentKey, paymentExisting);
+
             order.items.forEach((item) => {
                 const key = item.productId || item.name;
                 if (!key) return;
+                const matchedProduct = products.find(
+                    (product) => product.id === key || product.name === item.name
+                );
                 const existing = productMap.get(key) || {
                     id: key,
-                    name: item.name || products.find((product) => product.id === key)?.name || 'Тодорхойгүй бүтээгдэхүүн',
+                    name: item.name || matchedProduct?.name || 'Тодорхойгүй бүтээгдэхүүн',
+                    image: matchedProduct?.image || '',
                     soldQty: 0,
                     revenue: 0,
                 };
                 existing.soldQty += item.quantity;
                 existing.revenue += item.lineAmount || 0;
+                if (!existing.image && matchedProduct?.image) {
+                    existing.image = matchedProduct.image;
+                }
                 productMap.set(key, existing);
             });
 
@@ -373,6 +409,12 @@ const Dashboard = () => {
             .map(([district, count]) => ({ district, count }))
             .sort((a, b) => b.count - a.count)
             .slice(0, 5);
+        const paymentBreakdown = [...paymentMap.values()]
+            .sort((a, b) => b.amount - a.amount)
+            .map((item, index) => ({
+                ...item,
+                color: ['#7c3aed', '#db2777', '#2563eb', '#ea580c', '#059669', '#475569'][index % 6],
+            }));
         const topProducts = [...productMap.values()]
             .sort((a, b) => b.soldQty - a.soldQty)
             .slice(0, 5);
@@ -409,6 +451,23 @@ const Dashboard = () => {
             .sort((a, b) => b.createdAtMs - a.createdAtMs)
             .slice(0, 6);
         const maxChartValue = Math.max(...dayBuckets.map((item) => item.total), 1);
+        const dailyBreakdown = dayBuckets.map((item) => ({
+            ...item,
+            orders: weekDeliveries.filter((order) => {
+                const orderDate = new Date(order.createdAtMs);
+                return `${orderDate.getMonth() + 1}/${orderDate.getDate()}` === item.label;
+            }).length,
+        }));
+        const paymentTotal = paymentBreakdown.reduce((sum, item) => sum + item.amount, 0);
+        const paymentSegments = paymentBreakdown
+            .map((item, index) => {
+                const previous = paymentBreakdown
+                    .slice(0, index)
+                    .reduce((sum, current) => sum + (paymentTotal ? (current.amount / paymentTotal) * 100 : 0), 0);
+                const current = paymentTotal ? (item.amount / paymentTotal) * 100 : 0;
+                return `${item.color} ${previous}% ${previous + current}%`;
+            })
+            .join(', ');
 
         return {
             totals: {
@@ -432,11 +491,12 @@ const Dashboard = () => {
                 peakHour,
                 peakDay,
                 averageTurnaround,
-                trend: dayBuckets.map((item) => ({
+                trend: dailyBreakdown.map((item) => ({
                     ...item,
                     percent: Math.max(8, Math.round((item.total / maxChartValue) * 100)),
                 })),
                 topHours,
+                dailyBreakdown,
             },
             performance: {
                 successRate: totalDeliveryOrders ? (completedCount / totalDeliveryOrders) * 100 : 0,
@@ -450,6 +510,8 @@ const Dashboard = () => {
                 offlineRevenue: profitabilityMix.find((item) => item.label === 'Offline')?.value || 0,
                 growthTrend: getGrowth(deliveryRevenue, previousWeekRevenue),
                 bestOrderType,
+                paymentBreakdown,
+                paymentSegments,
             },
             geography: {
                 topDistricts,
@@ -569,16 +631,16 @@ const Dashboard = () => {
                             <strong>{deliveryAnalytics.totals.today}</strong>
                         </div>
                         <div className="mini-kpi">
+                            <span>Өдрийн дундаж хүргэлт</span>
+                            <strong>{deliveryAnalytics.totals.averageDailyDeliveries.toFixed(1)}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>7 хоногийн хүргэлтийн тоо</span>
+                            <strong>{deliveryAnalytics.totals.week}</strong>
+                        </div>
+                        <div className="mini-kpi">
                             <span>30 хоногийн хүргэлт</span>
                             <strong>{deliveryAnalytics.totals.month}</strong>
-                        </div>
-                        <div className="mini-kpi">
-                            <span>Ачаалалтай өдөр</span>
-                            <strong>{deliveryAnalytics.time.peakDay?.label || '-'}</strong>
-                        </div>
-                        <div className="mini-kpi">
-                            <span>Peak hour</span>
-                            <strong>{deliveryAnalytics.time.peakHour?.label || '-'}</strong>
                         </div>
                     </div>
                 </div>
@@ -628,13 +690,23 @@ const Dashboard = () => {
                             <strong>{deliveryAnalytics.quality.topProduct?.name || '-'}</strong>
                         </div>
                     </div>
-                    <div className="ranking-list">
+                    <div className="product-showcase-list">
                         {deliveryAnalytics.quality.topProducts.length ? (
                             deliveryAnalytics.quality.topProducts.map((product, index) => (
-                                <div className="ranking-row" key={`${product.id}-${index}`}>
-                                    <div className="ranking-left">
+                                <div className="product-showcase-row" key={`${product.id}-${index}`}>
+                                    <div className="product-showcase-left">
                                         <span className="ranking-index">#{index + 1}</span>
-                                        <span className="ranking-name">{product.name}</span>
+                                        <div className="product-showcase-thumb">
+                                            {product.image ? (
+                                                <img src={product.image} alt={product.name} />
+                                            ) : (
+                                                <span>{product.name.slice(0, 1)}</span>
+                                            )}
+                                        </div>
+                                        <div className="product-showcase-meta">
+                                            <span className="ranking-name">{product.name}</span>
+                                            <small>{formatMoney(product.revenue)}</small>
+                                        </div>
                                     </div>
                                     <strong>{product.soldQty} ш</strong>
                                 </div>
@@ -730,8 +802,8 @@ const Dashboard = () => {
                 <div className="section-card">
                     <div className="section-heading-row">
                         <div>
-                            <h3>Борлуулалтын анализ</h3>
-                            <p>Delivery contribution болон суваг хоорондын харьцуулалт</p>
+                            <h3>Борлуулалт ба төлбөр</h3>
+                            <p>Delivery contribution, суваг харьцуулалт, payment split</p>
                         </div>
                     </div>
                     <div className="sales-mix-grid">
@@ -752,42 +824,114 @@ const Dashboard = () => {
                             <strong>{formatPercent(deliveryAnalytics.sales.growthTrend)}</strong>
                         </div>
                     </div>
-                    <div className="comparison-stack">
-                        <div className="comparison-row">
-                            <span>Delivery</span>
-                            <div className="comparison-bar">
-                                <span
-                                    style={{
-                                        width: `${
-                                            deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue > 0
-                                                ? (deliveryAnalytics.sales.deliveryRevenue /
-                                                      (deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue)) *
-                                                  100
-                                                : 0
-                                        }%`,
-                                    }}
-                                />
+                    <div className="sales-analysis-layout">
+                        <div className="comparison-stack">
+                            <div className="comparison-row">
+                                <span>Delivery</span>
+                                <div className="comparison-bar">
+                                    <span
+                                        style={{
+                                            width: `${
+                                                deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue > 0
+                                                    ? (deliveryAnalytics.sales.deliveryRevenue /
+                                                          (deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue)) *
+                                                      100
+                                                    : 0
+                                            }%`,
+                                        }}
+                                    />
+                                </div>
+                                <strong>{formatMoney(deliveryAnalytics.sales.deliveryRevenue)}</strong>
                             </div>
-                            <strong>{formatMoney(deliveryAnalytics.sales.deliveryRevenue)}</strong>
+                            <div className="comparison-row">
+                                <span>Offline</span>
+                                <div className="comparison-bar muted">
+                                    <span
+                                        style={{
+                                            width: `${
+                                                deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue > 0
+                                                    ? (deliveryAnalytics.sales.offlineRevenue /
+                                                          (deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue)) *
+                                                      100
+                                                    : 0
+                                            }%`,
+                                        }}
+                                    />
+                                </div>
+                                <strong>{formatMoney(deliveryAnalytics.sales.offlineRevenue)}</strong>
+                            </div>
                         </div>
-                        <div className="comparison-row">
-                            <span>Offline</span>
-                            <div className="comparison-bar muted">
-                                <span
+
+                        <div className="payment-panel">
+                            <div className="payment-donut-wrap">
+                                <div
+                                    className="payment-donut"
                                     style={{
-                                        width: `${
-                                            deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue > 0
-                                                ? (deliveryAnalytics.sales.offlineRevenue /
-                                                      (deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue)) *
-                                                  100
-                                                : 0
-                                        }%`,
+                                        background: deliveryAnalytics.sales.paymentBreakdown.length
+                                            ? `conic-gradient(${deliveryAnalytics.sales.paymentSegments})`
+                                            : '#e2e8f0',
                                     }}
-                                />
+                                >
+                                    <div className="payment-donut-center">
+                                        <span>Payment</span>
+                                        <strong>{deliveryAnalytics.sales.paymentBreakdown.length}</strong>
+                                    </div>
+                                </div>
                             </div>
-                            <strong>{formatMoney(deliveryAnalytics.sales.offlineRevenue)}</strong>
+                            <div className="payment-legend">
+                                {deliveryAnalytics.sales.paymentBreakdown.length ? (
+                                    deliveryAnalytics.sales.paymentBreakdown.map((item) => (
+                                        <div key={item.label} className="payment-legend-row">
+                                            <div className="payment-legend-label">
+                                                <span
+                                                    className="payment-legend-dot"
+                                                    style={{ background: item.color }}
+                                                />
+                                                <small>{item.label}</small>
+                                            </div>
+                                            <div className="payment-legend-value">
+                                                <strong>{formatMoney(item.amount)}</strong>
+                                                <span>{item.count} order</span>
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <p className="empty-state-text">Төлбөрийн мэдээлэл алга байна.</p>
+                                )}
+                            </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div className="section-card">
+                <div className="section-heading-row">
+                    <div>
+                        <h3>7 хоногийн өдөр өдрийн хүргэлт</h3>
+                        <p>Өдөр бүрийн хүргэлтийн тоо болон дүн</p>
+                    </div>
+                </div>
+                <div className="daily-table-wrap">
+                    <table className="daily-breakdown-table">
+                        <thead>
+                            <tr>
+                                <th>Огноо</th>
+                                <th>Хүргэлтийн тоо</th>
+                                <th>Хүргэлтийн дүн</th>
+                                <th>Өдрийн хувь</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {deliveryAnalytics.time.dailyBreakdown.map((day) => (
+                                <tr key={day.key}>
+                                    <td>{day.label}</td>
+                                    <td>{day.orders}</td>
+                                    <td>{formatMoney(day.total)}</td>
+                                    <td>{deliveryAnalytics.totals.revenue > 0 ? formatRate((day.total / deliveryAnalytics.totals.revenue) * 100) : '0.0%'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
             </div>
 
