@@ -665,7 +665,13 @@ const Orders = () => {
                                         <div className="search-results-dropdown">
                                             {searchableProducts.length > 0 ? searchableProducts.map(p => (
                                                 <div key={p.id} className="search-result-item" onClick={() => addProductToOrder(p)}>
-                                                    <div><div><strong>{p.name}</strong></div><div className="p-stock">Үлдэгдэл: {p.stock || 0} ш</div></div>
+                                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                                        <img src={getItemImage(p)} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover' }} />
+                                                        <div>
+                                                            <div><strong>{p.name}</strong></div>
+                                                            <div className="p-stock">Үлдэгдэл: {p.stock || 0} ш</div>
+                                                        </div>
+                                                    </div>
                                                     <div className="p-price">₮{(p.price || p.salePrice).toLocaleString()}</div>
                                                 </div>
                                             )) : <div className="search-result-item" style={{ justifyContent: 'center', color: '#999' }}>Ийм бүтээгдэхүүн олдсонгүй</div>}
@@ -678,7 +684,15 @@ const Orders = () => {
                                 {newOrder.items.length === 0 ? <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>Захиалгад бараа нэмээгүй байна</p> :
                                     newOrder.items.map(item => (
                                         <div key={item.id} className="added-item-row">
-                                            <div><strong>{item.name}</strong><span style={{ fontSize: '0.85rem', color: '#666', marginLeft: 10 }}>{item.quantity} x ₮{item.price.toLocaleString()}</span></div>
+                                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                                <img src={getItemImage(item)} alt="" style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover' }} />
+                                                <div>
+                                                    <strong>{item.name}</strong>
+                                                    <div style={{ fontSize: '0.85rem', color: '#666' }}>
+                                                        {item.quantity} x ₮{item.price.toLocaleString()}
+                                                    </div>
+                                                </div>
+                                            </div>
                                             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                                                 <input type="number" min="1" value={item.quantity} onChange={e => setNewOrder({ ...newOrder, items: newOrder.items.map(i => i.id === item.id ? { ...i, quantity: Number(e.target.value) } : i) })} style={{ width: 60, padding: '4px 8px' }} />
                                                 <button type="button" onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })} style={{ color: '#DC2626' }}><Trash2 size={16} /></button>
