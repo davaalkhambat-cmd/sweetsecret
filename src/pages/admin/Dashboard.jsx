@@ -365,6 +365,10 @@ const Dashboard = () => {
         const basketValues = weekDeliveries.map((order) => order.total);
         const peakHour = [...hourBuckets].sort((a, b) => b.count - a.count)[0];
         const peakDay = [...weekdayBuckets].sort((a, b) => b.count - a.count)[0];
+        const topHours = [...hourBuckets]
+            .filter((bucket) => bucket.count > 0)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 3);
         const topDistricts = [...districtMap.entries()]
             .map(([district, count]) => ({ district, count }))
             .sort((a, b) => b.count - a.count)
@@ -432,7 +436,7 @@ const Dashboard = () => {
                     ...item,
                     percent: Math.max(8, Math.round((item.total / maxChartValue) * 100)),
                 })),
-                hourBuckets,
+                topHours,
             },
             performance: {
                 successRate: totalDeliveryOrders ? (completedCount / totalDeliveryOrders) * 100 : 0,
@@ -569,7 +573,7 @@ const Dashboard = () => {
                             <strong>{deliveryAnalytics.totals.month}</strong>
                         </div>
                         <div className="mini-kpi">
-                            <span>Peak day</span>
+                            <span>Ачаалалтай өдөр</span>
                             <strong>{deliveryAnalytics.time.peakDay?.label || '-'}</strong>
                         </div>
                         <div className="mini-kpi">
@@ -698,16 +702,28 @@ const Dashboard = () => {
                             </div>
                         ))}
                     </div>
-                    <div className="hour-strip">
-                        {deliveryAnalytics.time.hourBuckets.map((bucket) => (
-                            <div
-                                key={bucket.label}
-                                className={`hour-chip ${bucket.label === deliveryAnalytics.time.peakHour?.label ? 'active' : ''}`}
-                            >
-                                <span>{bucket.label}</span>
-                                <strong>{bucket.count}</strong>
-                            </div>
-                        ))}
+                    <div className="time-insight-row">
+                        <div className="time-highlight-card">
+                            <span>Хамгийн их захиалга ордог цаг</span>
+                            <strong>{deliveryAnalytics.time.peakHour?.label || '-'}</strong>
+                            <small>Promotion болон rider scheduling-ийн үндсэн slot</small>
+                        </div>
+                        <div className="top-hours-strip">
+                            {deliveryAnalytics.time.topHours.length ? (
+                                deliveryAnalytics.time.topHours.map((bucket, index) => (
+                                    <div
+                                        key={bucket.label}
+                                        className={`hour-chip ${index === 0 ? 'active' : ''}`}
+                                    >
+                                        <span>{index === 0 ? 'Top slot' : `Top ${index + 1}`}</span>
+                                        <strong>{bucket.label}</strong>
+                                        <small>{bucket.count} захиалга</small>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="empty-state-text">Цагийн ангиллын өгөгдөл алга байна.</p>
+                            )}
+                        </div>
                     </div>
                 </div>
 
