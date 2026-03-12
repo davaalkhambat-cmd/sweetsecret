@@ -25,6 +25,8 @@ import {
     Instagram,
     Globe,
     MessageCircle,
+    Wallet,
+    CreditCard,
 } from 'lucide-react';
 import {
     collection,
@@ -86,6 +88,14 @@ const Orders = () => {
         { key: 'website', label: 'Veb sait', icon: <Globe size={14} /> },
         { key: 'phone', label: 'Утас', icon: <Phone size={14} /> },
         { key: 'other', label: 'Бусад', icon: <MessageCircle size={14} /> },
+    ];
+
+    const PAYMENT_METHODS = [
+        { key: 'cash', label: 'Бэлэн' },
+        { key: 'bank_transfer', label: 'Данс' },
+        { key: 'qpay', label: 'QPay' },
+        { key: 'storepay', label: 'Storepay' },
+        { key: 'pocket', label: 'Pocket' },
     ];
 
     // Product Search State
@@ -366,6 +376,18 @@ const Orders = () => {
                                 <div className="pricing-field"><label>Дэд дүн</label><input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly /></div>
                                 <div className="pricing-field"><label><Truck size={14} /> Хүргэлтийн төлбөр</label><input className="form-input" type="number" value={newOrder.deliveryFee} onChange={e => setNewOrder({ ...newOrder, deliveryFee: Number(e.target.value) })} /></div>
                                 <div className="pricing-field"><label><Tags size={14} /> Хөнгөлөлт (₮)</label><input className="form-input" type="number" value={newOrder.discount} onChange={e => setNewOrder({ ...newOrder, discount: Number(e.target.value) })} /></div>
+                                <div className="pricing-field" style={{ gridColumn: 'span 2' }}>
+                                    <label><CreditCard size={14} /> Төлбөрийн нөхцөл</label>
+                                    <select
+                                        className="form-select"
+                                        value={newOrder.paymentMethod}
+                                        onChange={e => setNewOrder({ ...newOrder, paymentMethod: e.target.value })}
+                                    >
+                                        {PAYMENT_METHODS.map(m => (
+                                            <option key={m.key} value={m.key}>{m.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
                                 <div className="final-total-box"><span className="total-label">Нийт дүн:</span><span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount).toLocaleString()}</span></div>
                             </div>
 
@@ -388,7 +410,16 @@ const Orders = () => {
                         </div>
                         <div className="order-details-content">
                             <div className="delivery-info-section" style={{ borderTop: 'none', paddingTop: 0 }}>
-                                <div><h4 style={{ marginBottom: '10px' }}>Хэрэглэгчийн мэдээлэл</h4><p><User size={14} /> {selectedOrder.customerName || 'Зочин'}</p><p><Phone size={14} /> {selectedOrder.phoneNumber || '-'}</p><p><MapPin size={14} /> {selectedOrder.address?.fullAddress || selectedOrder.deliveryAddress || 'Хаяггүй'}</p></div>
+                                <div>
+                                    <h4 style={{ marginBottom: '10px' }}>Хэрэглэгчийн мэдээлэл</h4>
+                                    <p><User size={14} /> {selectedOrder.customerName || 'Зочин'}</p>
+                                    <p><Phone size={14} /> {selectedOrder.phoneNumber || '-'}</p>
+                                    <p><MapPin size={14} /> {selectedOrder.address?.fullAddress || selectedOrder.deliveryAddress || 'Хаяггүй'}</p>
+                                    <div style={{ marginTop: '10px', fontSize: '0.85rem', color: '#666' }}>
+                                        <p><Tags size={14} /> Суваг: {selectedOrder.source || 'Veb sait'}</p>
+                                        <p><CreditCard size={14} /> Төлбөр: {PAYMENT_METHODS.find(m => m.key === selectedOrder.paymentMethod)?.label || selectedOrder.paymentMethod || 'Тодорхойгүй'}</p>
+                                    </div>
+                                </div>
                                 <div style={{ textAlign: 'right' }}><h4>Төлөв өөрчлөх</h4><div style={{ display: 'flex', flexDirection: 'column', gap: '5px', marginTop: '10px' }}>{Object.entries(STATUS_CONFIG).map(([key, cfg]) => <div key={key} className={`status-step ${selectedOrder.status === key ? 'active' : ''}`} onClick={() => handleUpdateStatus(selectedOrder.id, key)}>{cfg.icon}<span>{cfg.label}</span></div>)}</div></div>
                             </div>
                             <div className="order-items-listing" style={{ marginTop: '20px' }}>
