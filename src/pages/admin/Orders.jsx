@@ -28,6 +28,8 @@ import {
     Wallet,
     CreditCard,
     Star,
+    ShoppingBag,
+    ShieldCheck,
 } from 'lucide-react';
 import {
     collection,
