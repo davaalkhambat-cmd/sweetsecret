@@ -1,24 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    TrendingUp,
-    Users,
-    ShoppingBag,
-    ArrowUpRight,
-    ArrowDownRight,
-    CircleDollarSign,
     AlertTriangle,
-    MapPinned,
-    Truck,
+    ArrowDownRight,
+    ArrowUpRight,
+    ChartNoAxesColumn,
+    CheckCircle2,
+    CircleDollarSign,
     Clock3,
+    MapPinned,
+    RotateCcw,
+    ShoppingBag,
+    Target,
+    TimerReset,
+    Truck,
+    Users,
+    XCircle,
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../../firebase';
-import { MapContainer, Marker, Popup, TileLayer, Tooltip } from 'react-leaflet';
 import { divIcon } from 'leaflet';
+import { MapContainer, Marker, Popup, TileLayer, Tooltip } from 'react-leaflet';
+import { db } from '../../firebase';
 
-const WEEK_DAYS = ['Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя', 'Ня'];
 const DEFAULT_CENTER = [47.9184, 106.9177];
-const RANGE_OPTIONS = [7, 14, 31];
+const RANGE_OPTIONS = [1, 7, 30];
+const WEEK_DAY_LABELS = ['Ня', 'Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя'];
+const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
 
 const deliveryMarkerIcon = divIcon({
     className: 'delivery-marker-wrap',
@@ -38,8 +44,7 @@ const toMs = (timestamp) => {
 const toNumber = (value) => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string') {
-        const cleaned = value.replace(/[^\d.-]/g, '');
-        const parsed = Number(cleaned);
+        const parsed = Number(value.replace(/[^\d.-]/g, ''));
         return Number.isFinite(parsed) ? parsed : 0;
     }
     return 0;
@@ -51,6 +56,7 @@ const toItems = (rawItems) => {
         productId: String(item?.productId || item?.id || item?.sku || item?.name || ''),
         name: String(item?.name || ''),
         quantity: Math.max(1, toNumber(item?.quantity ?? item?.qty ?? item?.count ?? 1)),
+        lineAmount: toNumber(item?.lineAmount ?? item?.subtotal ?? item?.price) * Math.max(1, toNumber(item?.quantity ?? item?.qty ?? item?.count ?? 1)),
     }));
 };
 
@@ -90,8 +96,18 @@ const extractCoordinates = (data) => {
         const point = getPoint(candidate);
         if (point) return point;
     }
+
     return null;
 };
+
+const extractDistrict = (data) =>
+    String(
+        data?.address?.district ||
+            data?.shippingAddress?.district ||
+            data?.district ||
+            data?.region ||
+            ''
+    ).trim();
 
 const extractAddress = (data) =>
     data?.deliveryAddress ||
@@ -102,8 +118,16 @@ const extractAddress = (data) =>
     data?.address?.text ||
     '';
 
-const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
+const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+const formatRate = (value) => `${value.toFixed(1)}%`;
+const formatDuration = (minutes) => {
+    if (!Number.isFinite(minutes) || minutes <= 0) return '-';
+    if (minutes < 60) return `${Math.round(minutes)} мин`;
+    const hours = Math.floor(minutes / 60);
+    const remainMinutes = Math.round(minutes % 60);
+    return remainMinutes ? `${hours}ц ${remainMinutes}м` : `${hours}ц`;
+};
 
 const getGrowth = (current, previous) => {
     if (previous <= 0) return current <= 0 ? 0 : 100;
@@ -113,19 +137,28 @@ const getGrowth = (current, previous) => {
 const normalizeStatus = (status) => {
     const normalized = String(status || '').toLowerCase();
     if (['completed', 'paid', 'delivered', 'fulfilled', 'хүргэгдсэн'].includes(normalized)) return 'completed';
-    if (['pending', 'new', 'хүлээгдэж буй'].includes(normalized)) return 'pending';
-    if (['processing', 'packed', 'баталгаажсан'].includes(normalized)) return 'processing';
+    if (['cancelled', 'canceled', 'цуцлагдсан'].includes(normalized)) return 'cancelled';
+    if (['returned', 'return', 'refund', 'буцаалт', 'буцаагдсан'].includes(normalized)) return 'returned';
     if (['shipped', 'in-transit', 'хүргэлтэнд'].includes(normalized)) return 'shipped';
+    if (['processing', 'packed', 'баталгаажсан'].includes(normalized)) return 'processing';
     return 'pending';
 };
 
+const getOutcomeTimestamp = (data) =>
+    toMs(
+        data?.deliveredAt ||
+            data?.completedAt ||
+            data?.fulfilledAt ||
+            data?.updatedAt
+    );
+
 const Dashboard = () => {
     const [orders, setOrders] = useState([]);
-    const [users, setUsers] = useState([]);
+    const [sales, setSales] = useState([]);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [errorMessage, setErrorMessage] = useState('');
-    const [mapRangeDays, setMapRangeDays] = useState(7);
+    const [rangeDays, setRangeDays] = useState(7);
 
     useEffect(() => {
         const unsubscribers = [
@@ -138,18 +171,30 @@ const Dashboard = () => {
                             const deliveryTypeRaw = String(
                                 data.deliveryType || data.shippingMethod || data.fulfillmentType || ''
                             ).toLowerCase();
-                            const isPickup = deliveryTypeRaw.includes('pickup') || deliveryTypeRaw.includes('өөрөө');
+                            const isPickup =
+                                deliveryTypeRaw.includes('pickup') ||
+                                deliveryTypeRaw.includes('өөрөө');
+
+                            const createdAtMs = toMs(data.createdAt || data.updatedAt);
+                            const outcomeAtMs = getOutcomeTimestamp(data);
 
                             return {
                                 id: docSnap.id,
                                 total: toNumber(data.totalAmount ?? data.total ?? data.amount),
-                                status: data.status || 'pending',
+                                status: normalizeStatus(data.status),
+                                rawStatus: String(data.status || 'pending'),
                                 customer: data.customerName || data.userName || data.email || 'Хэрэглэгч',
-                                createdAtMs: toMs(data.createdAt || data.updatedAt),
+                                createdAtMs,
+                                completedAtMs: outcomeAtMs,
                                 items: toItems(data.items),
                                 coordinates: extractCoordinates(data),
                                 address: extractAddress(data),
+                                district: extractDistrict(data),
+                                source: String(data.source || ''),
+                                paymentMethod: String(data.paymentMethod || ''),
+                                deliveryType: String(data.deliveryType || 'delivery'),
                                 isDelivery: !isPickup,
+                                isPickup,
                             };
                         })
                     );
@@ -161,36 +206,34 @@ const Dashboard = () => {
                 }
             ),
             onSnapshot(
-                collection(db, 'users'),
+                collection(db, 'sales'),
                 (snapshot) => {
-                    setUsers(
+                    setSales(
                         snapshot.docs.map((docSnap) => {
                             const data = docSnap.data();
                             return {
                                 id: docSnap.id,
-                                role: String(data.role || '').toLowerCase(),
+                                total: toNumber(data.total ?? data.totalAmount ?? data.amount),
+                                createdAtMs: toMs(data.createdAt || data.updatedAt),
+                                items: toItems(data.items),
+                                customer: data.customerName || 'Walk-in Customer',
                             };
                         })
                     );
                 },
                 (error) => {
-                    console.error('Users snapshot error:', error);
-                    setErrorMessage('Dashboard мэдээлэл уншихад алдаа гарлаа.');
+                    console.error('Sales snapshot error:', error);
+                    setErrorMessage('Offline sales мэдээлэл уншихад алдаа гарлаа.');
                 }
             ),
             onSnapshot(
                 collection(db, 'products'),
                 (snapshot) => {
                     setProducts(
-                        snapshot.docs.map((docSnap) => {
-                            const data = docSnap.data();
-                            return {
-                                id: docSnap.id,
-                                name: data.name || 'Нэргүй бүтээгдэхүүн',
-                                stock: toNumber(data.stock),
-                                status: String(data.status || '').toLowerCase(),
-                            };
-                        })
+                        snapshot.docs.map((docSnap) => ({
+                            id: docSnap.id,
+                            name: docSnap.data().name || 'Нэргүй бүтээгдэхүүн',
+                        }))
                     );
                     setLoading(false);
                 },
@@ -205,180 +248,284 @@ const Dashboard = () => {
         return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
     }, []);
 
-    const analytics = useMemo(() => {
+    const deliveryAnalytics = useMemo(() => {
         const now = Date.now();
         const dayMs = 24 * 60 * 60 * 1000;
-        const currentStart = now - 7 * dayMs;
-        const previousStart = now - 14 * dayMs;
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0);
+        const todayStartMs = startOfToday.getTime();
+        const weekStartMs = now - 7 * dayMs;
+        const monthStartMs = now - 30 * dayMs;
+        const previousWeekStartMs = now - 14 * dayMs;
+        const mapRangeStartMs = now - rangeDays * dayMs;
 
-        let currentSales = 0;
-        let previousSales = 0;
-        let currentOrders = 0;
-        let previousOrders = 0;
-        const totalSalesAll = orders.reduce((sum, order) => sum + order.total, 0);
-        const averageBasketValue = orders.length ? totalSalesAll / orders.length : 0;
+        const deliveryOrders = orders.filter((order) => order.isDelivery);
+        const offlineSales = sales.filter((sale) => sale.createdAtMs > 0);
+        const inRangeDeliveryOrders = deliveryOrders.filter((order) => order.createdAtMs >= mapRangeStartMs);
+        const todaysDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= todayStartMs);
+        const weekDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= weekStartMs);
+        const previousWeekDeliveries = deliveryOrders.filter(
+            (order) => order.createdAtMs >= previousWeekStartMs && order.createdAtMs < weekStartMs
+        );
+        const monthDeliveries = deliveryOrders.filter((order) => order.createdAtMs >= monthStartMs);
 
-        const dailySales = Array.from({ length: 7 }, (_, index) => {
-            const start = now - (6 - index) * dayMs;
+        const dayBuckets = Array.from({ length: 7 }, (_, index) => {
+            const bucketDate = new Date(now - (6 - index) * dayMs);
+            bucketDate.setHours(0, 0, 0, 0);
             return {
                 key: index,
-                label: WEEK_DAYS[new Date(start).getDay() === 0 ? 6 : new Date(start).getDay() - 1],
-                start,
-                end: start + dayMs,
+                label: `${bucketDate.getMonth() + 1}/${bucketDate.getDate()}`,
                 total: 0,
             };
         });
 
-        orders.forEach((order) => {
-            if (!order.createdAtMs) return;
-
-            if (order.createdAtMs >= currentStart) {
-                currentOrders += 1;
-                currentSales += order.total;
-            } else if (order.createdAtMs >= previousStart) {
-                previousOrders += 1;
-                previousSales += order.total;
-            }
-
-            dailySales.forEach((day) => {
-                if (order.createdAtMs >= day.start && order.createdAtMs < day.end) {
-                    day.total += order.total;
-                }
-            });
-        });
-
-        const maxDaily = Math.max(...dailySales.map((day) => day.total), 1);
-        const chartData = dailySales.map((day) => ({
-            ...day,
-            percent: Math.max(8, Math.round((day.total / maxDaily) * 100)),
+        const hourBuckets = Array.from({ length: 24 }, (_, hour) => ({
+            label: HOUR_LABELS[hour],
+            count: 0,
         }));
 
-        const activeProducts = products.filter((product) => product.status !== 'inactive').length;
-        const lowStockCount = products.filter((product) => product.stock > 0 && product.stock <= 5).length;
-        const outOfStockCount = products.filter((product) => product.stock <= 0).length;
-        const customerCount = users.filter((user) => !['admin', 'manager'].includes(user.role)).length;
-        const productNameMap = new Map(products.map((product) => [String(product.id), product.name]));
-        const soldProductMap = new Map();
+        const weekdayBuckets = Array.from({ length: 7 }, (_, weekdayIndex) => ({
+            label: WEEK_DAY_LABELS[weekdayIndex],
+            count: 0,
+        }));
 
-        orders.forEach((order) => {
+        const districtMap = new Map();
+        const productMap = new Map();
+        const turnaroundMinutes = [];
+        let completedCount = 0;
+        let cancelledCount = 0;
+        let returnedCount = 0;
+        let deliveryRevenue = 0;
+        let previousWeekRevenue = 0;
+
+        deliveryOrders.forEach((order) => {
+            if (order.createdAtMs >= weekStartMs) {
+                deliveryRevenue += order.total;
+            }
+
+            if (order.createdAtMs >= previousWeekStartMs && order.createdAtMs < weekStartMs) {
+                previousWeekRevenue += order.total;
+            }
+
+            if (order.createdAtMs >= weekStartMs) {
+                const hour = new Date(order.createdAtMs).getHours();
+                const weekDay = new Date(order.createdAtMs).getDay();
+                hourBuckets[hour].count += 1;
+                weekdayBuckets[weekDay].count += 1;
+            }
+
+            if (order.createdAtMs >= now - 7 * dayMs) {
+                const bucketIndex = Math.min(
+                    6,
+                    Math.max(0, Math.floor((order.createdAtMs - (now - 7 * dayMs)) / dayMs))
+                );
+                if (dayBuckets[bucketIndex]) {
+                    dayBuckets[bucketIndex].total += order.total;
+                }
+            }
+
+            if (order.status === 'completed') completedCount += 1;
+            if (order.status === 'cancelled') cancelledCount += 1;
+            if (order.status === 'returned') returnedCount += 1;
+
+            if (order.district) {
+                districtMap.set(order.district, (districtMap.get(order.district) || 0) + 1);
+            }
+
             order.items.forEach((item) => {
                 const key = item.productId || item.name;
                 if (!key) return;
-                const existing = soldProductMap.get(key) || {
+                const existing = productMap.get(key) || {
                     id: key,
-                    name: item.name || productNameMap.get(String(key)) || 'Тодорхойгүй бүтээгдэхүүн',
+                    name: item.name || products.find((product) => product.id === key)?.name || 'Тодорхойгүй бүтээгдэхүүн',
                     soldQty: 0,
+                    revenue: 0,
                 };
                 existing.soldQty += item.quantity;
-                soldProductMap.set(key, existing);
+                existing.revenue += item.lineAmount || 0;
+                productMap.set(key, existing);
             });
+
+            if (order.completedAtMs > order.createdAtMs && order.status === 'completed') {
+                turnaroundMinutes.push((order.completedAtMs - order.createdAtMs) / (1000 * 60));
+            }
         });
 
-        const topSoldProducts = [...soldProductMap.values()]
+        const totalDeliveryOrders = deliveryOrders.length;
+        const weeklyOrderCount = weekDeliveries.length;
+        const averageDailyDeliveries = weeklyOrderCount / 7;
+        const totalSalesRevenue =
+            weekDeliveries.reduce((sum, order) => sum + order.total, 0) +
+            offlineSales
+                .filter((sale) => sale.createdAtMs >= weekStartMs)
+                .reduce((sum, sale) => sum + sale.total, 0);
+        const averageOrderValue = weeklyOrderCount
+            ? weekDeliveries.reduce((sum, order) => sum + order.total, 0) / weeklyOrderCount
+            : 0;
+        const basketValues = weekDeliveries.map((order) => order.total);
+        const peakHour = [...hourBuckets].sort((a, b) => b.count - a.count)[0];
+        const peakDay = [...weekdayBuckets].sort((a, b) => b.count - a.count)[0];
+        const topDistricts = [...districtMap.entries()]
+            .map(([district, count]) => ({ district, count }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5);
+        const topProducts = [...productMap.values()]
             .sort((a, b) => b.soldQty - a.soldQty)
             .slice(0, 5);
-
-        const topStockProducts = [...products]
-            .sort((a, b) => b.stock - a.stock)
-            .slice(0, 5);
-
-        const recentOrders = [...orders]
-            .sort((a, b) => b.createdAtMs - a.createdAtMs)
-            .slice(0, 6);
-
-        return {
-            currentSales,
-            currentOrders,
-            averageBasketValue,
-            salesGrowth: getGrowth(currentSales, previousSales),
-            orderGrowth: getGrowth(currentOrders, previousOrders),
-            productCount: products.length,
-            activeProducts,
-            lowStockCount,
-            outOfStockCount,
-            customerCount,
-            chartData,
-            recentOrders,
-            topSoldProducts,
-            topStockProducts,
-        };
-    }, [orders, products, users]);
-
-    const deliveryInsights = useMemo(() => {
-        const now = Date.now();
-        const dayMs = 24 * 60 * 60 * 1000;
-        const fromMs = now - mapRangeDays * dayMs;
-
-        const ordersInRange = orders.filter((order) => order.createdAtMs && order.createdAtMs >= fromMs);
-        const deliveriesWithCoords = ordersInRange.filter(
-            (order) => order.isDelivery && Array.isArray(order.coordinates)
-        );
-
-        const uniqueCustomerCount = new Set(deliveriesWithCoords.map((order) => `${order.customer}-${order.id}`)).size;
-        const averageDeliveryValue = deliveriesWithCoords.length
-            ? deliveriesWithCoords.reduce((sum, order) => sum + order.total, 0) / deliveriesWithCoords.length
-            : 0;
-
-        const center =
-            deliveriesWithCoords.length > 0
+        const bestProduct = topProducts[0] || null;
+        const coordinatesOrders = inRangeDeliveryOrders.filter((order) => Array.isArray(order.coordinates));
+        const mapCenter =
+            coordinatesOrders.length > 0
                 ? [
-                      deliveriesWithCoords.reduce((sum, order) => sum + order.coordinates[0], 0) /
-                          deliveriesWithCoords.length,
-                      deliveriesWithCoords.reduce((sum, order) => sum + order.coordinates[1], 0) /
-                          deliveriesWithCoords.length,
+                      coordinatesOrders.reduce((sum, order) => sum + order.coordinates[0], 0) / coordinatesOrders.length,
+                      coordinatesOrders.reduce((sum, order) => sum + order.coordinates[1], 0) / coordinatesOrders.length,
                   ]
                 : DEFAULT_CENTER;
-
-        const recentDeliveries = [...deliveriesWithCoords]
+        const averageTurnaround =
+            turnaroundMinutes.length > 0
+                ? turnaroundMinutes.reduce((sum, minutes) => sum + minutes, 0) / turnaroundMinutes.length
+                : 0;
+        const autoTarget = Math.max(10, Math.round(averageDailyDeliveries * 1.15));
+        const todayActual = todaysDeliveries.length;
+        const deliveryRevenueShare = totalSalesRevenue > 0 ? (deliveryRevenue / totalSalesRevenue) * 100 : 0;
+        const profitabilityMix = [
+            {
+                label: 'Delivery',
+                value: weekDeliveries.reduce((sum, order) => sum + order.total, 0),
+            },
+            {
+                label: 'Offline',
+                value: offlineSales
+                    .filter((sale) => sale.createdAtMs >= weekStartMs)
+                    .reduce((sum, sale) => sum + sale.total, 0),
+            },
+        ];
+        const bestOrderType = [...profitabilityMix].sort((a, b) => b.value - a.value)[0];
+        const recentDeliveries = [...weekDeliveries]
             .sort((a, b) => b.createdAtMs - a.createdAtMs)
-            .slice(0, 8);
+            .slice(0, 6);
+        const maxChartValue = Math.max(...dayBuckets.map((item) => item.total), 1);
 
         return {
-            fromMs,
-            deliveriesWithCoords,
-            center,
-            uniqueCustomerCount,
-            averageDeliveryValue,
+            totals: {
+                today: todaysDeliveries.length,
+                week: weeklyOrderCount,
+                month: monthDeliveries.length,
+                revenue: deliveryRevenue,
+                averageOrderValue,
+                averageDailyDeliveries,
+                wowOrdersGrowth: getGrowth(weeklyOrderCount, previousWeekDeliveries.length),
+                wowRevenueGrowth: getGrowth(deliveryRevenue, previousWeekRevenue),
+            },
+            quality: {
+                maxBasket: basketValues.length ? Math.max(...basketValues) : 0,
+                minBasket: basketValues.length ? Math.min(...basketValues) : 0,
+                avgBasket: averageOrderValue,
+                topProduct: bestProduct,
+                topProducts,
+            },
+            time: {
+                peakHour,
+                peakDay,
+                averageTurnaround,
+                trend: dayBuckets.map((item) => ({
+                    ...item,
+                    percent: Math.max(8, Math.round((item.total / maxChartValue) * 100)),
+                })),
+                hourBuckets,
+            },
+            performance: {
+                successRate: totalDeliveryOrders ? (completedCount / totalDeliveryOrders) * 100 : 0,
+                cancelRate: totalDeliveryOrders ? (cancelledCount / totalDeliveryOrders) * 100 : 0,
+                returnRate: totalDeliveryOrders ? (returnedCount / totalDeliveryOrders) * 100 : 0,
+                averageTurnaround,
+            },
+            sales: {
+                revenueShare: deliveryRevenueShare,
+                deliveryRevenue,
+                offlineRevenue: profitabilityMix.find((item) => item.label === 'Offline')?.value || 0,
+                growthTrend: getGrowth(deliveryRevenue, previousWeekRevenue),
+                bestOrderType,
+            },
+            geography: {
+                topDistricts,
+                coordinatesOrders,
+                mapCenter,
+            },
+            plan: {
+                target: autoTarget,
+                actual: todayActual,
+                achievement: autoTarget ? (todayActual / autoTarget) * 100 : 0,
+            },
+            strategy: {
+                pushProduct: bestProduct?.name || 'Өгөгдөл дутуу',
+                promoWindow: peakHour?.label || '-',
+                addCapacity: averageTurnaround > 90 || todayActual > autoTarget,
+                profitableType: bestOrderType?.label || '-',
+            },
             recentDeliveries,
         };
-    }, [orders, mapRangeDays]);
+    }, [orders, products, rangeDays, sales]);
 
-    const stats = [
+    const heroStats = [
         {
-            title: '7 хоногийн борлуулалт',
-            value: formatMoney(analytics.currentSales),
-            change: formatPercent(analytics.salesGrowth),
-            isUp: analytics.salesGrowth >= 0,
-            icon: <TrendingUp size={22} color="#10b981" />,
+            title: '7 хоногийн хүргэлт',
+            value: deliveryAnalytics.totals.week.toLocaleString(),
+            change: formatPercent(deliveryAnalytics.totals.wowOrdersGrowth),
+            isUp: deliveryAnalytics.totals.wowOrdersGrowth >= 0,
+            icon: <Truck size={22} color="#b45309" />,
         },
         {
-            title: '7 хоногийн захиалга',
-            value: analytics.currentOrders.toLocaleString(),
-            change: formatPercent(analytics.orderGrowth),
-            isUp: analytics.orderGrowth >= 0,
-            icon: <ShoppingBag size={22} color="#3b82f6" />,
+            title: '7 хоногийн орлого',
+            value: formatMoney(deliveryAnalytics.totals.revenue),
+            change: formatPercent(deliveryAnalytics.totals.wowRevenueGrowth),
+            isUp: deliveryAnalytics.totals.wowRevenueGrowth >= 0,
+            icon: <CircleDollarSign size={22} color="#047857" />,
         },
         {
-            title: 'Дундаж сагсны үнэ',
-            value: formatMoney(analytics.averageBasketValue),
-            change: orders.length ? `${orders.length} нийт захиалга` : 'өгөгдөл алга',
+            title: 'Дундаж сагсны дүн',
+            value: formatMoney(deliveryAnalytics.totals.averageOrderValue),
+            change: `${deliveryAnalytics.totals.averageDailyDeliveries.toFixed(1)} хүргэлт/өдөр`,
             isUp: true,
-            icon: <CircleDollarSign size={22} color="#f59e0b" />,
+            icon: <ShoppingBag size={22} color="#2563eb" />,
         },
         {
-            title: 'Нийт хэрэглэгч',
-            value: analytics.customerCount.toLocaleString(),
-            change: `${analytics.productCount} бараа`,
-            isUp: true,
-            icon: <Users size={22} color="#8b5cf6" />,
+            title: 'Target achievement',
+            value: formatRate(deliveryAnalytics.plan.achievement),
+            change: `${deliveryAnalytics.plan.actual}/${deliveryAnalytics.plan.target} өнөөдөр`,
+            isUp: deliveryAnalytics.plan.achievement >= 100,
+            icon: <Target size={22} color="#7c3aed" />,
+        },
+    ];
+
+    const strategicCards = [
+        {
+            title: 'Түлхэх бүтээгдэхүүн',
+            value: deliveryAnalytics.strategy.pushProduct,
+            note: 'Delivery-ээр хамгийн их эргэлттэй SKU',
+        },
+        {
+            title: 'Promotion хийх цаг',
+            value: deliveryAnalytics.strategy.promoWindow,
+            note: 'Peak hour эхлэхээс 30-60 минутын өмнө идэвхжүүлэх',
+        },
+        {
+            title: 'Capacity шийдвэр',
+            value: deliveryAnalytics.strategy.addCapacity ? 'Нэмэх шаардлагатай' : 'Одоогийн багтаамж хүрэлцээтэй',
+            note: 'Дундаж turnaround болон өнөөдрийн target-аас тооцсон',
+        },
+        {
+            title: 'Ашигтай order type',
+            value: deliveryAnalytics.strategy.profitableType,
+            note: 'Сүүлийн 7 хоногийн revenue contribution',
         },
     ];
 
     return (
         <div className="dashboard-container">
             <div className="dashboard-header">
-                <h1>Хянах самбар</h1>
-                <p>Сүүлийн 7 хоногийн бизнесийн гол үзүүлэлтүүд</p>
+                <h1>Delivery Decision Dashboard</h1>
+                <p>Өдөр тутмын гүйцэтгэл, 7 хоногийн тренд, стратегийн шийдвэрийг нэг дэлгэц дээр харуулна.</p>
             </div>
 
             {errorMessage && (
@@ -389,7 +536,7 @@ const Dashboard = () => {
             )}
 
             <div className="stats-grid">
-                {stats.map((stat) => (
+                {heroStats.map((stat) => (
                     <div key={stat.title} className="stat-card">
                         <div className="stat-icon">{stat.icon}</div>
                         <div className="stat-info">
@@ -404,36 +551,257 @@ const Dashboard = () => {
                 ))}
             </div>
 
+            <div className="delivery-summary-grid">
+                <div className="section-card summary-card-feature">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Үндсэн KPI snapshot</h3>
+                            <p>Менежментийн daily/weekly review-д хамгийн түрүүнд харах тоонууд</p>
+                        </div>
+                    </div>
+                    <div className="mini-kpi-grid">
+                        <div className="mini-kpi">
+                            <span>Өнөөдрийн хүргэлт</span>
+                            <strong>{deliveryAnalytics.totals.today}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>30 хоногийн хүргэлт</span>
+                            <strong>{deliveryAnalytics.totals.month}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>Peak day</span>
+                            <strong>{deliveryAnalytics.time.peakDay?.label || '-'}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>Peak hour</span>
+                            <strong>{deliveryAnalytics.time.peakHour?.label || '-'}</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="section-card target-card">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Төлөвлөгөө vs Гүйцэтгэл</h3>
+                            <p>Target нь trailing 7-day average дээр суурилсан auto benchmark</p>
+                        </div>
+                    </div>
+                    <div className="target-progress-wrap">
+                        <div className="target-progress-bar">
+                            <span style={{ width: `${Math.min(deliveryAnalytics.plan.achievement, 100)}%` }} />
+                        </div>
+                        <div className="target-progress-meta">
+                            <strong>{formatRate(deliveryAnalytics.plan.achievement)}</strong>
+                            <span>{deliveryAnalytics.plan.actual} бодит / {deliveryAnalytics.plan.target} зорилт</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="dashboard-sections dashboard-sections-equal">
+                <div className="section-card">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Захиалгын чанарын үзүүлэлт</h3>
+                            <p>Basket quality болон түлхэх SKU-г ялгана</p>
+                        </div>
+                    </div>
+                    <div className="mini-kpi-grid quality-grid">
+                        <div className="mini-kpi">
+                            <span>Хамгийн өндөр сагс</span>
+                            <strong>{formatMoney(deliveryAnalytics.quality.maxBasket)}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>Хамгийн бага сагс</span>
+                            <strong>{formatMoney(deliveryAnalytics.quality.minBasket)}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>Дундаж сагс</span>
+                            <strong>{formatMoney(deliveryAnalytics.quality.avgBasket)}</strong>
+                        </div>
+                        <div className="mini-kpi">
+                            <span>Хамгийн их зарагдсан</span>
+                            <strong>{deliveryAnalytics.quality.topProduct?.name || '-'}</strong>
+                        </div>
+                    </div>
+                    <div className="ranking-list">
+                        {deliveryAnalytics.quality.topProducts.length ? (
+                            deliveryAnalytics.quality.topProducts.map((product, index) => (
+                                <div className="ranking-row" key={`${product.id}-${index}`}>
+                                    <div className="ranking-left">
+                                        <span className="ranking-index">#{index + 1}</span>
+                                        <span className="ranking-name">{product.name}</span>
+                                    </div>
+                                    <strong>{product.soldQty} ш</strong>
+                                </div>
+                            ))
+                        ) : (
+                            <p className="empty-state-text">Top бүтээгдэхүүний өгөгдөл алга байна.</p>
+                        )}
+                    </div>
+                </div>
+
+                <div className="section-card">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Гүйцэтгэлийн үзүүлэлт</h3>
+                            <p>Operational health болон service level</p>
+                        </div>
+                    </div>
+                    <div className="performance-grid">
+                        <div className="performance-item success">
+                            <CheckCircle2 size={18} />
+                            <div>
+                                <span>Амжилттай хүргэлт</span>
+                                <strong>{formatRate(deliveryAnalytics.performance.successRate)}</strong>
+                            </div>
+                        </div>
+                        <div className="performance-item danger">
+                            <XCircle size={18} />
+                            <div>
+                                <span>Цуцлагдсан</span>
+                                <strong>{formatRate(deliveryAnalytics.performance.cancelRate)}</strong>
+                            </div>
+                        </div>
+                        <div className="performance-item warn">
+                            <RotateCcw size={18} />
+                            <div>
+                                <span>Буцаалт</span>
+                                <strong>{formatRate(deliveryAnalytics.performance.returnRate)}</strong>
+                            </div>
+                        </div>
+                        <div className="performance-item neutral">
+                            <TimerReset size={18} />
+                            <div>
+                                <span>Дундаж хүргэлтийн хугацаа</span>
+                                <strong>{formatDuration(deliveryAnalytics.performance.averageTurnaround)}</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="dashboard-sections">
+                <div className="section-card">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Цаг хугацааны анализ</h3>
+                            <p>Delivery demand curve болон ажиллах хуваарийн суурь</p>
+                        </div>
+                    </div>
+                    <div className="mock-chart-container">
+                        {deliveryAnalytics.time.trend.map((point) => (
+                            <div key={point.key} className="chart-column">
+                                <div className="chart-value">{point.total ? `₮${Math.round(point.total / 1000)}k` : '₮0'}</div>
+                                <div className="chart-bar" style={{ height: `${point.percent}%` }} />
+                                <div className="chart-label">{point.label}</div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="hour-strip">
+                        {deliveryAnalytics.time.hourBuckets.map((bucket) => (
+                            <div
+                                key={bucket.label}
+                                className={`hour-chip ${bucket.label === deliveryAnalytics.time.peakHour?.label ? 'active' : ''}`}
+                            >
+                                <span>{bucket.label}</span>
+                                <strong>{bucket.count}</strong>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="section-card">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Борлуулалтын анализ</h3>
+                            <p>Delivery contribution болон суваг хоорондын харьцуулалт</p>
+                        </div>
+                    </div>
+                    <div className="sales-mix-grid">
+                        <div className="sales-mix-item">
+                            <span>Delivery revenue share</span>
+                            <strong>{formatRate(deliveryAnalytics.sales.revenueShare)}</strong>
+                        </div>
+                        <div className="sales-mix-item">
+                            <span>Delivery revenue</span>
+                            <strong>{formatMoney(deliveryAnalytics.sales.deliveryRevenue)}</strong>
+                        </div>
+                        <div className="sales-mix-item">
+                            <span>Offline revenue</span>
+                            <strong>{formatMoney(deliveryAnalytics.sales.offlineRevenue)}</strong>
+                        </div>
+                        <div className="sales-mix-item">
+                            <span>Growth trend</span>
+                            <strong>{formatPercent(deliveryAnalytics.sales.growthTrend)}</strong>
+                        </div>
+                    </div>
+                    <div className="comparison-stack">
+                        <div className="comparison-row">
+                            <span>Delivery</span>
+                            <div className="comparison-bar">
+                                <span
+                                    style={{
+                                        width: `${
+                                            deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue > 0
+                                                ? (deliveryAnalytics.sales.deliveryRevenue /
+                                                      (deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue)) *
+                                                  100
+                                                : 0
+                                        }%`,
+                                    }}
+                                />
+                            </div>
+                            <strong>{formatMoney(deliveryAnalytics.sales.deliveryRevenue)}</strong>
+                        </div>
+                        <div className="comparison-row">
+                            <span>Offline</span>
+                            <div className="comparison-bar muted">
+                                <span
+                                    style={{
+                                        width: `${
+                                            deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue > 0
+                                                ? (deliveryAnalytics.sales.offlineRevenue /
+                                                      (deliveryAnalytics.sales.deliveryRevenue + deliveryAnalytics.sales.offlineRevenue)) *
+                                                  100
+                                                : 0
+                                        }%`,
+                                    }}
+                                />
+                            </div>
+                            <strong>{formatMoney(deliveryAnalytics.sales.offlineRevenue)}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div className="section-card delivery-map-card">
                 <div className="delivery-map-header">
                     <div>
-                        <h3>Хүргэлтийн байршлын газрын зураг</h3>
-                        <p>
-                            Сүүлийн {mapRangeDays} хоногийн координаттай хүргэлтийн захиалгууд
-                        </p>
+                        <h3>Байршлын анализ</h3>
+                        <p>Delivery heat map болон дүүргийн эрэлт</p>
                     </div>
                     <div className="range-switch">
                         {RANGE_OPTIONS.map((days) => (
                             <button
                                 key={days}
                                 type="button"
-                                className={`range-btn ${mapRangeDays === days ? 'active' : ''}`}
-                                onClick={() => setMapRangeDays(days)}
+                                className={`range-btn ${rangeDays === days ? 'active' : ''}`}
+                                onClick={() => setRangeDays(days)}
                             >
-                                {days} хоног
+                                {days === 1 ? 'Өдөр' : `${days} хоног`}
                             </button>
                         ))}
                     </div>
                 </div>
-
                 <div className="delivery-map-grid">
                     <div className="delivery-map-canvas">
-                        <MapContainer center={deliveryInsights.center} zoom={11} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
+                        <MapContainer center={deliveryAnalytics.geography.mapCenter} zoom={11} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
                             <TileLayer
                                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                             />
-                            {deliveryInsights.deliveriesWithCoords.map((order) => (
+                            {deliveryAnalytics.geography.coordinatesOrders.map((order) => (
                                 <Marker key={order.id} position={order.coordinates} icon={deliveryMarkerIcon}>
                                     <Tooltip direction="top" offset={[0, -8]}>{order.customer}</Tooltip>
                                     <Popup>
@@ -441,9 +809,7 @@ const Dashboard = () => {
                                             <strong>#{order.id.slice(0, 8).toUpperCase()}</strong>
                                             <p style={{ margin: '6px 0' }}>{order.customer}</p>
                                             <p style={{ margin: '6px 0' }}>{formatMoney(order.total)}</p>
-                                            <p style={{ margin: '6px 0' }}>
-                                                {new Date(order.createdAtMs).toLocaleDateString('mn-MN')}
-                                            </p>
+                                            <p style={{ margin: '6px 0' }}>{order.district || '-'}</p>
                                             {order.address ? <p style={{ margin: '6px 0' }}>{order.address}</p> : null}
                                         </div>
                                     </Popup>
@@ -455,184 +821,107 @@ const Dashboard = () => {
                     <div className="delivery-side">
                         <div className="delivery-kpis">
                             <div className="delivery-kpi">
-                                <Truck size={16} />
-                                <div>
-                                    <span>Хүргэлтийн тоо</span>
-                                    <strong>{deliveryInsights.deliveriesWithCoords.length}</strong>
-                                </div>
-                            </div>
-                            <div className="delivery-kpi">
                                 <MapPinned size={16} />
                                 <div>
-                                    <span>Байршлын цэг</span>
-                                    <strong>{deliveryInsights.deliveriesWithCoords.length}</strong>
+                                    <span>Координаттай хүргэлт</span>
+                                    <strong>{deliveryAnalytics.geography.coordinatesOrders.length}</strong>
                                 </div>
                             </div>
                             <div className="delivery-kpi">
                                 <Users size={16} />
                                 <div>
-                                    <span>Хүргэсэн хэрэглэгч</span>
-                                    <strong>{deliveryInsights.uniqueCustomerCount}</strong>
+                                    <span>Тэргүүлэгч дүүрэг</span>
+                                    <strong>{deliveryAnalytics.geography.topDistricts[0]?.district || '-'}</strong>
                                 </div>
                             </div>
                             <div className="delivery-kpi">
-                                <CircleDollarSign size={16} />
+                                <ChartNoAxesColumn size={16} />
                                 <div>
-                                    <span>Дундаж хүргэлтийн дүн</span>
-                                    <strong>{formatMoney(deliveryInsights.averageDeliveryValue)}</strong>
+                                    <span>Хамгийн их захиалга</span>
+                                    <strong>{deliveryAnalytics.geography.topDistricts[0]?.count || 0}</strong>
+                                </div>
+                            </div>
+                            <div className="delivery-kpi">
+                                <Clock3 size={16} />
+                                <div>
+                                    <span>Сонгосон хугацаа</span>
+                                    <strong>{rangeDays === 1 ? 'Өдөр' : `${rangeDays} хоног`}</strong>
                                 </div>
                             </div>
                         </div>
 
                         <div className="delivery-list">
                             <h4>
-                                <Clock3 size={14} />
-                                <span>Сүүлийн хүргэлтүүд</span>
+                                <MapPinned size={14} />
+                                <span>Top дүүргүүд</span>
                             </h4>
-                            {deliveryInsights.recentDeliveries.length ? (
-                                deliveryInsights.recentDeliveries.map((order) => (
-                                    <div key={order.id} className="delivery-row">
+                            {deliveryAnalytics.geography.topDistricts.length ? (
+                                deliveryAnalytics.geography.topDistricts.map((item) => (
+                                    <div key={item.district} className="delivery-row">
                                         <div>
-                                            <p>#{order.id.slice(0, 6).toUpperCase()}</p>
-                                            <small>{order.customer}</small>
+                                            <p>{item.district}</p>
+                                            <small>Захиалгын тоо</small>
                                         </div>
                                         <div>
-                                            <p>{formatMoney(order.total)}</p>
-                                            <small>{new Date(order.createdAtMs).toLocaleDateString('mn-MN')}</small>
+                                            <p>{item.count}</p>
                                         </div>
                                     </div>
                                 ))
                             ) : (
-                                <p className="empty-state-text">
-                                    Сонгосон хугацаанд координаттай хүргэлтийн өгөгдөл алга байна.
-                                </p>
+                                <p className="empty-state-text">Дүүргийн өгөгдөл алга байна.</p>
                             )}
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="dashboard-sections">
+            <div className="dashboard-sections dashboard-sections-equal">
                 <div className="section-card">
-                    <h3>7 хоногийн борлуулалтын тренд</h3>
-                    <div className="mock-chart-container">
-                        {analytics.chartData.map((point) => (
-                            <div key={point.key} className="chart-column">
-                                <div className="chart-value">{point.total ? `₮${Math.round(point.total / 1000)}k` : '₮0'}</div>
-                                <div className="chart-bar" style={{ height: `${point.percent}%` }}></div>
-                                <div className="chart-label">{point.label}</div>
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Стратегийн мэдээлэл</h3>
+                            <p>Dashboard-аас шууд гаргах шийдвэрийн санал</p>
+                        </div>
+                    </div>
+                    <div className="strategy-grid">
+                        {strategicCards.map((card) => (
+                            <div key={card.title} className="strategy-card">
+                                <span>{card.title}</span>
+                                <strong>{card.value}</strong>
+                                <small>{card.note}</small>
                             </div>
                         ))}
                     </div>
                 </div>
 
                 <div className="section-card">
-                    <h3>Барааны нөөцийн төлөв</h3>
-                    <div className="inventory-grid">
-                        <div className="inventory-item">
-                            <span className="inventory-label">Идэвхтэй бараа</span>
-                            <strong>{analytics.activeProducts}</strong>
-                        </div>
-                        <div className="inventory-item warning">
-                            <span className="inventory-label">Low stock (≤5)</span>
-                            <strong>{analytics.lowStockCount}</strong>
-                        </div>
-                        <div className="inventory-item danger">
-                            <span className="inventory-label">Out of stock</span>
-                            <strong>{analytics.outOfStockCount}</strong>
-                        </div>
-                        <div className="inventory-item">
-                            <span className="inventory-label">Нийт бараа</span>
-                            <strong>{analytics.productCount}</strong>
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Сүүлийн хүргэлтүүд</h3>
+                            <p>Execution-level follow-up шаардлагатай order-уудыг хурдан шалгана</p>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <div className="dashboard-sections">
-                <div className="section-card">
-                    <h3>Хамгийн их зарагдсан 5 бүтээгдэхүүн</h3>
-                    <div className="ranking-list">
-                        {analytics.topSoldProducts.length ? (
-                            analytics.topSoldProducts.map((product, index) => (
-                                <div className="ranking-row" key={`${product.id}-${index}`}>
-                                    <div className="ranking-left">
-                                        <span className="ranking-index">#{index + 1}</span>
-                                        <span className="ranking-name">{product.name}</span>
-                                    </div>
-                                    <strong>{product.soldQty} ш</strong>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="empty-state-text">Зарагдсан бүтээгдэхүүний өгөгдөл алга байна.</p>
-                        )}
-                    </div>
-                </div>
-
-                <div className="section-card">
-                    <h3>Хамгийн их үлдэгдэлтэй 5 бүтээгдэхүүн</h3>
-                    <div className="ranking-list">
-                        {analytics.topStockProducts.length ? (
-                            analytics.topStockProducts.map((product, index) => (
-                                <div className="ranking-row" key={`${product.id}-${index}`}>
-                                    <div className="ranking-left">
-                                        <span className="ranking-index">#{index + 1}</span>
-                                        <span className="ranking-name">{product.name}</span>
-                                    </div>
-                                    <strong>{product.stock} ш</strong>
-                                </div>
-                            ))
-                        ) : (
-                            <p className="empty-state-text">Үлдэгдлийн өгөгдөл алга байна.</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            <div className="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Захиалга</th>
-                            <th>Хэрэглэгч</th>
-                            <th>Дүн</th>
-                            <th>Огноо</th>
-                            <th>Төлөв</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+                    <div className="delivery-list recent-delivery-list">
                         {loading ? (
-                            <tr>
-                                <td colSpan={5}>Уншиж байна...</td>
-                            </tr>
-                        ) : analytics.recentOrders.length ? (
-                            analytics.recentOrders.map((order) => {
-                                const statusClass = normalizeStatus(order.status);
-                                return (
-                                    <tr key={order.id}>
-                                        <td>#{order.id.slice(0, 6).toUpperCase()}</td>
-                                        <td>{order.customer}</td>
-                                        <td>{formatMoney(order.total)}</td>
-                                        <td>
-                                            {order.createdAtMs
-                                                ? new Date(order.createdAtMs).toLocaleDateString('mn-MN')
-                                                : '-'}
-                                        </td>
-                                        <td>
-                                            <span className={`status-pill ${statusClass}`}>
-                                                {String(order.status || 'pending')}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                );
-                            })
+                            <p className="empty-state-text">Уншиж байна...</p>
+                        ) : deliveryAnalytics.recentDeliveries.length ? (
+                            deliveryAnalytics.recentDeliveries.map((order) => (
+                                <div key={order.id} className="delivery-row">
+                                    <div>
+                                        <p>#{order.id.slice(0, 6).toUpperCase()}</p>
+                                        <small>{order.customer}</small>
+                                    </div>
+                                    <div>
+                                        <p>{formatMoney(order.total)}</p>
+                                        <small>{order.rawStatus}</small>
+                                    </div>
+                                </div>
+                            ))
                         ) : (
-                            <tr>
-                                <td colSpan={5}>Одоогоор захиалгын мэдээлэл алга байна.</td>
-                            </tr>
+                            <p className="empty-state-text">Сүүлийн хүргэлтийн өгөгдөл алга байна.</p>
                         )}
-                    </tbody>
-                </table>
+                    </div>
+                </div>
             </div>
         </div>
     );
