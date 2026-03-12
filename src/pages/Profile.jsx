@@ -10,6 +10,7 @@ import {
     Clock,
     ShieldCheck,
     Shield,
+    Briefcase,
     Mail,
     Lock,
     UserCircle2,
@@ -39,7 +40,7 @@ const Profile = () => {
     const [authMessage, setAuthMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { user, loading, isAdmin, signInWithGoogle, signInWithEmail, signUpWithEmail, logout } = useAuth();
+    const { user, loading, isAdmin, isStaff, signInWithGoogle, signInWithEmail, signUpWithEmail, logout } = useAuth();
     const navigate = useNavigate();
 
     const userData = useMemo(() => {
@@ -254,6 +255,15 @@ const Profile = () => {
                             >
                                 <Shield size={20} />
                                 <span>Админ панел</span>
+                            </button>
+                        )}
+                        {isStaff && (
+                            <button
+                                className="nav-item staff-nav"
+                                onClick={() => navigate('/workspace')}
+                            >
+                                <Briefcase size={20} />
+                                <span>Ажлын талбар</span>
                             </button>
                         )}
                         <div className="nav-divider"></div>

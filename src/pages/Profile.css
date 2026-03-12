@@ -269,6 +269,24 @@
     color: #F0C674;
 }
 
+.nav-item.staff-nav {
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    color: #fff;
+    font-weight: 600;
+    border-radius: 12px;
+    margin-top: 5px;
+    transition: all 0.3s ease;
+}
+
+.nav-item.staff-nav:hover {
+    background: linear-gradient(135deg, #1D4ED8 0%, #1E40AF 100%);
+    transform: translateX(3px);
+}
+
+.nav-item.staff-nav svg {
+    color: #fff;
+}
+
 .nav-divider {
     height: 1px;
     background-color: #eee;

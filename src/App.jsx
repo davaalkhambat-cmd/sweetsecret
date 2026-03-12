@@ -16,6 +16,7 @@ import Promotions from './pages/admin/Promotions';
 import AdminLogin from './pages/admin/AdminLogin';
 import StaffRoles from './pages/admin/StaffRoles';
 import Profile from './pages/Profile';
+import StaffWorkspace from './pages/staff/StaffWorkspace';
 import { PERMISSIONS } from './config/roles';
 
 function App() {
@@ -109,6 +110,15 @@ function App() {
             } />
 
             <Route path="/admin/login" element={<AdminLogin />} />
+
+            <Route
+                path="/workspace"
+                element={
+                    <RequireAdmin>
+                        <StaffWorkspace />
+                    </RequireAdmin>
+                }
+            />
 
             {/* Admin Routes */}
             <Route
