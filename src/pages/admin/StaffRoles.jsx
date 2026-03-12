@@ -22,6 +22,8 @@ import {
     Info,
     Plus,
     Palette,
+    UserPlus,
+    Mail,
 } from 'lucide-react';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -105,7 +107,12 @@ const StaffRoles = () => {
         icon: '👤',
         permissions: []
     });
-
+    const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
+    const [newStaff, setNewStaff] = useState({
+        email: '',
+        displayName: '',
+        role: 'sales' // Default role for new staff
+    });
     // Firestore listener
     useEffect(() => {
         const unsubscribe = onSnapshot(
@@ -273,6 +280,43 @@ const StaffRoles = () => {
         });
     };
 
+    const handleAddStaff = async (e) => {
+        e.preventDefault();
+        if (!newStaff.email || !newStaff.role) {
+            setErrorMessage('И-мэйл болон эрхийг заавал оруулна уу.');
+            return;
+        }
+
+        // Check if email already exists in users list
+        const existing = users.find(u => u.email.toLowerCase() === newStaff.email.toLowerCase());
+        if (existing) {
+            setErrorMessage('Энэ и-мэйл бүртгэлтэй байна. Та жагсаалтаас эрхийг нь сольж болно.');
+            return;
+        }
+
+        try {
+            // Create a placeholder record in users with a temporary ID (or based on email hash)
+            // Using setDoc with a custom ID so we don't create multiple docs for same email
+            const tempId = `invited_${newStaff.email.replace(/[^a-z0-9]/gi, '_')}`;
+            await setDoc(doc(db, 'users', tempId), {
+                email: newStaff.email.toLowerCase(),
+                displayName: newStaff.displayName,
+                role: newStaff.role,
+                status: 'invited',
+                createdAt: serverTimestamp(),
+                invitedBy: currentUser?.uid || 'admin'
+            });
+
+            setSuccessMessage(`✅ "${newStaff.email}" ажилтан амжилттай бүртгэгдлээ. Тэр энэ и-мэйлээрээ нэвтрэхэд эрх нь шууд идэвхжинэ.`);
+            setIsAddStaffModalOpen(false);
+            setNewStaff({ email: '', displayName: '', role: 'sales' });
+            setTimeout(() => setSuccessMessage(''), 5000);
+        } catch (error) {
+            console.error('Error adding staff:', error);
+            setErrorMessage('Ажилтан нэмэхэд алдаа гарлаа.');
+        }
+    };
+
     return (
         <div className="admin-page staff-roles-page">
             {/* Page Header */}
@@ -280,6 +324,14 @@ const StaffRoles = () => {
                 <div className="header-info">
                     <h1>Ажилтны эрхийн удирдлага</h1>
                     <p>Системийн дотоод ажилчдын роль, зөвшөөрлийг удирдана</p>
+                </div>
+                <div className="staff-header-actions">
+                    {isAdmin && (
+                        <button className="staff-btn-primary" onClick={() => setIsAddStaffModalOpen(true)}>
+                            <UserPlus size={18} />
+                            Ажилтан нэмэх
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -798,6 +850,77 @@ const StaffRoles = () => {
                                 <button type="submit" className="btn-save">
                                     <ShieldCheck size={18} />
                                     Роль үүсгэх
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+            {/* Add Staff Modal */}
+            {isAddStaffModalOpen && (
+                <div className="staff-confirm-overlay" onClick={() => setIsAddStaffModalOpen(false)}>
+                    <div className="staff-role-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <div>
+                                <h3>Шинэ ажилтан бүртгэх</h3>
+                                <p>Ажилтны и-мэйл хаягийг оруулж эрх онооно.</p>
+                            </div>
+                            <button className="close-btn" onClick={() => setIsAddStaffModalOpen(false)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAddStaff}>
+                            <div className="role-form-grid">
+                                <div className="form-group-full">
+                                    <label>И-мэйл хаяг (Required)</label>
+                                    <div className="input-with-icon">
+                                        <Mail size={16} className="field-icon" />
+                                        <input
+                                            type="email"
+                                            placeholder="staff@sweetsecret.mn"
+                                            value={newStaff.email}
+                                            onChange={e => setNewStaff({ ...newStaff, email: e.target.value })}
+                                            required
+                                        />
+                                    </div>
+                                    <p className="hint">Ажилтан энэ и-мэйл хаягаараа нэвтрэх ёстойг анхаарна уу.</p>
+                                </div>
+
+                                <div className="form-group-full">
+                                    <label>Ажилтны нэр (Full Name)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Жишээ: Бат Болд"
+                                        value={newStaff.displayName}
+                                        onChange={e => setNewStaff({ ...newStaff, displayName: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="form-group-full">
+                                    <label>Албан тушаал / Эрх</label>
+                                    <select
+                                        className="form-select"
+                                        value={newStaff.role}
+                                        onChange={e => setNewStaff({ ...newStaff, role: e.target.value })}
+                                        required
+                                    >
+                                        {assignableRoles.map(r => (
+                                            <option key={r.key} value={r.key}>
+                                                {r.icon} {r.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="modal-actions">
+                                <button type="button" className="btn-cancel" onClick={() => setIsAddStaffModalOpen(false)}>
+                                    Болих
+                                </button>
+                                <button type="submit" className="btn-save">
+                                    <UserPlus size={18} />
+                                    Бүртгэх
                                 </button>
                             </div>
                         </form>

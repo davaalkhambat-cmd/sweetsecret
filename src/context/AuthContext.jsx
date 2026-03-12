@@ -11,7 +11,7 @@ import {
     signOut,
     updateProfile,
 } from 'firebase/auth';
-import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc, query, where, getDocs, getDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES, DEFAULT_ROLES } from '../config/roles';
 
@@ -54,23 +54,43 @@ export const AuthProvider = ({ children }) => {
         const fallbackName = firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Хэрэглэгч';
         const userRef = doc(db, 'users', firebaseUser.uid);
 
+        // Check if UID doc already exists
+        const userSnap = await getDoc(userRef);
+        let existingData = userSnap.exists() ? userSnap.data() : null;
+
+        // If no UID doc, try finding by email (pre-assigned roles)
+        if (!existingData && firebaseUser.email) {
+            const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
+            const querySnap = await getDocs(q);
+            if (!querySnap.empty) {
+                // Take the first one found by email
+                existingData = querySnap.docs[0].data();
+            }
+        }
+
         const payload = {
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || fallbackName,
-            photoURL: firebaseUser.photoURL || '',
-            phoneNumber: firebaseUser.phoneNumber || '',
+            displayName: firebaseUser.displayName || existingData?.displayName || fallbackName,
+            photoURL: firebaseUser.photoURL || existingData?.photoURL || '',
+            phoneNumber: firebaseUser.phoneNumber || existingData?.phoneNumber || '',
             providerIds: (firebaseUser.providerData || [])
                 .map((provider) => provider?.providerId)
                 .filter(Boolean),
             updatedAt: serverTimestamp(),
+            role: existingData?.role || 'customer' // Preserve role if it exists
         };
 
-        if (options.isNewUser) {
+        if (options.isNewUser && !existingData) {
             payload.createdAt = serverTimestamp();
             payload.status = 'active';
             payload.role = 'customer';
             payload.loyaltyPoints = 0;
+        } else if (options.isNewUser && existingData) {
+            // New sign up, but already was in DB (e.g. from invited staff list)
+            payload.createdAt = existingData.createdAt || serverTimestamp();
+            payload.status = 'active';
+            payload.loyaltyPoints = existingData.loyaltyPoints || 0;
         }
 
         await setDoc(userRef, payload, { merge: true });
