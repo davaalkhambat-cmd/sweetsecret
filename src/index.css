@@ -4769,6 +4769,87 @@ tbody tr:last-child td {
   color: #111;
 }
 
+/* Modal Form Styles */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group-full {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  transition: all 0.2s;
+  background: #fff;
+  outline: none;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  border-color: #2D2424;
+  box-shadow: 0 0 0 3px rgba(45, 36, 36, 0.05);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Source Selector */
+.source-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.source-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.source-chip:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.source-chip.active {
+  background: #2D2424;
+  color: #fff;
+  border-color: #2D2424;
+  box-shadow: 0 4px 12px rgba(45, 36, 36, 0.2);
+}
+
+.source-chip svg {
+  opacity: 0.7;
+}
+
+.source-chip.active svg {
+  opacity: 1;
+}
+
 .final-total-box {
   grid-column: 1 / -1;
   text-align: right;

@@ -21,6 +21,10 @@ import {
     ShoppingCart,
     MapPinned,
     Tags,
+    Facebook,
+    Instagram,
+    Globe,
+    MessageCircle,
 } from 'lucide-react';
 import {
     collection,
@@ -73,7 +77,16 @@ const Orders = () => {
         paymentMethod: 'bank_transfer',
         deliveryFee: 5000,
         discount: 0,
+        source: 'facebook',
     });
+
+    const SOURCE_OPTIONS = [
+        { key: 'facebook', label: 'Facebook', icon: <Facebook size={14} /> },
+        { key: 'instagram', label: 'Instagram', icon: <Instagram size={14} /> },
+        { key: 'website', label: 'Veb sait', icon: <Globe size={14} /> },
+        { key: 'phone', label: 'Утас', icon: <Phone size={14} /> },
+        { key: 'other', label: 'Бусад', icon: <MessageCircle size={14} /> },
+    ];
 
     // Product Search State
     const [productSearch, setProductSearch] = useState('');
@@ -160,7 +173,7 @@ const Orders = () => {
                 ...newOrder,
                 totalAmount,
                 createdAt: serverTimestamp(),
-                source: 'admin_manual',
+                entryType: 'admin_manual',
                 createdBy: currentUser?.uid || 'admin'
             });
             setIsAddModalOpen(false);
@@ -168,7 +181,7 @@ const Orders = () => {
                 customerName: '', phoneNumber: '', email: '',
                 address: { zone: 'Улаанбаатар', city: 'Улаанбаатар', district: '', khoroo: '', fullAddress: '', additionalInfo: '' },
                 items: [], status: 'pending', deliveryType: 'delivery', paymentMethod: 'bank_transfer',
-                deliveryFee: 5000, discount: 0
+                deliveryFee: 5000, discount: 0, source: 'facebook'
             });
         } catch (error) {
             console.error("Submit order error:", error);
@@ -251,20 +264,63 @@ const Orders = () => {
                         </div>
 
                         <form onSubmit={handleSubmitOrder} style={{ maxHeight: '75vh', overflowY: 'auto', paddingRight: '10px' }}>
-                            <div className="modal-section-title"><User size={18} style={{ marginRight: 8 }} /> Үйлчлүүлэгчийн мэдээлэл</div>
+                            <div className="modal-section-title"><User size={18} style={{ marginRight: 8 }} /> Үйлчлүүлэгч & Суваг</div>
                             <div className="address-grid">
-                                <div><label>Үйлчлүүлэгчийн нэр *</label><input type="text" value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })} required /></div>
-                                <div><label>Утасны дугаар *</label><input type="tel" value={newOrder.phoneNumber} onChange={e => setNewOrder({ ...newOrder, phoneNumber: e.target.value })} required /></div>
+                                <div className="form-group">
+                                    <label>Үйлчлүүлэгчийн нэр *</label>
+                                    <input className="form-input" type="text" value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })} required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Утасны дугаар *</label>
+                                    <input className="form-input" type="tel" value={newOrder.phoneNumber} onChange={e => setNewOrder({ ...newOrder, phoneNumber: e.target.value })} required />
+                                </div>
+                                <div className="form-group-full">
+                                    <label>Захиалгын суваг (Source)</label>
+                                    <div className="source-selector-grid">
+                                        {SOURCE_OPTIONS.map(opt => (
+                                            <button
+                                                key={opt.key}
+                                                type="button"
+                                                className={`source-chip ${newOrder.source === opt.key ? 'active' : ''}`}
+                                                onClick={() => setNewOrder({ ...newOrder, source: opt.key })}
+                                            >
+                                                {opt.icon}
+                                                <span>{opt.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
                             <div className="modal-section-title"><MapPinned size={18} style={{ marginRight: 8 }} /> Хүргэлтийн мэдээлэл</div>
                             <div className="address-grid">
-                                <div className="form-group-full"><label>Хүргэлтийн бүс</label><select className="form-select" value={newOrder.address.zone} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, zone: e.target.value } })}><option>Улаанбаатар</option><option>Орон нутаг</option></select></div>
-                                <div><label>Хот / Аймаг *</label><input type="text" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })} required /></div>
-                                <div><label>Сум / Дүүрэг *</label><input type="text" value={newOrder.address.district} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, district: e.target.value } })} placeholder="Сум/Дүүрэг сонгох" required /></div>
-                                <div><label>Баг / Хороо *</label><input type="text" value={newOrder.address.khoroo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })} placeholder="Баг/Хороо сонгох" required /></div>
-                                <div className="form-group-full"><label>Хүргэлтийн хаяг *</label><input type="text" value={newOrder.address.fullAddress} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, fullAddress: e.target.value } })} placeholder="Дэлгэрэнгүй хаяг оруулах" required /></div>
-                                <div className="form-group-full"><label>Нэмэлт мэдээлэл</label><textarea rows="2" value={newOrder.address.additionalInfo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, additionalInfo: e.target.value } })} placeholder="Хүргэлтийн үед анхаарах зүйлс..." /></div>
+                                <div className="form-group-full">
+                                    <label>Хүргэлтийн бүс</label>
+                                    <select className="form-select" value={newOrder.address.zone} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, zone: e.target.value } })}>
+                                        <option>Улаанбаатар</option>
+                                        <option>Орон нутаг</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label>Хот / Аймаг *</label>
+                                    <input className="form-input" type="text" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })} required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Сум / Дүүрэг *</label>
+                                    <input className="form-input" type="text" value={newOrder.address.district} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, district: e.target.value } })} placeholder="Сум/Дүүрэг сонгох" required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Баг / Хороо *</label>
+                                    <input className="form-input" type="text" value={newOrder.address.khoroo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })} placeholder="Баг/Хороо сонгох" required />
+                                </div>
+                                <div className="form-group-full">
+                                    <label>Хүргэлтийн хаяг *</label>
+                                    <input className="form-input" type="text" value={newOrder.address.fullAddress} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, fullAddress: e.target.value } })} placeholder="Дэлгэрэнгүй хаяг оруулах" required />
+                                </div>
+                                <div className="form-group-full">
+                                    <label>Нэмэлт мэдээлэл</label>
+                                    <textarea className="form-textarea" rows="2" value={newOrder.address.additionalInfo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, additionalInfo: e.target.value } })} placeholder="Хүргэлтийн үед анхаарах зүйлс..." />
+                                </div>
                             </div>
 
                             <div className="modal-section-title"><ShoppingCart size={18} style={{ marginRight: 8 }} /> Бараа бүтээгдэхүүн</div>
@@ -273,6 +329,7 @@ const Orders = () => {
                                 <div className="input-with-icon">
                                     <SearchIcon size={16} className="field-icon" />
                                     <input
+                                        className="form-input"
                                         type="text"
                                         placeholder="Бүтээгдэхүүний нэрээр хайх..."
                                         value={productSearch}
@@ -306,9 +363,9 @@ const Orders = () => {
                             </div>
 
                             <div className="pricing-summary-grid">
-                                <div className="pricing-field"><label>Дэд дүн</label><input type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly /></div>
-                                <div className="pricing-field"><label><Truck size={14} /> Хүргэлтийн төлбөр</label><input type="number" value={newOrder.deliveryFee} onChange={e => setNewOrder({ ...newOrder, deliveryFee: Number(e.target.value) })} /></div>
-                                <div className="pricing-field"><label><Tags size={14} /> Хөнгөлөлт (₮)</label><input type="number" value={newOrder.discount} onChange={e => setNewOrder({ ...newOrder, discount: Number(e.target.value) })} /></div>
+                                <div className="pricing-field"><label>Дэд дүн</label><input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly /></div>
+                                <div className="pricing-field"><label><Truck size={14} /> Хүргэлтийн төлбөр</label><input className="form-input" type="number" value={newOrder.deliveryFee} onChange={e => setNewOrder({ ...newOrder, deliveryFee: Number(e.target.value) })} /></div>
+                                <div className="pricing-field"><label><Tags size={14} /> Хөнгөлөлт (₮)</label><input className="form-input" type="number" value={newOrder.discount} onChange={e => setNewOrder({ ...newOrder, discount: Number(e.target.value) })} /></div>
                                 <div className="final-total-box"><span className="total-label">Нийт дүн:</span><span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount).toLocaleString()}</span></div>
                             </div>
 
