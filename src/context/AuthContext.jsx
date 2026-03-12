@@ -11,7 +11,7 @@ import {
     signOut,
     updateProfile,
 } from 'firebase/auth';
-import { collection, doc, onSnapshot, serverTimestamp, setDoc, query, where, getDocs, getDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc, query, where, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
 import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES, DEFAULT_ROLES } from '../config/roles';
 
@@ -56,41 +56,65 @@ export const AuthProvider = ({ children }) => {
 
         // Check if UID doc already exists
         const userSnap = await getDoc(userRef);
-        let existingData = userSnap.exists() ? userSnap.data() : null;
+        const existingUIDData = userSnap.exists() ? userSnap.data() : null;
 
-        // If no UID doc, try finding by email (pre-assigned roles)
-        if (!existingData && firebaseUser.email) {
-            const q = query(collection(db, 'users'), where('email', '==', firebaseUser.email));
-            const querySnap = await getDocs(q);
-            if (!querySnap.empty) {
-                // Take the first one found by email
-                existingData = querySnap.docs[0].data();
+        // Try to find if there's an invitation doc for this email (status: 'invited')
+        let invitationData = null;
+        if (firebaseUser.email) {
+            const normalizedEmail = firebaseUser.email.toLowerCase();
+            const q = query(collection(db, 'users'), where('email', '==', normalizedEmail), where('status', '==', 'invited'));
+            const invitationSnap = await getDocs(q);
+            if (!invitationSnap.empty) {
+                // Find primary invitation (favoring doc with ID starting with 'invited_')
+                const bestDoc = invitationSnap.docs.find(d => d.id.startsWith('invited_')) || invitationSnap.docs[0];
+                invitationData = {
+                    ...bestDoc.data(),
+                    docId: bestDoc.id
+                };
             }
         }
 
         const payload = {
             uid: firebaseUser.uid,
             email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || existingData?.displayName || fallbackName,
-            photoURL: firebaseUser.photoURL || existingData?.photoURL || '',
-            phoneNumber: firebaseUser.phoneNumber || existingData?.phoneNumber || '',
+            displayName: firebaseUser.displayName || invitationData?.displayName || existingUIDData?.displayName || fallbackName,
+            photoURL: firebaseUser.photoURL || existingUIDData?.photoURL || '',
+            phoneNumber: firebaseUser.phoneNumber || invitationData?.phoneNumber || existingUIDData?.phoneNumber || '',
             providerIds: (firebaseUser.providerData || [])
                 .map((provider) => provider?.providerId)
                 .filter(Boolean),
             updatedAt: serverTimestamp(),
-            role: existingData?.role || 'customer' // Preserve role if it exists
+            role: invitationData?.role || existingUIDData?.role || 'customer'
         };
 
-        if (options.isNewUser && !existingData) {
+        if (invitationData) {
+            // USER WAS INVITED: Explicitly upgrade role and mark as active
+            payload.status = 'active';
+            payload.createdAt = existingUIDData?.createdAt || invitationData.createdAt || serverTimestamp();
+            payload.loyaltyPoints = existingUIDData?.loyaltyPoints || invitationData.loyaltyPoints || 0;
+
+            // Cleanup: Delete the temporary invitation document if it's separate from UID doc
+            if (invitationData.docId !== firebaseUser.uid) {
+                try {
+                    await deleteDoc(doc(db, 'users', invitationData.docId));
+                } catch (e) {
+                    console.error("Cleanup invited doc failed:", e);
+                }
+            }
+        } else if (existingUIDData) {
+            // EXISTING USER: Regular sync
+            payload.status = existingUIDData.status || 'active';
+            payload.createdAt = existingUIDData.createdAt || serverTimestamp();
+            payload.loyaltyPoints = existingUIDData.loyaltyPoints || 0;
+            payload.role = existingUIDData.role || 'customer';
+        } else {
+            // BRAND NEW USER: Initialize as customer
+            payload.status = 'active';
             payload.createdAt = serverTimestamp();
-            payload.status = 'active';
-            payload.role = 'customer';
-            payload.loyaltyPoints = 0;
-        } else if (options.isNewUser && existingData) {
-            // New sign up, but already was in DB (e.g. from invited staff list)
-            payload.createdAt = existingData.createdAt || serverTimestamp();
-            payload.status = 'active';
-            payload.loyaltyPoints = existingData.loyaltyPoints || 0;
+            if (options.isNewUser) {
+                payload.role = 'customer';
+                payload.loyaltyPoints = 0;
+            }
         }
 
         await setDoc(userRef, payload, { merge: true });
