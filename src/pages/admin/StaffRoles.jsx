@@ -1,0 +1,613 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+    collection,
+    doc,
+    onSnapshot,
+    updateDoc,
+    serverTimestamp,
+} from 'firebase/firestore';
+import {
+    Search,
+    ShieldCheck,
+    Users as UsersIcon,
+    UserRoundCog,
+    ChevronDown,
+    Check,
+    X,
+    AlertTriangle,
+    LoaderCircle,
+    Eye,
+    EyeOff,
+    Info,
+} from 'lucide-react';
+import { db } from '../../firebase';
+import { useAuth } from '../../context/AuthContext';
+import {
+    ROLES,
+    STAFF_ROLES,
+    PERMISSIONS,
+    getAssignableRoles,
+    getRoleInfo,
+    roleHasPermission,
+    ADMIN_MENU,
+} from '../../config/roles';
+
+// ─── Helpers ────────────────────────────────────────────────────
+const toMs = (timestamp) => {
+    if (!timestamp) return 0;
+    if (typeof timestamp?.toMillis === 'function') return timestamp.toMillis();
+    if (timestamp instanceof Date) return timestamp.getTime();
+    if (typeof timestamp === 'number') return timestamp;
+    return 0;
+};
+
+const PERMISSION_GROUPS = [
+    {
+        title: 'Хянах самбар',
+        permissions: [PERMISSIONS.VIEW_DASHBOARD, PERMISSIONS.VIEW_FULL_ANALYTICS],
+    },
+    {
+        title: 'Бараа бүтээгдэхүүн',
+        permissions: [PERMISSIONS.VIEW_PRODUCTS, PERMISSIONS.EDIT_PRODUCTS, PERMISSIONS.DELETE_PRODUCTS],
+    },
+    {
+        title: 'Захиалга',
+        permissions: [PERMISSIONS.VIEW_ORDERS, PERMISSIONS.EDIT_ORDERS],
+    },
+    {
+        title: 'Хэрэглэгч',
+        permissions: [PERMISSIONS.VIEW_USERS, PERMISSIONS.EDIT_USER_ROLES],
+    },
+    {
+        title: 'Урамшуулал',
+        permissions: [PERMISSIONS.VIEW_PROMOTIONS, PERMISSIONS.EDIT_PROMOTIONS],
+    },
+    {
+        title: 'Систем',
+        permissions: [PERMISSIONS.MANAGE_STAFF_ROLES, PERMISSIONS.VIEW_SETTINGS],
+    },
+];
+
+const PERMISSION_LABELS = {
+    [PERMISSIONS.VIEW_DASHBOARD]: 'Dashboard харах',
+    [PERMISSIONS.VIEW_FULL_ANALYTICS]: 'Бүх аналитик харах',
+    [PERMISSIONS.VIEW_PRODUCTS]: 'Бараа харах',
+    [PERMISSIONS.EDIT_PRODUCTS]: 'Бараа засах',
+    [PERMISSIONS.DELETE_PRODUCTS]: 'Бараа устгах',
+    [PERMISSIONS.VIEW_ORDERS]: 'Захиалга харах',
+    [PERMISSIONS.EDIT_ORDERS]: 'Захиалга засах',
+    [PERMISSIONS.VIEW_USERS]: 'Хэрэглэгч харах',
+    [PERMISSIONS.EDIT_USER_ROLES]: 'Role өөрчлөх',
+    [PERMISSIONS.VIEW_PROMOTIONS]: 'Урамшуулал харах',
+    [PERMISSIONS.EDIT_PROMOTIONS]: 'Урамшуулал засах',
+    [PERMISSIONS.MANAGE_STAFF_ROLES]: 'Ажилтны эрх удирдах',
+    [PERMISSIONS.VIEW_SETTINGS]: 'Тохиргоо харах',
+};
+
+// ─── Main Component ─────────────────────────────────────────────
+const StaffRoles = () => {
+    const { user: currentUser, role: currentRole, isAdmin } = useAuth();
+    const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterRole, setFilterRole] = useState('all');
+    const [updatingUid, setUpdatingUid] = useState(null);
+    const [confirmDialog, setConfirmDialog] = useState(null);
+    const [selectedRoleInfo, setSelectedRoleInfo] = useState(null);
+    const [activeTab, setActiveTab] = useState('staff'); // 'staff' | 'roles'
+
+    // Firestore listener
+    useEffect(() => {
+        const unsubscribe = onSnapshot(
+            collection(db, 'users'),
+            (snapshot) => {
+                const rows = snapshot.docs
+                    .map((docSnap) => {
+                        const data = docSnap.data();
+                        return {
+                            id: docSnap.id,
+                            displayName: data.displayName || '',
+                            email: data.email || '',
+                            role: data.role || 'customer',
+                            status: String(data.status || 'active').toLowerCase(),
+                            photoURL: data.photoURL || '',
+                            createdAtMs: toMs(data.createdAt),
+                            updatedAtMs: toMs(data.updatedAt),
+                        };
+                    })
+                    .sort((a, b) => b.updatedAtMs - a.updatedAtMs);
+                setUsers(rows);
+                setErrorMessage('');
+                setLoading(false);
+            },
+            (error) => {
+                console.error('StaffRoles: users snapshot error:', error);
+                setErrorMessage('Хэрэглэгчийн мэдээлэл уншихад алдаа гарлаа.');
+                setLoading(false);
+            }
+        );
+        return () => unsubscribe();
+    }, []);
+
+    // Staff users filtering
+    const staffUsers = useMemo(
+        () => users.filter((u) => STAFF_ROLES.includes(u.role)),
+        [users]
+    );
+
+    const filteredUsers = useMemo(() => {
+        const source = activeTab === 'staff' ? staffUsers : users;
+        return source.filter((u) => {
+            const q = searchTerm.trim().toLowerCase();
+            const matchSearch =
+                !q ||
+                u.displayName.toLowerCase().includes(q) ||
+                u.email.toLowerCase().includes(q) ||
+                u.id.toLowerCase().includes(q);
+            const matchRole = filterRole === 'all' || u.role === filterRole;
+            return matchSearch && matchRole;
+        });
+    }, [users, staffUsers, searchTerm, filterRole, activeTab]);
+
+    const summary = useMemo(() => {
+        const counts = {};
+        STAFF_ROLES.forEach((r) => (counts[r] = 0));
+        users.forEach((u) => {
+            if (STAFF_ROLES.includes(u.role)) counts[u.role] = (counts[u.role] || 0) + 1;
+        });
+        return {
+            totalStaff: staffUsers.length,
+            totalUsers: users.length,
+            ...counts,
+        };
+    }, [users, staffUsers]);
+
+    // ─── Role Change ────────────────────────────────────────────
+    const handleRoleChange = (targetUser, newRole) => {
+        // Prevent self-demotion
+        if (targetUser.id === currentUser?.uid) {
+            setErrorMessage('Та өөрийнхөө эрхийг өөрчлөх боломжгүй!');
+            setTimeout(() => setErrorMessage(''), 3000);
+            return;
+        }
+
+        const roleInfo = getRoleInfo(newRole);
+        setConfirmDialog({
+            targetUser,
+            newRole,
+            roleInfo,
+            message: `"${targetUser.displayName || targetUser.email}" хэрэглэгчийн эрхийг "${roleInfo.label}" болгох уу?`,
+        });
+    };
+
+    const confirmRoleChange = async () => {
+        if (!confirmDialog) return;
+        const { targetUser, newRole } = confirmDialog;
+        setConfirmDialog(null);
+        setUpdatingUid(targetUser.id);
+        setErrorMessage('');
+        setSuccessMessage('');
+
+        try {
+            const userRef = doc(db, 'users', targetUser.id);
+            await updateDoc(userRef, {
+                role: newRole,
+                updatedAt: serverTimestamp(),
+                roleUpdatedBy: currentUser?.uid || 'unknown',
+                roleUpdatedAt: serverTimestamp(),
+            });
+            const roleInfo = getRoleInfo(newRole);
+            setSuccessMessage(
+                `✅ "${targetUser.displayName || targetUser.email}" → ${roleInfo.icon} ${roleInfo.label} болгосон`
+            );
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (error) {
+            console.error('Role update error:', error);
+            setErrorMessage('Эрх өөрчлөхөд алдаа гарлаа. Дахин оролдоно уу.');
+            setTimeout(() => setErrorMessage(''), 4000);
+        } finally {
+            setUpdatingUid(null);
+        }
+    };
+
+    const assignableRoles = getAssignableRoles();
+
+    return (
+        <div className="admin-page staff-roles-page">
+            {/* Page Header */}
+            <div className="page-header">
+                <div className="header-info">
+                    <h1>Ажилтны эрхийн удирдлага</h1>
+                    <p>Системийн дотоод ажилчдын роль, зөвшөөрлийг удирдана</p>
+                </div>
+            </div>
+
+            {/* Summary Cards */}
+            <div className="staff-summary-grid">
+                <div className="staff-summary-card">
+                    <div className="staff-summary-icon" style={{ background: '#8B000018', color: '#8B0000' }}>
+                        <ShieldCheck size={20} />
+                    </div>
+                    <div>
+                        <span>Нийт ажилтан</span>
+                        <strong>{summary.totalStaff}</strong>
+                    </div>
+                </div>
+                <div className="staff-summary-card">
+                    <div className="staff-summary-icon" style={{ background: '#2563EB18', color: '#2563EB' }}>
+                        <UsersIcon size={20} />
+                    </div>
+                    <div>
+                        <span>Нийт хэрэглэгч</span>
+                        <strong>{summary.totalUsers}</strong>
+                    </div>
+                </div>
+                <div className="staff-summary-card">
+                    <div className="staff-summary-icon" style={{ background: '#7C3AED18', color: '#7C3AED' }}>
+                        <UserRoundCog size={20} />
+                    </div>
+                    <div>
+                        <span>Админ</span>
+                        <strong>{(summary.admin || 0) + (summary.manager || 0)}</strong>
+                    </div>
+                </div>
+                <div className="staff-summary-card">
+                    <div className="staff-summary-icon" style={{ background: '#05966918', color: '#059669' }}>
+                        <ShieldCheck size={20} />
+                    </div>
+                    <div>
+                        <span>Бусад ажилтан</span>
+                        <strong>
+                            {(summary.marketing_manager || 0) + (summary.sales || 0) + (summary.cashier || 0)}
+                        </strong>
+                    </div>
+                </div>
+            </div>
+
+            {/* Tab navigation */}
+            <div className="staff-tabs">
+                <button
+                    className={`staff-tab ${activeTab === 'staff' ? 'active' : ''}`}
+                    onClick={() => { setActiveTab('staff'); setFilterRole('all'); }}
+                >
+                    <ShieldCheck size={16} />
+                    Ажилтнууд ({staffUsers.length})
+                </button>
+                <button
+                    className={`staff-tab ${activeTab === 'roles' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('roles')}
+                >
+                    <Info size={16} />
+                    Ролийн зөвшөөрлүүд
+                </button>
+                <button
+                    className={`staff-tab ${activeTab === 'all' ? 'active' : ''}`}
+                    onClick={() => { setActiveTab('all'); setFilterRole('all'); }}
+                >
+                    <UsersIcon size={16} />
+                    Бүх хэрэглэгч ({users.length})
+                </button>
+            </div>
+
+            {/* Messages */}
+            {errorMessage && (
+                <div className="staff-alert staff-alert-error">
+                    <AlertTriangle size={16} />
+                    <span>{errorMessage}</span>
+                    <button onClick={() => setErrorMessage('')}><X size={14} /></button>
+                </div>
+            )}
+            {successMessage && (
+                <div className="staff-alert staff-alert-success">
+                    <Check size={16} />
+                    <span>{successMessage}</span>
+                    <button onClick={() => setSuccessMessage('')}><X size={14} /></button>
+                </div>
+            )}
+
+            {/* Roles Tab Content */}
+            {activeTab === 'roles' && (
+                <div className="roles-overview">
+                    {/* Role Cards */}
+                    <div className="roles-card-grid">
+                        {Object.values(ROLES)
+                            .filter((r) => r.key !== 'customer')
+                            .map((role) => (
+                                <div
+                                    key={role.key}
+                                    className={`role-info-card ${selectedRoleInfo === role.key ? 'expanded' : ''}`}
+                                    onClick={() =>
+                                        setSelectedRoleInfo(selectedRoleInfo === role.key ? null : role.key)
+                                    }
+                                >
+                                    <div className="role-card-header">
+                                        <div className="role-card-icon" style={{ background: role.color + '18', color: role.color }}>
+                                            <span>{role.icon}</span>
+                                        </div>
+                                        <div className="role-card-title">
+                                            <h4>{role.label}</h4>
+                                            <span className="role-card-subtitle">{role.labelEn}</span>
+                                        </div>
+                                        <ChevronDown
+                                            size={16}
+                                            className={`role-card-chevron ${selectedRoleInfo === role.key ? 'rotated' : ''}`}
+                                        />
+                                    </div>
+                                    <p className="role-card-desc">{role.description}</p>
+
+                                    {selectedRoleInfo === role.key && (
+                                        <div className="role-permissions-detail">
+                                            <h5>Зөвшөөрөгдсөн эрхүүд:</h5>
+                                            {PERMISSION_GROUPS.map((group) => {
+                                                const hasAny = group.permissions.some((p) =>
+                                                    role.permissions.includes(p)
+                                                );
+                                                if (!hasAny) return null;
+                                                return (
+                                                    <div key={group.title} className="perm-group">
+                                                        <span className="perm-group-title">{group.title}</span>
+                                                        <div className="perm-items">
+                                                            {group.permissions.map((p) => (
+                                                                <div
+                                                                    key={p}
+                                                                    className={`perm-item ${role.permissions.includes(p) ? 'granted' : 'denied'}`}
+                                                                >
+                                                                    {role.permissions.includes(p) ? (
+                                                                        <Eye size={13} />
+                                                                    ) : (
+                                                                        <EyeOff size={13} />
+                                                                    )}
+                                                                    <span>{PERMISSION_LABELS[p] || p}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+
+                                            <h5 style={{ marginTop: '12px' }}>Харах боломжтой хуудсууд:</h5>
+                                            <div className="perm-items">
+                                                {ADMIN_MENU.map((menu) => (
+                                                    <div
+                                                        key={menu.key}
+                                                        className={`perm-item ${role.permissions.includes(menu.requiredPermission) ? 'granted' : 'denied'}`}
+                                                    >
+                                                        {role.permissions.includes(menu.requiredPermission) ? (
+                                                            <Check size={13} />
+                                                        ) : (
+                                                            <X size={13} />
+                                                        )}
+                                                        <span>{menu.title}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                    </div>
+
+                    {/* Comparison Table */}
+                    <div className="roles-comparison">
+                        <h3>Роль харьцуулалтын хүснэгт</h3>
+                        <div className="table-container">
+                            <table className="comparison-table">
+                                <thead>
+                                    <tr>
+                                        <th>Эрх</th>
+                                        {Object.values(ROLES)
+                                            .filter((r) => r.key !== 'customer')
+                                            .map((role) => (
+                                                <th key={role.key} style={{ color: role.color }}>
+                                                    {role.icon} {role.label}
+                                                </th>
+                                            ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.values(PERMISSIONS).map((perm) => (
+                                        <tr key={perm}>
+                                            <td>{PERMISSION_LABELS[perm] || perm}</td>
+                                            {Object.values(ROLES)
+                                                .filter((r) => r.key !== 'customer')
+                                                .map((role) => (
+                                                    <td key={`${role.key}-${perm}`}>
+                                                        {role.permissions.includes(perm) ? (
+                                                            <span className="perm-check">
+                                                                <Check size={14} />
+                                                            </span>
+                                                        ) : (
+                                                            <span className="perm-cross">
+                                                                <X size={14} />
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                ))}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Staff / All Users Tab Content */}
+            {activeTab !== 'roles' && (
+                <>
+                    {/* Filters */}
+                    <div className="staff-filters">
+                        <div className="search-box">
+                            <Search size={18} />
+                            <input
+                                type="text"
+                                placeholder="Нэр, и-мэйл хайх..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <select
+                            className="form-select"
+                            value={filterRole}
+                            onChange={(e) => setFilterRole(e.target.value)}
+                        >
+                            <option value="all">Бүх role</option>
+                            {activeTab === 'staff'
+                                ? STAFF_ROLES.map((r) => (
+                                    <option key={r} value={r}>
+                                        {getRoleInfo(r).label}
+                                    </option>
+                                ))
+                                : Object.keys(ROLES).map((r) => (
+                                    <option key={r} value={r}>
+                                        {getRoleInfo(r).label}
+                                    </option>
+                                ))}
+                        </select>
+                    </div>
+
+                    {/* Users Table */}
+                    <div className="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Хэрэглэгч</th>
+                                    <th>И-мэйл</th>
+                                    <th>Одоогийн роль</th>
+                                    <th>Төлөв</th>
+                                    <th>Роль өөрчлөх</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan={5}>
+                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '8px 0' }}>
+                                                <LoaderCircle size={16} className="spin" />
+                                                <span>Уншиж байна...</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : filteredUsers.length ? (
+                                    filteredUsers.map((u) => {
+                                        const info = getRoleInfo(u.role);
+                                        const isSelf = u.id === currentUser?.uid;
+                                        const isUpdating = updatingUid === u.id;
+
+                                        return (
+                                            <tr key={u.id} className={isSelf ? 'self-row' : ''}>
+                                                <td className="product-name-cell">
+                                                    <div className="staff-user-cell">
+                                                        <div
+                                                            className="staff-avatar"
+                                                            style={{ background: info.color + '18', color: info.color }}
+                                                        >
+                                                            {u.displayName ? u.displayName[0].toUpperCase() : '?'}
+                                                        </div>
+                                                        <div>
+                                                            <span>{u.displayName || 'Нэр оруулаагүй'}</span>
+                                                            {isSelf && <span className="self-tag">Та</span>}
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>{u.email || '-'}</td>
+                                                <td>
+                                                    <span
+                                                        className="staff-role-pill"
+                                                        style={{
+                                                            background: info.color + '14',
+                                                            color: info.color,
+                                                            borderColor: info.color + '30',
+                                                        }}
+                                                    >
+                                                        {info.icon} {info.label}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <span className={`status-pill ${u.status === 'active' ? 'active' : 'inactive'}`}>
+                                                        {u.status}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    {isUpdating ? (
+                                                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                                            <LoaderCircle size={14} className="spin" />
+                                                            <span style={{ fontSize: '0.82rem', color: '#6b7280' }}>Шинэчилж байна...</span>
+                                                        </div>
+                                                    ) : isSelf ? (
+                                                        <span style={{ fontSize: '0.82rem', color: '#9ca3af' }}>—</span>
+                                                    ) : !isAdmin ? (
+                                                        <span style={{ fontSize: '0.82rem', color: '#9ca3af' }}>Эрх хүрэлцэхгүй</span>
+                                                    ) : (
+                                                        <select
+                                                            className="form-select staff-role-select"
+                                                            value={u.role}
+                                                            onChange={(e) => handleRoleChange(u, e.target.value)}
+                                                        >
+                                                            {Object.values(ROLES).map((r) => (
+                                                                <option key={r.key} value={r.key}>
+                                                                    {r.icon} {r.label}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan={5}>Илэрц олдсонгүй.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </>
+            )}
+
+            {/* Confirm Dialog Modal */}
+            {confirmDialog && (
+                <div className="staff-confirm-overlay" onClick={() => setConfirmDialog(null)}>
+                    <div className="staff-confirm-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="staff-confirm-icon" style={{ background: confirmDialog.roleInfo.color + '18' }}>
+                            <span style={{ fontSize: '2rem' }}>{confirmDialog.roleInfo.icon}</span>
+                        </div>
+                        <h3>Эрх өөрчлөх</h3>
+                        <p>{confirmDialog.message}</p>
+                        <div className="staff-confirm-meta">
+                            <div className="staff-confirm-from">
+                                <span>Одоогийн:</span>
+                                <strong>{getRoleInfo(confirmDialog.targetUser.role).label}</strong>
+                            </div>
+                            <span className="staff-confirm-arrow">→</span>
+                            <div className="staff-confirm-to">
+                                <span>Шинэ:</span>
+                                <strong style={{ color: confirmDialog.roleInfo.color }}>
+                                    {confirmDialog.roleInfo.label}
+                                </strong>
+                            </div>
+                        </div>
+                        <div className="staff-confirm-actions">
+                            <button className="staff-btn-cancel" onClick={() => setConfirmDialog(null)}>
+                                Цуцлах
+                            </button>
+                            <button
+                                className="staff-btn-confirm"
+                                style={{ background: confirmDialog.roleInfo.color }}
+                                onClick={confirmRoleChange}
+                            >
+                                <Check size={16} />
+                                Баталгаажуулах
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default StaffRoles;

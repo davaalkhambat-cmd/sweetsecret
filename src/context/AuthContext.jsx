@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import {
     browserPopupRedirectResolver,
     browserLocalPersistence,
@@ -13,6 +13,7 @@ import {
 } from 'firebase/auth';
 import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
+import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES } from '../config/roles';
 
 const AuthContext = createContext(null);
 
@@ -79,7 +80,7 @@ export const AuthProvider = ({ children }) => {
             // Ignore and continue with default persistence.
         });
 
-        let unsubscribeProfile = () => {};
+        let unsubscribeProfile = () => { };
 
         const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
             setUser(nextUser);
@@ -117,12 +118,25 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
+    const userRole = userProfile?.role || 'customer';
+    const isStaff = isStaffRole(userRole);
+    const isAdmin = ['admin', 'manager'].includes(userRole);
+    const roleInfo = getRoleInfo(userRole);
+
+    const hasPermission = useCallback(
+        (permission) => roleHasPermission(userRole, permission),
+        [userRole]
+    );
+
     const value = useMemo(
         () => ({
             user,
             userProfile,
-            role: userProfile?.role || null,
-            isAdmin: ['admin', 'manager'].includes(userProfile?.role),
+            role: userRole,
+            roleInfo,
+            isAdmin,
+            isStaff,
+            hasPermission,
             loading,
             signInWithGoogle: async () => {
                 try {
@@ -168,7 +182,7 @@ export const AuthProvider = ({ children }) => {
                 }
             },
         }),
-        [user, userProfile, loading]
+        [user, userProfile, loading, userRole, isAdmin, isStaff, roleInfo, hasPermission]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

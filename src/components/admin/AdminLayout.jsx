@@ -3,12 +3,14 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Search, Bell, User } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { getRoleInfo } from '../../config/roles';
 
 const AdminLayout = () => {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const navigate = useNavigate();
-    const { user, userProfile, logout } = useAuth();
+    const { user, userProfile, role, logout } = useAuth();
+    const roleInfo = getRoleInfo(role);
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -35,9 +37,17 @@ const AdminLayout = () => {
                     <div className="header-actions">
                         <button className="header-btn"><Bell size={20} /></button>
                         <div className="user-profile">
-                            <span className="username">
-                                {userProfile?.displayName || user?.email || 'Админ'}
-                            </span>
+                            <div className="user-info-stack">
+                                <span className="username">
+                                    {userProfile?.displayName || user?.email || 'Ажилтан'}
+                                </span>
+                                <span
+                                    className="header-role-tag"
+                                    style={{ background: roleInfo.color + '18', color: roleInfo.color }}
+                                >
+                                    {roleInfo.icon} {roleInfo.label}
+                                </span>
+                            </div>
                             <div className="avatar"><User size={20} /></div>
                         </div>
                     </div>

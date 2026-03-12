@@ -4,7 +4,7 @@ import { LoaderCircle, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const AdminLogin = () => {
-    const { user, role, isAdmin, loading, signInWithEmail, signInWithGoogle, logout } = useAuth();
+    const { user, role, isStaff, loading, signInWithEmail, signInWithGoogle, logout } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
@@ -17,7 +17,7 @@ const AdminLogin = () => {
         return typeof fromPath === 'string' && fromPath.startsWith('/admin') ? fromPath : '/admin';
     }, [location.state]);
 
-    if (!loading && user && isAdmin) {
+    if (!loading && user && isStaff) {
         return <Navigate to={targetPath} replace />;
     }
 
@@ -73,10 +73,10 @@ const AdminLogin = () => {
                     </div>
                 )}
 
-                {!loading && user && !isAdmin && (
+                {!loading && user && !isStaff && (
                     <div className="admin-login-alert">
-                        Энэ хэрэглэгч админ эрхгүй байна
-                        {role ? ` (role: ${role})` : ''}. Админ эрхтэй аккаунтаар дахин нэвтэрнэ үү.
+                        Энэ хэрэглэгч ажилтны эрхгүй байна
+                        {role ? ` (role: ${role})` : ''}. Ажилтны эрхтэй аккаунтаар дахин нэвтэрнэ үү.
                     </div>
                 )}
 

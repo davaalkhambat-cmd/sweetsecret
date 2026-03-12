@@ -14,7 +14,9 @@ import Orders from './pages/admin/Orders';
 import Users from './pages/admin/Users';
 import Promotions from './pages/admin/Promotions';
 import AdminLogin from './pages/admin/AdminLogin';
+import StaffRoles from './pages/admin/StaffRoles';
 import Profile from './pages/Profile';
+import { PERMISSIONS } from './config/roles';
 
 function App() {
     const [isCartOpen, setIsCartOpen] = useState(false);
@@ -118,11 +120,36 @@ function App() {
                 }
             >
                 <Route index element={<Dashboard />} />
-                <Route path="products" element={<Products />} />
-                <Route path="orders" element={<Orders />} />
-                <Route path="users" element={<Users />} />
-                <Route path="promotions" element={<Promotions />} />
-                <Route path="settings" element={<div className="admin-page"><h1>Тохиргоо (Тун удахгүй)</h1></div>} />
+                <Route path="products" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PRODUCTS}>
+                        <Products />
+                    </RequireAdmin>
+                } />
+                <Route path="orders" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_ORDERS}>
+                        <Orders />
+                    </RequireAdmin>
+                } />
+                <Route path="users" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_USERS}>
+                        <Users />
+                    </RequireAdmin>
+                } />
+                <Route path="promotions" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PROMOTIONS}>
+                        <Promotions />
+                    </RequireAdmin>
+                } />
+                <Route path="staff-roles" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.MANAGE_STAFF_ROLES}>
+                        <StaffRoles />
+                    </RequireAdmin>
+                } />
+                <Route path="settings" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
+                        <div className="admin-page"><h1>Тохиргоо (Тун удахгүй)</h1></div>
+                    </RequireAdmin>
+                } />
             </Route>
         </Routes>
     );

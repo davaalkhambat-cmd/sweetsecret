@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     User,
     Package,
@@ -8,6 +9,7 @@ import {
     ChevronRight,
     Clock,
     ShieldCheck,
+    Shield,
     Mail,
     Lock,
     UserCircle2,
@@ -37,7 +39,8 @@ const Profile = () => {
     const [authMessage, setAuthMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const { user, loading, signInWithGoogle, signInWithEmail, signUpWithEmail, logout } = useAuth();
+    const { user, loading, isAdmin, signInWithGoogle, signInWithEmail, signUpWithEmail, logout } = useAuth();
+    const navigate = useNavigate();
 
     const userData = useMemo(() => {
         if (!user) {
@@ -244,6 +247,15 @@ const Profile = () => {
                             <Settings size={20} />
                             <span>Тохиргоо</span>
                         </button>
+                        {isAdmin && (
+                            <button
+                                className="nav-item admin-nav"
+                                onClick={() => navigate('/admin')}
+                            >
+                                <Shield size={20} />
+                                <span>Админ панел</span>
+                            </button>
+                        )}
                         <div className="nav-divider"></div>
                         <button className="nav-item logout" onClick={handleLogout}>
                             <LogOut size={20} />
