@@ -169,6 +169,16 @@ const parseInputDate = (value, endOfDay = false) => {
         : new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
 };
 
+const getPlanStorageKey = (mode, selectedMonthValue, fromDate, toDate, nowDate) => {
+    if (mode === 'specific_month' && selectedMonthValue) {
+        return `month:${selectedMonthValue}`;
+    }
+    if (mode === 'custom_range') {
+        return `range:${fromDate || toInputDate(new Date(nowDate.getFullYear(), nowDate.getMonth(), 1))}:${toDate || toInputDate(nowDate)}`;
+    }
+    return `month:${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(2, '0')}`;
+};
+
 const normalizeStatus = (status) => {
     const normalized = String(status || '').toLowerCase();
     if (['completed', 'paid', 'delivered', 'fulfilled', 'хүргэгдсэн'].includes(normalized)) return 'completed';
@@ -200,6 +210,35 @@ const Dashboard = () => {
     const [selectedMonth, setSelectedMonth] = useState(`${todayDate.getFullYear()}-${String(todayDate.getMonth() + 1).padStart(2, '0')}`);
     const [customFromDate, setCustomFromDate] = useState(toInputDate(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)));
     const [customToDate, setCustomToDate] = useState(toInputDate(todayDate));
+    const [planTargets, setPlanTargets] = useState({});
+
+    const activePlanKey = useMemo(
+        () => getPlanStorageKey(dateFilterMode, selectedMonth, customFromDate, customToDate, todayDate),
+        [customFromDate, customToDate, dateFilterMode, selectedMonth, todayDate]
+    );
+
+    useEffect(() => {
+        try {
+            const stored = window.localStorage.getItem('delivery-dashboard-plan-targets');
+            if (!stored) return;
+            const parsed = JSON.parse(stored);
+            if (parsed && typeof parsed === 'object') {
+                setPlanTargets(parsed);
+            }
+        } catch (error) {
+            console.error('Plan targets read error:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem('delivery-dashboard-plan-targets', JSON.stringify(planTargets));
+        } catch (error) {
+            console.error('Plan targets write error:', error);
+        }
+    }, [planTargets]);
+
+    const currentPlanTarget = toNumber(planTargets[activePlanKey]);
 
     useEffect(() => {
         const unsubscribers = [
@@ -518,7 +557,7 @@ const Dashboard = () => {
             turnaroundMinutes.length > 0
                 ? turnaroundMinutes.reduce((sum, minutes) => sum + minutes, 0) / turnaroundMinutes.length
                 : 0;
-        const autoTarget = Math.max(10, Math.round(averageDailyDeliveries * 1.15));
+        const recommendedTarget = Math.max(10, Math.round(averageDailyDeliveries * 1.15));
         const todayActual = todaysDeliveries.length;
         const deliveryRevenueShare = totalSalesRevenue > 0 ? (deliveryRevenue / totalSalesRevenue) * 100 : 0;
         const profitabilityMix = [
@@ -636,19 +675,20 @@ const Dashboard = () => {
                 mapCenter,
             },
             plan: {
-                target: autoTarget,
-                actual: todayActual,
-                achievement: autoTarget ? (todayActual / autoTarget) * 100 : 0,
+                target: currentPlanTarget,
+                recommendedTarget,
+                actual: selectedPeriodOrderCount,
+                achievement: currentPlanTarget ? (selectedPeriodOrderCount / currentPlanTarget) * 100 : 0,
             },
             strategy: {
                 pushProduct: bestProduct?.name || 'Өгөгдөл дутуу',
                 promoWindow: peakHour?.label || '-',
-                addCapacity: averageTurnaround > 90 || todayActual > autoTarget,
+                addCapacity: averageTurnaround > 90 || selectedPeriodOrderCount > (currentPlanTarget || recommendedTarget),
                 profitableType: bestOrderType?.label || '-',
             },
             recentDeliveries,
         };
-    }, [customFromDate, customToDate, dateFilterMode, now, orders, products, rangeDays, sales, selectedMonth]);
+    }, [currentPlanTarget, customFromDate, customToDate, dateFilterMode, now, orders, products, rangeDays, sales, selectedMonth]);
 
     const heroStats = [
         {
@@ -674,9 +714,11 @@ const Dashboard = () => {
         },
         {
             title: 'Target achievement',
-            value: formatRate(deliveryAnalytics.plan.achievement),
-            change: `${deliveryAnalytics.plan.actual}/${deliveryAnalytics.plan.target} өнөөдөр`,
-            isUp: deliveryAnalytics.plan.achievement >= 100,
+            value: deliveryAnalytics.plan.target ? formatRate(deliveryAnalytics.plan.achievement) : 'Төлөвлөгөө оруулна уу',
+            change: deliveryAnalytics.plan.target
+                ? `${deliveryAnalytics.plan.actual}/${deliveryAnalytics.plan.target} гүйцэтгэл`
+                : `Санал: ${deliveryAnalytics.plan.recommendedTarget}`,
+            isUp: deliveryAnalytics.plan.target ? deliveryAnalytics.plan.achievement >= 100 : true,
             icon: <Target size={22} color="#7c3aed" />,
         },
     ];
@@ -816,7 +858,32 @@ const Dashboard = () => {
                     <div className="section-heading-row">
                         <div>
                             <h3>Төлөвлөгөө vs Гүйцэтгэл</h3>
-                            <p>Target нь trailing 7-day average дээр суурилсан auto benchmark</p>
+                            <p>Сонгосон хугацааны төлөвлөгөөг оруулаад achievement-ийг түүнээс бодно</p>
+                        </div>
+                    </div>
+                    <div className="target-form-row">
+                        <label className="target-input-group">
+                            <span>Төлөвлөгөөт хүргэлтийн тоо</span>
+                            <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                className="dashboard-date-input target-number-input"
+                                value={planTargets[activePlanKey] ?? ''}
+                                placeholder={`${deliveryAnalytics.plan.recommendedTarget}`}
+                                onChange={(event) => {
+                                    const value = event.target.value.replace(/[^\d]/g, '');
+                                    setPlanTargets((prev) => ({
+                                        ...prev,
+                                        [activePlanKey]: value,
+                                    }));
+                                }}
+                            />
+                        </label>
+                        <div className="target-hint-card">
+                            <span>Санал болгосон target</span>
+                            <strong>{deliveryAnalytics.plan.recommendedTarget}</strong>
+                            <small>Сүүлийн 7 хоногийн дундаж дээр суурилсан benchmark</small>
                         </div>
                     </div>
                     <div className="target-progress-wrap">
@@ -824,8 +891,12 @@ const Dashboard = () => {
                             <span style={{ width: `${Math.min(deliveryAnalytics.plan.achievement, 100)}%` }} />
                         </div>
                         <div className="target-progress-meta">
-                            <strong>{formatRate(deliveryAnalytics.plan.achievement)}</strong>
-                            <span>{deliveryAnalytics.plan.actual} бодит / {deliveryAnalytics.plan.target} зорилт</span>
+                            <strong>{deliveryAnalytics.plan.target ? formatRate(deliveryAnalytics.plan.achievement) : '0.0%'}</strong>
+                            <span>
+                                {deliveryAnalytics.plan.target
+                                    ? `${deliveryAnalytics.plan.actual} бодит / ${deliveryAnalytics.plan.target} зорилт`
+                                    : 'Achievement тооцоолохын тулд төлөвлөгөө оруулна уу'}
+                            </span>
                         </div>
                     </div>
                 </div>

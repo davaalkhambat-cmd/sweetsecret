@@ -1821,6 +1821,10 @@ img {
   .delivery-summary-grid {
     grid-template-columns: 1fr;
   }
+
+  .target-form-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .delivery-map-card {
@@ -2044,6 +2048,53 @@ img {
 
 .target-card {
   background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+}
+
+.target-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.8fr);
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.target-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.target-input-group span {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.target-number-input {
+  width: 100%;
+}
+
+.target-hint-card {
+  border: 1px solid #e9d5ff;
+  background: #faf5ff;
+  border-radius: 12px;
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.target-hint-card span {
+  font-size: 0.76rem;
+  color: #7e22ce;
+}
+
+.target-hint-card strong {
+  font-size: 1.2rem;
+  color: #581c87;
+}
+
+.target-hint-card small {
+  font-size: 0.74rem;
+  color: #6b7280;
 }
 
 .target-progress-wrap {
