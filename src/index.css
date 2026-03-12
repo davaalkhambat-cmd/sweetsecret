@@ -4896,3 +4896,31 @@ tbody tr:last-child td {
   transform: translateY(-50%);
   color: #999;
 }
+.discount-type-mini-select {
+  border: none;
+  background: #f3f4f6;
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  color: #4b5563;
+  outline: none;
+}
+
+.discount-type-mini-select:hover {
+  background: #e5e7eb;
+}
+
+.status-select.active {
+  background-color: #ecfdf5 !important;
+  color: #059669 !important;
+  border-color: #10b981 !important;
+}
+
+.status-select.inactive {
+  background-color: #fef2f2 !important;
+  color: #dc2626 !important;
+  border-color: #f87171 !important;
+}

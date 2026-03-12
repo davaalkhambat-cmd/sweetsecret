@@ -86,6 +86,7 @@ const Orders = () => {
         paymentMethod: 'bank_transfer',
         deliveryFee: 5000,
         discount: 0,
+        discountType: 'amount', // 'amount' or 'percent'
         source: '',
     });
 
@@ -94,15 +95,19 @@ const Orders = () => {
         { key: 'instagram', label: 'Instagram', icon: <Instagram size={14} /> },
         { key: 'website', label: 'Веб сайт', icon: <Globe size={14} /> },
         { key: 'phone', label: 'Утас', icon: <Phone size={14} /> },
+        { key: 'banana', label: 'Banana Mall', icon: <ShoppingBag size={14} /> },
+        { key: 'shoppy', label: 'Shoppy', icon: <ShoppingBag size={14} /> },
+        { key: 'contracted', label: 'Гэрээт', icon: <ShieldCheck size={14} /> },
         { key: 'other', label: 'Бусад', icon: <MessageCircle size={14} /> },
     ];
 
     const PAYMENT_METHODS = [
-        { key: 'cash', label: 'Бэлэн' },
         { key: 'bank_transfer', label: 'Данс' },
         { key: 'qpay', label: 'QPay' },
         { key: 'storepay', label: 'Storepay' },
         { key: 'pocket', label: 'Pocket' },
+        { key: 'sono', label: 'Sono' },
+        { key: 'monpay', label: 'Monpay' },
     ];
 
     // Product Search State
@@ -244,7 +249,28 @@ const Orders = () => {
     };
 
     const calculateSubtotal = (items) => items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-    const calculateTotal = (items, fee, discount) => calculateSubtotal(items) + (Number(fee) || 0) - (Number(discount) || 0);
+    const calculateTotal = (items, fee, discount, discountType = 'amount') => {
+        const subtotal = calculateSubtotal(items);
+        let discountValue = Number(discount) || 0;
+        if (discountType === 'percent') {
+            discountValue = (subtotal * (Number(discount) || 0)) / 100;
+        }
+        return subtotal + (Number(fee) || 0) - discountValue;
+    };
+
+    // Number Formatting Helpers
+    const formatNumberInput = (val) => {
+        if (val === undefined || val === null || val === '') return '';
+        const num = val.toString().replace(/[^0-9]/g, '');
+        if (num === '') return '';
+        return parseInt(num).toLocaleString();
+    };
+
+    const parseNumberInput = (val) => {
+        if (!val) return 0;
+        const num = val.toString().replace(/[^0-9]/g, '');
+        return num === '' ? 0 : parseInt(num);
+    };
 
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
@@ -252,7 +278,7 @@ const Orders = () => {
         if (!newOrder.source) return alert("Захиалгын суваг сонгоно уу.");
 
         try {
-            const totalAmount = calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount);
+            const totalAmount = calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType);
             await addDoc(collection(db, 'orders'), {
                 ...newOrder,
                 totalAmount,
@@ -265,7 +291,7 @@ const Orders = () => {
                 customerName: '', phoneNumber: '', email: '',
                 address: { zone: 'Улаанбаатар', city: 'Улаанбаатар', district: '', khoroo: '', fullAddress: '', additionalInfo: '' },
                 items: [], status: 'pending', deliveryType: 'delivery', paymentMethod: 'bank_transfer',
-                deliveryFee: 5000, discount: 0, source: ''
+                deliveryFee: 5000, discount: 0, discountType: 'amount', source: ''
             });
         } catch (error) {
             console.error("Submit order error:", error);
@@ -566,9 +592,41 @@ const Orders = () => {
                             </div>
 
                             <div className="pricing-summary-grid">
-                                <div className="pricing-field"><label>Дэд дүн</label><input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly /></div>
-                                <div className="pricing-field"><label><Truck size={14} /> Хүргэлтийн төлбөр</label><input className="form-input" type="number" value={newOrder.deliveryFee} onChange={e => setNewOrder({ ...newOrder, deliveryFee: Number(e.target.value) })} /></div>
-                                <div className="pricing-field"><label><Tags size={14} /> Хөнгөлөлт (₮)</label><input className="form-input" type="number" value={newOrder.discount} onChange={e => setNewOrder({ ...newOrder, discount: Number(e.target.value) })} /></div>
+                                <div className="pricing-field">
+                                    <label>Дэд дүн</label>
+                                    <input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly />
+                                </div>
+                                <div className="pricing-field">
+                                    <label><Truck size={14} /> Хүргэлтийн төлбөр</label>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        value={formatNumberInput(newOrder.deliveryFee)}
+                                        onChange={e => setNewOrder({ ...newOrder, deliveryFee: parseNumberInput(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="pricing-field">
+                                    <label>
+                                        <Tags size={14} /> Хөнгөлөлт
+                                        <select
+                                            value={newOrder.discountType}
+                                            onChange={e => setNewOrder({ ...newOrder, discountType: e.target.value })}
+                                            className="discount-type-mini-select"
+                                        >
+                                            <option value="amount">₮</option>
+                                            <option value="percent">%</option>
+                                        </select>
+                                    </label>
+                                    <input
+                                        className="form-input"
+                                        type="text"
+                                        value={newOrder.discountType === 'amount' ? formatNumberInput(newOrder.discount) : newOrder.discount}
+                                        onChange={e => {
+                                            const val = newOrder.discountType === 'amount' ? parseNumberInput(e.target.value) : e.target.value;
+                                            setNewOrder({ ...newOrder, discount: val });
+                                        }}
+                                    />
+                                </div>
                                 <div className="pricing-field" style={{ gridColumn: 'span 2' }}>
                                     <label><CreditCard size={14} /> Төлбөрийн нөхцөл</label>
                                     <select
@@ -581,7 +639,10 @@ const Orders = () => {
                                         ))}
                                     </select>
                                 </div>
-                                <div className="final-total-box"><span className="total-label">Нийт дүн:</span><span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount).toLocaleString()}</span></div>
+                                <div className="final-total-box">
+                                    <span className="total-label">Нийт дүн:</span>
+                                    <span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType).toLocaleString()}</span>
+                                </div>
                             </div>
 
                             <div className="modal-actions">
