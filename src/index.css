@@ -1696,36 +1696,36 @@ img {
 .dashboard-greeting-card {
   position: relative;
   overflow: hidden;
-  border-radius: 24px;
-  padding: 1.6rem 1.7rem;
-  min-height: 220px;
+  border-radius: 20px;
+  padding: 1.15rem 1.25rem;
+  min-height: 178px;
   display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 1.25rem;
+  grid-template-columns: 170px 1fr;
+  gap: 1rem;
   color: #fff;
 }
 
 .dashboard-greeting-card.sunrise {
-  background: linear-gradient(135deg, #f97316 0%, #fb7185 55%, #7c3aed 100%);
+  background: linear-gradient(135deg, #fb923c 0%, #fda4af 52%, #818cf8 100%);
 }
 
 .dashboard-greeting-card.day {
-  background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 55%, #2563eb 100%);
+  background: linear-gradient(135deg, #14b8a6 0%, #38bdf8 55%, #60a5fa 100%);
 }
 
 .dashboard-greeting-card.evening {
-  background: linear-gradient(135deg, #7c2d12 0%, #b91c1c 45%, #312e81 100%);
+  background: linear-gradient(135deg, #f97316 0%, #f43f5e 42%, #6366f1 100%);
 }
 
 .dashboard-greeting-card.night {
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #312e81 100%);
+  background: linear-gradient(135deg, #172554 0%, #1e3a8a 45%, #4f46e5 100%);
 }
 
 .dashboard-greeting-visual {
   position: relative;
-  min-height: 180px;
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.08);
+  min-height: 140px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.16);
   backdrop-filter: blur(4px);
 }
@@ -1737,32 +1737,32 @@ img {
 }
 
 .greeting-orb.orb-one {
-  width: 90px;
-  height: 90px;
-  top: 24px;
-  left: 26px;
-  background: rgba(255, 255, 255, 0.28);
+  width: 72px;
+  height: 72px;
+  top: 22px;
+  left: 22px;
+  background: rgba(255, 255, 255, 0.34);
 }
 
 .greeting-orb.orb-two {
-  width: 54px;
-  height: 54px;
-  right: 26px;
-  bottom: 26px;
-  background: rgba(255, 255, 255, 0.18);
+  width: 42px;
+  height: 42px;
+  right: 22px;
+  bottom: 22px;
+  background: rgba(255, 255, 255, 0.22);
 }
 
 .greeting-icon-wrap {
   position: absolute;
-  right: 24px;
-  top: 24px;
-  width: 72px;
-  height: 72px;
-  border-radius: 20px;
+  right: 20px;
+  top: 20px;
+  width: 60px;
+  height: 60px;
+  border-radius: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.2);
   border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
@@ -1774,24 +1774,24 @@ img {
 }
 
 .greeting-kicker {
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  opacity: 0.82;
+  opacity: 0.86;
 }
 
 .dashboard-greeting-copy h1 {
   color: #fff;
-  font-size: clamp(2rem, 4vw, 3rem);
+  font-size: clamp(1.7rem, 3.4vw, 2.55rem);
   line-height: 1;
   margin: 0;
 }
 
 .dashboard-greeting-copy p {
   max-width: 640px;
-  font-size: 1rem;
-  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .greeting-quote {
@@ -1799,15 +1799,15 @@ img {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
-  padding: 0.85rem 1rem;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.1);
+  padding: 0.7rem 0.9rem;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.14);
-  max-width: 640px;
+  max-width: 560px;
 }
 
 .greeting-quote small {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.72);
@@ -1815,7 +1815,7 @@ img {
 
 .greeting-quote strong {
   color: #fff;
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   line-height: 1.45;
 }
 
@@ -2761,6 +2761,182 @@ img {
 
 .daily-breakdown-table tbody tr:hover {
   background: #f8fafc;
+}
+
+.trend-chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.trend-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.trend-chart-header h3 {
+  margin-bottom: 0.25rem;
+}
+
+.trend-chart-header p {
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.trend-chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: #475569;
+}
+
+.trend-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.trend-chart-legend i {
+  width: 18px;
+  height: 4px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.trend-chart-legend i.current {
+  background: linear-gradient(90deg, #22c55e 0%, #10b981 100%);
+}
+
+.trend-chart-legend i.previous {
+  background: linear-gradient(90deg, #fb7185 0%, #f43f5e 100%);
+}
+
+.trend-chart-shell {
+  position: relative;
+  border-radius: 20px;
+  background: linear-gradient(180deg, #fff 0%, #fff7f7 100%);
+  border: 1px solid #f1e4e7;
+  padding: 0.8rem;
+  overflow: hidden;
+}
+
+.trend-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.trend-grid-line {
+  stroke: #e5e7eb;
+  stroke-width: 1;
+}
+
+.trend-axis-text {
+  fill: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.trend-line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-line.current {
+  stroke: #f43f5e;
+}
+
+.trend-line.previous {
+  stroke: #22c55e;
+  stroke-dasharray: 7 8;
+  opacity: 0.95;
+}
+
+.trend-bar {
+  fill: rgba(34, 197, 94, 0.82);
+  cursor: pointer;
+  transition: fill 0.2s ease, transform 0.2s ease;
+}
+
+.trend-bar.active,
+.trend-bar:hover {
+  fill: #16a34a;
+}
+
+.trend-point {
+  fill: #fff;
+  stroke: #f43f5e;
+  stroke-width: 3;
+  cursor: pointer;
+}
+
+.trend-active-line {
+  stroke: rgba(244, 63, 94, 0.2);
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+}
+
+.trend-point-active {
+  fill: #f43f5e;
+  stroke: #fff;
+  stroke-width: 3;
+}
+
+.trend-chart-tooltip {
+  position: absolute;
+  top: 16px;
+  transform: translateX(-50%);
+  min-width: 170px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.14);
+  border: 1px solid #f1d4da;
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  backdrop-filter: blur(6px);
+}
+
+.trend-chart-tooltip small {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.trend-chart-tooltip strong {
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.trend-chart-tooltip span {
+  color: #64748b;
+  font-size: 0.76rem;
+}
+
+.trend-tooltip-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0.25rem 0;
+}
+
+.trend-tooltip-delta {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.trend-tooltip-delta.up {
+  color: #16a34a;
+}
+
+.trend-tooltip-delta.down {
+  color: #e11d48;
 }
 
 .inventory-grid {

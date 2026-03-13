@@ -138,6 +138,12 @@ const extractAddress = (data) =>
 const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
 const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 const formatRate = (value) => `${value.toFixed(1)}%`;
+const formatCompactMoney = (value) => {
+    const numeric = Math.round(value || 0);
+    if (numeric >= 1000000) return `₮${(numeric / 1000000).toFixed(1)}M`;
+    if (numeric >= 1000) return `₮${Math.round(numeric / 1000)}k`;
+    return `₮${numeric}`;
+};
 const formatMonthLabel = (date) => MONTH_NAMES[date.getMonth()];
 const formatMonthPossessive = (date) => `${date.getMonth() + 1}-р сарын`;
 const formatShortDate = (date) =>
@@ -191,37 +197,168 @@ const getGreetingMeta = (date) => {
 
     if (hour >= 5 && hour < 11) {
         return {
-            greeting: 'Өглөөний мэнд',
+            greeting: 'Өглөөний мэнд ☀️',
             caption: 'Өдрийг тайван эхлүүлээд гол тоонуудаа нэг дороос хар.',
             Icon: month >= 10 || month <= 1 ? CloudSnow : CloudSun,
             accent: 'sunrise',
+            emoji: '🌤️',
         };
     }
 
     if (hour >= 11 && hour < 17) {
         return {
-            greeting: 'Өдрийн мэнд',
+            greeting: 'Өдрийн мэнд 🌈',
             caption: 'Ид ачааллын цагаар гүйцэтгэл, орлого, төлөвлөгөөгөө хяна.',
             Icon: month >= 5 && month <= 7 ? Sun : CloudSun,
             accent: 'day',
+            emoji: '🌞',
         };
     }
 
     if (hour >= 17 && hour < 21) {
         return {
-            greeting: 'Оройн мэнд',
+            greeting: 'Оройн мэнд 🌇',
             caption: 'Өдрийн үр дүнг нэгтгээд дараагийн шийдвэрээ тодорхойл.',
             Icon: month >= 2 && month <= 4 ? CloudRain : CloudMoon,
             accent: 'evening',
+            emoji: '🌆',
         };
     }
 
     return {
-        greeting: 'Оройн амар амгалан',
+        greeting: 'Оройн амар амгалан 🌙',
         caption: 'Шөнийн нам гүмд маргаашийн төлөвлөгөөгөө цэгцэл.',
         Icon: MoonStar,
         accent: 'night',
+        emoji: '✨',
     };
+};
+
+const RevenueTrendChart = ({ points, currentLabel, previousLabel }) => {
+    const [activeIndex, setActiveIndex] = useState(points.length ? points.length - 1 : 0);
+
+    if (!points.length) {
+        return <p className="empty-state-text">Трендийн өгөгдөл алга байна.</p>;
+    }
+
+    const safeIndex = Math.min(activeIndex, points.length - 1);
+    const activePoint = points[safeIndex];
+    const chartWidth = 760;
+    const chartHeight = 280;
+    const padding = { top: 22, right: 18, bottom: 42, left: 50 };
+    const innerWidth = chartWidth - padding.left - padding.right;
+    const innerHeight = chartHeight - padding.top - padding.bottom;
+    const maxValue = Math.max(
+        ...points.flatMap((point) => [point.currentValue, point.previousValue]),
+        1
+    );
+    const stepX = points.length > 1 ? innerWidth / (points.length - 1) : innerWidth;
+    const yFor = (value) => padding.top + innerHeight - (value / maxValue) * innerHeight;
+    const xFor = (index) => padding.left + stepX * index;
+
+    const currentLine = points
+        .map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index)} ${yFor(point.currentValue)}`)
+        .join(' ');
+    const previousLine = points
+        .map((point, index) => `${index === 0 ? 'M' : 'L'} ${xFor(index)} ${yFor(point.previousValue)}`)
+        .join(' ');
+    const currentArea = `${currentLine} L ${xFor(points.length - 1)} ${padding.top + innerHeight} L ${xFor(0)} ${padding.top + innerHeight} Z`;
+    const gridLines = 5;
+    const activeX = xFor(safeIndex);
+    const activeY = yFor(activePoint.currentValue);
+
+    return (
+        <div className="trend-chart-card">
+            <div className="trend-chart-header">
+                <div>
+                    <h3>Тухайн сарын борлуулалтын тренд</h3>
+                    <p>{currentLabel} ба {previousLabel} харьцуулалт</p>
+                </div>
+                <div className="trend-chart-legend">
+                    <span><i className="current" />{currentLabel}</span>
+                    <span><i className="previous" />{previousLabel}</span>
+                </div>
+            </div>
+
+            <div className="trend-chart-shell">
+                <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="trend-chart-svg" role="img">
+                    <defs>
+                        <linearGradient id="trendAreaGradient" x1="0%" x2="0%" y1="0%" y2="100%">
+                            <stop offset="0%" stopColor="rgba(244, 63, 94, 0.35)" />
+                            <stop offset="100%" stopColor="rgba(244, 63, 94, 0)" />
+                        </linearGradient>
+                    </defs>
+
+                    {Array.from({ length: gridLines }, (_, index) => {
+                        const y = padding.top + (innerHeight / (gridLines - 1)) * index;
+                        const value = Math.round(maxValue - (maxValue / (gridLines - 1)) * index);
+                        return (
+                            <g key={`grid-${index}`}>
+                                <line x1={padding.left} x2={chartWidth - padding.right} y1={y} y2={y} className="trend-grid-line" />
+                                <text x={padding.left - 10} y={y + 4} textAnchor="end" className="trend-axis-text">
+                                    {formatCompactMoney(value)}
+                                </text>
+                            </g>
+                        );
+                    })}
+
+                    <path d={currentArea} fill="url(#trendAreaGradient)" />
+                    <path d={previousLine} className="trend-line previous" />
+                    <path d={currentLine} className="trend-line current" />
+
+                    {points.map((point, index) => {
+                        const barWidth = Math.max(10, innerWidth / Math.max(points.length * 2.5, 12));
+                        const x = xFor(index) - barWidth / 2;
+                        const y = yFor(point.currentValue);
+                        const height = padding.top + innerHeight - y;
+                        return (
+                            <g key={point.label}>
+                                <rect
+                                    x={x}
+                                    y={y}
+                                    width={barWidth}
+                                    height={Math.max(height, 6)}
+                                    rx="8"
+                                    className={`trend-bar ${safeIndex === index ? 'active' : ''}`}
+                                    onClick={() => setActiveIndex(index)}
+                                />
+                                <circle
+                                    cx={xFor(index)}
+                                    cy={yFor(point.currentValue)}
+                                    r={safeIndex === index ? 6 : 4}
+                                    className="trend-point"
+                                    onClick={() => setActiveIndex(index)}
+                                />
+                                <text x={xFor(index)} y={chartHeight - 14} textAnchor="middle" className="trend-axis-text">
+                                    {point.label}
+                                </text>
+                            </g>
+                        );
+                    })}
+
+                    <line x1={activeX} x2={activeX} y1={padding.top} y2={padding.top + innerHeight} className="trend-active-line" />
+                    <circle cx={activeX} cy={activeY} r="7" className="trend-point-active" />
+                </svg>
+
+                <div
+                    className="trend-chart-tooltip"
+                    style={{
+                        left: `${Math.min(72, Math.max(12, (safeIndex / Math.max(points.length - 1, 1)) * 100))}%`,
+                    }}
+                >
+                    <small>{activePoint.fullLabel}</small>
+                    <strong>{formatMoney(activePoint.currentValue)}</strong>
+                    <span>{currentLabel}</span>
+                    <div className="trend-tooltip-divider" />
+                    <strong>{formatMoney(activePoint.previousValue)}</strong>
+                    <span>{previousLabel}</span>
+                    <div className={`trend-tooltip-delta ${activePoint.delta >= 0 ? 'up' : 'down'}`}>
+                        {formatPercent(activePoint.delta)}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
 
 const getPlanStorageKey = (mode, selectedMonthValue, fromDate, toDate, nowDate) => {
@@ -685,6 +822,22 @@ const Dashboard = () => {
                 total: dayOrders.reduce((sum, order) => sum + order.total, 0),
             };
         });
+        const comparisonBaseDate = new Date(comparisonStartMs);
+        comparisonBaseDate.setHours(0, 0, 0, 0);
+        const comparisonDailyBreakdown = Array.from({ length: breakdownDays }, (_, index) => {
+            const bucketDate = new Date(comparisonBaseDate.getTime() + index * dayMs);
+            const dayStart = bucketDate.getTime();
+            const dayEnd = dayStart + dayMs;
+            const dayOrders = comparisonPeriodDeliveries.filter(
+                (order) => order.createdAtMs >= dayStart && order.createdAtMs <= Math.min(dayEnd - 1, comparisonEndMs)
+            );
+
+            return {
+                key: `p-${index}`,
+                label: `${bucketDate.getMonth() + 1}/${bucketDate.getDate()}`,
+                total: dayOrders.reduce((sum, order) => sum + order.total, 0),
+            };
+        });
         const dailyBreakdown = dayBuckets.map((item) => ({
             ...item,
             orders: weekDeliveries.filter((order) => {
@@ -692,6 +845,24 @@ const Dashboard = () => {
                 return `${orderDate.getMonth() + 1}/${orderDate.getDate()}` === item.label;
             }).length,
         }));
+        const trendCurrentLabel =
+            dateFilterMode === 'custom_range'
+                ? 'Сонгосон хугацаа'
+                : selectedMonthDisplay;
+        const trendComparisonLabel =
+            dateFilterMode === 'custom_range'
+                ? 'Өмнөх ижил хугацаа'
+                : MONTH_NAMES[comparisonBaseDate.getMonth()];
+        const revenueTrendPoints = selectedDailyBreakdown.map((currentDay, index) => {
+            const previousDay = comparisonDailyBreakdown[index] || { total: 0, label: '-' };
+            return {
+                label: currentDay.label.split('/')[1],
+                fullLabel: currentDay.label,
+                currentValue: currentDay.total,
+                previousValue: previousDay.total,
+                delta: previousDay.total > 0 ? ((currentDay.total - previousDay.total) / previousDay.total) * 100 : currentDay.total > 0 ? 100 : 0,
+            };
+        });
         const paymentTotal = paymentBreakdown.reduce((sum, item) => sum + item.amount, 0);
         const paymentSegments = paymentBreakdown
             .map((item, index) => {
@@ -743,6 +914,10 @@ const Dashboard = () => {
                 topHours,
                 dailyBreakdown,
                 monthDailyBreakdown: selectedDailyBreakdown,
+                comparisonDailyBreakdown,
+                revenueTrendPoints,
+                trendCurrentLabel,
+                trendPreviousLabel: trendComparisonLabel,
             },
             performance: {
                 successRate: totalDeliveryOrders ? (completedCount / totalDeliveryOrders) * 100 : 0,
@@ -855,7 +1030,7 @@ const Dashboard = () => {
                     <p>{greetingMeta.caption}</p>
                     <div className="greeting-quote">
                         <small>Өнөөдрийн санаа</small>
-                        <strong>{dailyQuote}</strong>
+                        <strong>{greetingMeta.emoji} {dailyQuote}</strong>
                     </div>
                 </div>
             </div>
@@ -1326,134 +1501,11 @@ const Dashboard = () => {
             </div>
 
             <div className="section-card">
-                <div className="section-heading-row">
-                    <div>
-                        <h3>{deliveryAnalytics.meta.monthLabel} өдөр өдрийн хүргэлт</h3>
-                        <p>{deliveryAnalytics.meta.monthRangeLabel}-ны хүргэлтийн тоо болон дүн</p>
-                    </div>
-                </div>
-                <div className="daily-table-wrap">
-                    <table className="daily-breakdown-table">
-                        <thead>
-                            <tr>
-                                <th>Огноо</th>
-                                <th>Хүргэлтийн тоо</th>
-                                <th>Хүргэлтийн дүн</th>
-                                <th>Өдрийн хувь</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {deliveryAnalytics.time.monthDailyBreakdown.map((day) => (
-                                <tr key={day.key}>
-                                    <td>{day.label}</td>
-                                    <td>{day.orders}</td>
-                                    <td>{formatMoney(day.total)}</td>
-                                    <td>{deliveryAnalytics.totals.monthRevenue > 0 ? formatRate((day.total / deliveryAnalytics.totals.monthRevenue) * 100) : '0.0%'}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div className="section-card delivery-map-card">
-                <div className="delivery-map-header">
-                    <div>
-                        <h3>Байршлын анализ</h3>
-                        <p>Delivery heat map болон дүүргийн эрэлт</p>
-                    </div>
-                    <div className="range-switch">
-                        {RANGE_OPTIONS.map((days) => (
-                            <button
-                                key={days}
-                                type="button"
-                                className={`range-btn ${rangeDays === days ? 'active' : ''}`}
-                                onClick={() => setRangeDays(days)}
-                            >
-                                {days === 1 ? 'Өдөр' : `${days} хоног`}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-                <div className="delivery-map-grid">
-                    <div className="delivery-map-canvas">
-                        <MapContainer center={deliveryAnalytics.geography.mapCenter} zoom={11} scrollWheelZoom style={{ height: '100%', width: '100%' }}>
-                            <TileLayer
-                                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                            />
-                            {deliveryAnalytics.geography.coordinatesOrders.map((order) => (
-                                <Marker key={order.id} position={order.coordinates} icon={deliveryMarkerIcon}>
-                                    <Tooltip direction="top" offset={[0, -8]}>{order.customer}</Tooltip>
-                                    <Popup>
-                                        <div style={{ minWidth: '180px' }}>
-                                            <strong>#{order.id.slice(0, 8).toUpperCase()}</strong>
-                                            <p style={{ margin: '6px 0' }}>{order.customer}</p>
-                                            <p style={{ margin: '6px 0' }}>{formatMoney(order.total)}</p>
-                                            <p style={{ margin: '6px 0' }}>{order.district || '-'}</p>
-                                            {order.address ? <p style={{ margin: '6px 0' }}>{order.address}</p> : null}
-                                        </div>
-                                    </Popup>
-                                </Marker>
-                            ))}
-                        </MapContainer>
-                    </div>
-
-                    <div className="delivery-side">
-                        <div className="delivery-kpis">
-                            <div className="delivery-kpi">
-                                <MapPinned size={16} />
-                                <div>
-                                    <span>Координаттай хүргэлт</span>
-                                    <strong>{deliveryAnalytics.geography.coordinatesOrders.length}</strong>
-                                </div>
-                            </div>
-                            <div className="delivery-kpi">
-                                <Users size={16} />
-                                <div>
-                                    <span>Тэргүүлэгч дүүрэг</span>
-                                    <strong>{deliveryAnalytics.geography.topDistricts[0]?.district || '-'}</strong>
-                                </div>
-                            </div>
-                            <div className="delivery-kpi">
-                                <ChartNoAxesColumn size={16} />
-                                <div>
-                                    <span>Хамгийн их захиалга</span>
-                                    <strong>{deliveryAnalytics.geography.topDistricts[0]?.count || 0}</strong>
-                                </div>
-                            </div>
-                            <div className="delivery-kpi">
-                                <Clock3 size={16} />
-                                <div>
-                                    <span>Сонгосон хугацаа</span>
-                                    <strong>{rangeDays === 1 ? 'Өдөр' : `${rangeDays} хоног`}</strong>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="delivery-list">
-                            <h4>
-                                <MapPinned size={14} />
-                                <span>Top дүүргүүд</span>
-                            </h4>
-                            {deliveryAnalytics.geography.topDistricts.length ? (
-                                deliveryAnalytics.geography.topDistricts.map((item) => (
-                                    <div key={item.district} className="delivery-row">
-                                        <div>
-                                            <p>{item.district}</p>
-                                            <small>Захиалгын тоо</small>
-                                        </div>
-                                        <div>
-                                            <p>{item.count}</p>
-                                        </div>
-                                    </div>
-                                ))
-                            ) : (
-                                <p className="empty-state-text">Дүүргийн өгөгдөл алга байна.</p>
-                            )}
-                        </div>
-                    </div>
-                </div>
+                <RevenueTrendChart
+                    points={deliveryAnalytics.time.revenueTrendPoints}
+                    currentLabel={deliveryAnalytics.time.trendCurrentLabel}
+                    previousLabel={deliveryAnalytics.time.trendPreviousLabel}
+                />
             </div>
 
             <div className="dashboard-sections dashboard-sections-equal">
