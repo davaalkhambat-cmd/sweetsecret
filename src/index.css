@@ -1693,6 +1693,132 @@ img {
   gap: 1.5rem;
 }
 
+.dashboard-greeting-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: 1.6rem 1.7rem;
+  min-height: 220px;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.25rem;
+  color: #fff;
+}
+
+.dashboard-greeting-card.sunrise {
+  background: linear-gradient(135deg, #f97316 0%, #fb7185 55%, #7c3aed 100%);
+}
+
+.dashboard-greeting-card.day {
+  background: linear-gradient(135deg, #0f766e 0%, #0ea5e9 55%, #2563eb 100%);
+}
+
+.dashboard-greeting-card.evening {
+  background: linear-gradient(135deg, #7c2d12 0%, #b91c1c 45%, #312e81 100%);
+}
+
+.dashboard-greeting-card.night {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #312e81 100%);
+}
+
+.dashboard-greeting-visual {
+  position: relative;
+  min-height: 180px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(4px);
+}
+
+.greeting-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+.greeting-orb.orb-one {
+  width: 90px;
+  height: 90px;
+  top: 24px;
+  left: 26px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.greeting-orb.orb-two {
+  width: 54px;
+  height: 54px;
+  right: 26px;
+  bottom: 26px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.greeting-icon-wrap {
+  position: absolute;
+  right: 24px;
+  top: 24px;
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.dashboard-greeting-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.65rem;
+}
+
+.greeting-kicker {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.82;
+}
+
+.dashboard-greeting-copy h1 {
+  color: #fff;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1;
+  margin: 0;
+}
+
+.dashboard-greeting-copy p {
+  max-width: 640px;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.greeting-quote {
+  margin-top: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  max-width: 640px;
+}
+
+.greeting-quote small {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.greeting-quote strong {
+  color: #fff;
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+
 .dashboard-filter-card {
   padding-bottom: 1.2rem;
 }
@@ -1917,6 +2043,14 @@ img {
 }
 
 @media (max-width: 1024px) {
+  .dashboard-greeting-card {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-greeting-visual {
+    min-height: 140px;
+  }
+
   .dashboard-sections {
     grid-template-columns: 1fr;
   }
@@ -2711,6 +2845,10 @@ img {
 }
 
 @media (max-width: 640px) {
+  .dashboard-greeting-card {
+    padding: 1.15rem;
+  }
+
   .performance-grid,
   .sales-mix-grid,
   .strategy-grid,

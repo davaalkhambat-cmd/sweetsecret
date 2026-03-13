@@ -5,13 +5,19 @@ import {
     ArrowUpRight,
     ChartNoAxesColumn,
     CheckCircle2,
+    CloudMoon,
+    CloudRain,
+    CloudSnow,
+    CloudSun,
     CircleDollarSign,
     Clock3,
+    MoonStar,
     PencilLine,
     MapPinned,
     RotateCcw,
     Save,
     ShoppingBag,
+    Sun,
     Target,
     TimerReset,
     Truck,
@@ -28,6 +34,14 @@ const RANGE_OPTIONS = [1, 7, 30];
 const WEEK_DAY_LABELS = ['Ня', 'Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя'];
 const HOUR_LABELS = Array.from({ length: 24 }, (_, hour) => `${String(hour).padStart(2, '0')}:00`);
 const MONTH_NAMES = ['1-р сар', '2-р сар', '3-р сар', '4-р сар', '5-р сар', '6-р сар', '7-р сар', '8-р сар', '9-р сар', '10-р сар', '11-р сар', '12-р сар'];
+const MOTIVATION_QUOTES = [
+    'Өнөөдрийн сахилга бат маргаашийн өсөлтийг бүтээнэ.',
+    'Жижиг сайжруулалтууд тогтвортой хийгдвэл том үр дүн гардаг.',
+    'Хэмжигддэг зүйлс илүү хурдан сайжирдаг.',
+    'Шийдвэр гаргах хурд сайн мэдээллээс эхэлдэг.',
+    'Өнөөдрийн зөв фокус багийн маргаашийн ачааллыг бууруулна.',
+    'Тодорхой зорилттай өдөр илүү ашигтай дуусдаг.',
+];
 
 const deliveryMarkerIcon = divIcon({
     className: 'delivery-marker-wrap',
@@ -171,6 +185,45 @@ const parseInputDate = (value, endOfDay = false) => {
         : new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
 };
 
+const getGreetingMeta = (date) => {
+    const hour = date.getHours();
+    const month = date.getMonth();
+
+    if (hour >= 5 && hour < 11) {
+        return {
+            greeting: 'Өглөөний мэнд',
+            caption: 'Өдрийг тайван эхлүүлээд гол тоонуудаа нэг дороос хар.',
+            Icon: month >= 10 || month <= 1 ? CloudSnow : CloudSun,
+            accent: 'sunrise',
+        };
+    }
+
+    if (hour >= 11 && hour < 17) {
+        return {
+            greeting: 'Өдрийн мэнд',
+            caption: 'Ид ачааллын цагаар гүйцэтгэл, орлого, төлөвлөгөөгөө хяна.',
+            Icon: month >= 5 && month <= 7 ? Sun : CloudSun,
+            accent: 'day',
+        };
+    }
+
+    if (hour >= 17 && hour < 21) {
+        return {
+            greeting: 'Оройн мэнд',
+            caption: 'Өдрийн үр дүнг нэгтгээд дараагийн шийдвэрээ тодорхойл.',
+            Icon: month >= 2 && month <= 4 ? CloudRain : CloudMoon,
+            accent: 'evening',
+        };
+    }
+
+    return {
+        greeting: 'Оройн амар амгалан',
+        caption: 'Шөнийн нам гүмд маргаашийн төлөвлөгөөгөө цэгцэл.',
+        Icon: MoonStar,
+        accent: 'night',
+    };
+};
+
 const getPlanStorageKey = (mode, selectedMonthValue, fromDate, toDate, nowDate) => {
     if (mode === 'specific_month' && selectedMonthValue) {
         return `month:${selectedMonthValue}`;
@@ -216,6 +269,9 @@ const Dashboard = () => {
     const [planDraft, setPlanDraft] = useState('');
     const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false);
     const [planSaveState, setPlanSaveState] = useState('');
+    const [dailyQuote] = useState(
+        () => MOTIVATION_QUOTES[Math.floor(Math.random() * MOTIVATION_QUOTES.length)]
+    );
 
     const activePlanKey = useMemo(
         () => getPlanStorageKey(dateFilterMode, selectedMonth, customFromDate, customToDate, todayDate),
@@ -780,8 +836,30 @@ const Dashboard = () => {
         },
     ];
 
+    const greetingMeta = getGreetingMeta(todayDate);
+    const GreetingIcon = greetingMeta.Icon;
+
     return (
         <div className="dashboard-container">
+            <div className={`dashboard-greeting-card ${greetingMeta.accent}`}>
+                <div className="dashboard-greeting-visual">
+                    <div className="greeting-orb orb-one" />
+                    <div className="greeting-orb orb-two" />
+                    <div className="greeting-icon-wrap">
+                        <GreetingIcon size={34} />
+                    </div>
+                </div>
+                <div className="dashboard-greeting-copy">
+                    <span className="greeting-kicker">{todayDate.toLocaleTimeString('mn-MN', { hour: '2-digit', minute: '2-digit' })}</span>
+                    <h1>{greetingMeta.greeting}</h1>
+                    <p>{greetingMeta.caption}</p>
+                    <div className="greeting-quote">
+                        <small>Өнөөдрийн санаа</small>
+                        <strong>{dailyQuote}</strong>
+                    </div>
+                </div>
+            </div>
+
             <div className="section-card dashboard-filter-card">
                 <div className="section-heading-row">
                     <div>
