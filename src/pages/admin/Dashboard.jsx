@@ -7,8 +7,10 @@ import {
     CheckCircle2,
     CircleDollarSign,
     Clock3,
+    PencilLine,
     MapPinned,
     RotateCcw,
+    Save,
     ShoppingBag,
     Target,
     TimerReset,
@@ -211,6 +213,9 @@ const Dashboard = () => {
     const [customFromDate, setCustomFromDate] = useState(toInputDate(new Date(todayDate.getFullYear(), todayDate.getMonth(), 1)));
     const [customToDate, setCustomToDate] = useState(toInputDate(todayDate));
     const [planTargets, setPlanTargets] = useState({});
+    const [planDraft, setPlanDraft] = useState('');
+    const [isPlanEditorOpen, setIsPlanEditorOpen] = useState(false);
+    const [planSaveState, setPlanSaveState] = useState('');
 
     const activePlanKey = useMemo(
         () => getPlanStorageKey(dateFilterMode, selectedMonth, customFromDate, customToDate, todayDate),
@@ -239,6 +244,27 @@ const Dashboard = () => {
     }, [planTargets]);
 
     const currentPlanTarget = toNumber(planTargets[activePlanKey]);
+
+    useEffect(() => {
+        setPlanDraft(currentPlanTarget ? String(currentPlanTarget) : '');
+        setPlanSaveState('');
+        setIsPlanEditorOpen(false);
+    }, [activePlanKey, currentPlanTarget]);
+
+    const handleSavePlan = () => {
+        setPlanTargets((prev) => ({
+            ...prev,
+            [activePlanKey]: planDraft.replace(/[^\d]/g, ''),
+        }));
+        setPlanSaveState('saved');
+        setIsPlanEditorOpen(false);
+    };
+
+    const handleCancelPlanEdit = () => {
+        setPlanDraft(currentPlanTarget ? String(currentPlanTarget) : '');
+        setPlanSaveState('');
+        setIsPlanEditorOpen(false);
+    };
 
     useEffect(() => {
         const unsubscribers = [
@@ -557,7 +583,15 @@ const Dashboard = () => {
             turnaroundMinutes.length > 0
                 ? turnaroundMinutes.reduce((sum, minutes) => sum + minutes, 0) / turnaroundMinutes.length
                 : 0;
-        const recommendedTarget = Math.max(10, Math.round(averageDailyDeliveries * 1.15));
+        const recommendedTarget = Math.max(
+            100000,
+            Math.round(
+                Math.max(
+                    comparisonPeriodRevenue || 0,
+                    selectedElapsedDays > 0 ? (selectedPeriodRevenue / selectedElapsedDays) * Math.max(selectedElapsedDays, 30) : 0
+                ) * 1.1
+            )
+        );
         const todayActual = todaysDeliveries.length;
         const deliveryRevenueShare = totalSalesRevenue > 0 ? (deliveryRevenue / totalSalesRevenue) * 100 : 0;
         const profitabilityMix = [
@@ -677,13 +711,13 @@ const Dashboard = () => {
             plan: {
                 target: currentPlanTarget,
                 recommendedTarget,
-                actual: selectedPeriodOrderCount,
-                achievement: currentPlanTarget ? (selectedPeriodOrderCount / currentPlanTarget) * 100 : 0,
+                actual: selectedPeriodRevenue,
+                achievement: currentPlanTarget ? (selectedPeriodRevenue / currentPlanTarget) * 100 : 0,
             },
             strategy: {
                 pushProduct: bestProduct?.name || 'Өгөгдөл дутуу',
                 promoWindow: peakHour?.label || '-',
-                addCapacity: averageTurnaround > 90 || selectedPeriodOrderCount > (currentPlanTarget || recommendedTarget),
+                addCapacity: averageTurnaround > 90 || selectedPeriodRevenue > (currentPlanTarget || recommendedTarget),
                 profitableType: bestOrderType?.label || '-',
             },
             recentDeliveries,
@@ -716,8 +750,8 @@ const Dashboard = () => {
             title: 'Target achievement',
             value: deliveryAnalytics.plan.target ? formatRate(deliveryAnalytics.plan.achievement) : 'Төлөвлөгөө оруулна уу',
             change: deliveryAnalytics.plan.target
-                ? `${deliveryAnalytics.plan.actual}/${deliveryAnalytics.plan.target} гүйцэтгэл`
-                : `Санал: ${deliveryAnalytics.plan.recommendedTarget}`,
+                ? `${formatMoney(deliveryAnalytics.plan.actual)} / ${formatMoney(deliveryAnalytics.plan.target)}`
+                : `Санал: ${formatMoney(deliveryAnalytics.plan.recommendedTarget)}`,
             isUp: deliveryAnalytics.plan.target ? deliveryAnalytics.plan.achievement >= 100 : true,
             icon: <Target size={22} color="#7c3aed" />,
         },
@@ -807,39 +841,48 @@ const Dashboard = () => {
                 <div className="section-heading-row">
                     <div>
                         <h3>Төлөвлөгөө оруулах</h3>
-                        <p>{deliveryAnalytics.meta.monthRangeLabel} хугацааны хүргэлтийн зорилтоо энд оруулна</p>
+                        <p>{deliveryAnalytics.meta.monthRangeLabel} хугацааны орлогын төлөвлөгөөг энд оруулна</p>
+                    </div>
+                    <div className="plan-entry-actions">
+                        {currentPlanTarget ? (
+                            <button
+                                type="button"
+                                className="plan-secondary-btn"
+                                onClick={() => {
+                                    setPlanDraft(String(currentPlanTarget));
+                                    setPlanSaveState('');
+                                    setIsPlanEditorOpen((prev) => !prev);
+                                }}
+                            >
+                                <PencilLine size={16} />
+                                <span>{isPlanEditorOpen ? 'Хаах' : 'Засах'}</span>
+                            </button>
+                        ) : null}
                     </div>
                 </div>
                 <div className="plan-entry-grid">
-                    <label className="target-input-group">
-                        <span>Төлөвлөгөөт хүргэлтийн тоо</span>
-                        <input
-                            type="number"
-                            min="0"
-                            inputMode="numeric"
-                            className="dashboard-date-input target-number-input plan-entry-input"
-                            value={planTargets[activePlanKey] ?? ''}
-                            placeholder={`${deliveryAnalytics.plan.recommendedTarget}`}
-                            onChange={(event) => {
-                                const value = event.target.value.replace(/[^\d]/g, '');
-                                setPlanTargets((prev) => ({
-                                    ...prev,
-                                    [activePlanKey]: value,
-                                }));
-                            }}
-                        />
-                    </label>
                     <div className="target-hint-card">
-                        <span>Санал болгосон target</span>
-                        <strong>{deliveryAnalytics.plan.recommendedTarget}</strong>
-                        <small>Сүүлийн 7 хоногийн дундаж дээр суурилсан benchmark</small>
+                        <span>Санал болгосон орлогын target</span>
+                        <strong>{formatMoney(deliveryAnalytics.plan.recommendedTarget)}</strong>
+                        <small>Өмнөх ижил хугацаа болон одоогийн pace дээр суурилсан benchmark</small>
                     </div>
                     <div className="plan-summary-card">
+                        <span>Хадгалсан төлөвлөгөө</span>
+                        <strong>
+                            {currentPlanTarget ? formatMoney(currentPlanTarget) : 'Оруулаагүй'}
+                        </strong>
+                        <small>
+                            {planSaveState === 'saved'
+                                ? 'Төлөвлөгөө хадгалагдлаа'
+                                : 'Сонгосон хугацаанд харгалзах target'}
+                        </small>
+                    </div>
+                    <div className="plan-summary-card accent">
                         <span>Одоогийн гүйцэтгэл</span>
                         <strong>
                             {deliveryAnalytics.plan.target
-                                ? `${deliveryAnalytics.plan.actual}/${deliveryAnalytics.plan.target}`
-                                : `${deliveryAnalytics.plan.actual} / -`}
+                                ? `${formatMoney(deliveryAnalytics.plan.actual)} / ${formatMoney(deliveryAnalytics.plan.target)}`
+                                : `${formatMoney(deliveryAnalytics.plan.actual)} / -`}
                         </strong>
                         <small>
                             {deliveryAnalytics.plan.target
@@ -848,6 +891,46 @@ const Dashboard = () => {
                         </small>
                     </div>
                 </div>
+
+                {isPlanEditorOpen || !currentPlanTarget ? (
+                    <div className="plan-editor-panel">
+                        <label className="target-input-group">
+                            <span>Төлөвлөгөөт орлогын дүн</span>
+                            <input
+                                type="number"
+                                min="0"
+                                inputMode="numeric"
+                                className="dashboard-date-input target-number-input plan-entry-input"
+                                value={planDraft}
+                                placeholder={`${deliveryAnalytics.plan.recommendedTarget}`}
+                                onChange={(event) => {
+                                    setPlanDraft(event.target.value.replace(/[^\d]/g, ''));
+                                    setPlanSaveState('');
+                                }}
+                            />
+                        </label>
+                        <div className="plan-editor-footer">
+                            <span className="plan-editor-note">
+                                Төлөвлөгөөг зөвхөн `Хадгалах` дарсны дараа dashboard дээр тооцно.
+                            </span>
+                            <div className="plan-editor-buttons">
+                                {currentPlanTarget ? (
+                                    <button type="button" className="plan-secondary-btn" onClick={handleCancelPlanEdit}>
+                                        Цуцлах
+                                    </button>
+                                ) : null}
+                                <button
+                                    type="button"
+                                    className="plan-primary-btn"
+                                    onClick={handleSavePlan}
+                                >
+                                    <Save size={16} />
+                                    <span>Хадгалах</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
             </div>
 
             {errorMessage && (
@@ -905,7 +988,7 @@ const Dashboard = () => {
                     <div className="section-heading-row">
                         <div>
                             <h3>Төлөвлөгөө vs Гүйцэтгэл</h3>
-                            <p>Сонгосон хугацааны төлөвлөгөөг оруулаад achievement-ийг түүнээс бодно</p>
+                            <p>Сонгосон хугацааны төлөвлөгөөт орлоготой бодит орлогыг харьцуулна</p>
                         </div>
                     </div>
                     <div className="target-progress-wrap">
@@ -916,7 +999,7 @@ const Dashboard = () => {
                             <strong>{deliveryAnalytics.plan.target ? formatRate(deliveryAnalytics.plan.achievement) : '0.0%'}</strong>
                             <span>
                                 {deliveryAnalytics.plan.target
-                                    ? `${deliveryAnalytics.plan.actual} бодит / ${deliveryAnalytics.plan.target} зорилт`
+                                    ? `${formatMoney(deliveryAnalytics.plan.actual)} бодит / ${formatMoney(deliveryAnalytics.plan.target)} зорилт`
                                     : 'Achievement тооцоолохын тулд төлөвлөгөө оруулна уу'}
                             </span>
                         </div>
