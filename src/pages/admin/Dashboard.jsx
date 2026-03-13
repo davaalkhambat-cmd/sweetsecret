@@ -803,6 +803,53 @@ const Dashboard = () => {
                 <p>{deliveryAnalytics.meta.monthRangeLabel}-ны delivery гүйцэтгэл, орлого, төлбөр, стратегийн дохиог нэг дэлгэц дээр харуулна.</p>
             </div>
 
+            <div className="section-card plan-entry-card">
+                <div className="section-heading-row">
+                    <div>
+                        <h3>Төлөвлөгөө оруулах</h3>
+                        <p>{deliveryAnalytics.meta.monthRangeLabel} хугацааны хүргэлтийн зорилтоо энд оруулна</p>
+                    </div>
+                </div>
+                <div className="plan-entry-grid">
+                    <label className="target-input-group">
+                        <span>Төлөвлөгөөт хүргэлтийн тоо</span>
+                        <input
+                            type="number"
+                            min="0"
+                            inputMode="numeric"
+                            className="dashboard-date-input target-number-input plan-entry-input"
+                            value={planTargets[activePlanKey] ?? ''}
+                            placeholder={`${deliveryAnalytics.plan.recommendedTarget}`}
+                            onChange={(event) => {
+                                const value = event.target.value.replace(/[^\d]/g, '');
+                                setPlanTargets((prev) => ({
+                                    ...prev,
+                                    [activePlanKey]: value,
+                                }));
+                            }}
+                        />
+                    </label>
+                    <div className="target-hint-card">
+                        <span>Санал болгосон target</span>
+                        <strong>{deliveryAnalytics.plan.recommendedTarget}</strong>
+                        <small>Сүүлийн 7 хоногийн дундаж дээр суурилсан benchmark</small>
+                    </div>
+                    <div className="plan-summary-card">
+                        <span>Одоогийн гүйцэтгэл</span>
+                        <strong>
+                            {deliveryAnalytics.plan.target
+                                ? `${deliveryAnalytics.plan.actual}/${deliveryAnalytics.plan.target}`
+                                : `${deliveryAnalytics.plan.actual} / -`}
+                        </strong>
+                        <small>
+                            {deliveryAnalytics.plan.target
+                                ? formatRate(deliveryAnalytics.plan.achievement)
+                                : 'Achievement тооцоолохын тулд төлөвлөгөө оруулна уу'}
+                        </small>
+                    </div>
+                </div>
+            </div>
+
             {errorMessage && (
                 <div className="dashboard-alert">
                     <AlertTriangle size={16} />
@@ -859,31 +906,6 @@ const Dashboard = () => {
                         <div>
                             <h3>Төлөвлөгөө vs Гүйцэтгэл</h3>
                             <p>Сонгосон хугацааны төлөвлөгөөг оруулаад achievement-ийг түүнээс бодно</p>
-                        </div>
-                    </div>
-                    <div className="target-form-row">
-                        <label className="target-input-group">
-                            <span>Төлөвлөгөөт хүргэлтийн тоо</span>
-                            <input
-                                type="number"
-                                min="0"
-                                inputMode="numeric"
-                                className="dashboard-date-input target-number-input"
-                                value={planTargets[activePlanKey] ?? ''}
-                                placeholder={`${deliveryAnalytics.plan.recommendedTarget}`}
-                                onChange={(event) => {
-                                    const value = event.target.value.replace(/[^\d]/g, '');
-                                    setPlanTargets((prev) => ({
-                                        ...prev,
-                                        [activePlanKey]: value,
-                                    }));
-                                }}
-                            />
-                        </label>
-                        <div className="target-hint-card">
-                            <span>Санал болгосон target</span>
-                            <strong>{deliveryAnalytics.plan.recommendedTarget}</strong>
-                            <small>Сүүлийн 7 хоногийн дундаж дээр суурилсан benchmark</small>
                         </div>
                     </div>
                     <div className="target-progress-wrap">
