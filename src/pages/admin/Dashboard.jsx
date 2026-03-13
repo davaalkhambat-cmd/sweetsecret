@@ -361,6 +361,73 @@ const RevenueTrendChart = ({ points, currentLabel, previousLabel }) => {
     );
 };
 
+const ProductRevenuePieChart = ({ products }) => {
+    if (!products.length) {
+        return <p className="empty-state-text">Бүтээгдэхүүний өгөгдөл алга байна.</p>;
+    }
+
+    const totalRevenue = products.reduce((sum, product) => sum + product.revenue, 0);
+    const palette = ['#7c3aed', '#ec4899', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#14b8a6', '#8b5cf6', '#f97316', '#64748b'];
+    const segments = products.map((product, index) => {
+        const previous = products
+            .slice(0, index)
+            .reduce((sum, current) => sum + (totalRevenue ? (current.revenue / totalRevenue) * 100 : 0), 0);
+        const current = totalRevenue ? (product.revenue / totalRevenue) * 100 : 0;
+        return {
+            ...product,
+            color: palette[index % palette.length],
+            start: previous,
+            end: previous + current,
+            share: current,
+        };
+    });
+
+    return (
+        <div className="product-pie-card">
+            <div className="trend-chart-header">
+                <div>
+                    <h3>Top 10 бүтээгдэхүүн</h3>
+                    <p>Тухайн хугацааны борлуулалтын үнийн дүнгээр</p>
+                </div>
+            </div>
+            <div className="product-pie-layout">
+                <div className="product-pie-wrap">
+                    <div
+                        className="product-pie-chart"
+                        style={{
+                            background: `conic-gradient(${segments
+                                .map((segment) => `${segment.color} ${segment.start}% ${segment.end}%`)
+                                .join(', ')})`,
+                        }}
+                    >
+                        <div className="product-pie-center">
+                            <span>Нийт</span>
+                            <strong>{formatMoney(totalRevenue)}</strong>
+                        </div>
+                    </div>
+                </div>
+                <div className="product-pie-legend">
+                    {segments.map((product, index) => (
+                        <div key={`${product.id}-${index}`} className="product-pie-row">
+                            <div className="product-pie-label">
+                                <span className="product-pie-dot" style={{ background: product.color }} />
+                                <div>
+                                    <strong>{product.name}</strong>
+                                    <small>{product.soldQty} ш</small>
+                                </div>
+                            </div>
+                            <div className="product-pie-values">
+                                <strong>{formatMoney(product.revenue)}</strong>
+                                <span>{formatRate(product.share)}</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const getPlanStorageKey = (mode, selectedMonthValue, fromDate, toDate, nowDate) => {
     if (mode === 'specific_month' && selectedMonthValue) {
         return `month:${selectedMonthValue}`;
@@ -762,7 +829,7 @@ const Dashboard = () => {
             }));
         const topProducts = [...productMap.values()]
             .sort((a, b) => b.soldQty - a.soldQty)
-            .slice(0, 5);
+            .slice(0, 10);
         const bestProduct = topProducts[0] || null;
         const coordinatesOrders = inRangeDeliveryOrders.filter((order) => Array.isArray(order.coordinates));
         const mapCenter =
@@ -1209,7 +1276,43 @@ const Dashboard = () => {
                 ))}
             </div>
 
+            <div className="analytics-top-grid">
+                <div className="section-card compact-trend-card">
+                    <RevenueTrendChart
+                        points={deliveryAnalytics.time.revenueTrendPoints}
+                        currentLabel={deliveryAnalytics.time.trendCurrentLabel}
+                        previousLabel={deliveryAnalytics.time.trendPreviousLabel}
+                    />
+                </div>
+
+                <div className="section-card compact-products-card">
+                    <ProductRevenuePieChart products={deliveryAnalytics.quality.topProducts} />
+                </div>
+            </div>
+
             <div className="delivery-summary-grid">
+                <div className="section-card target-card">
+                    <div className="section-heading-row">
+                        <div>
+                            <h3>Төлөвлөгөө vs Гүйцэтгэл</h3>
+                            <p>Сонгосон хугацааны төлөвлөгөөт орлоготой бодит орлогыг харьцуулна</p>
+                        </div>
+                    </div>
+                    <div className="target-progress-wrap">
+                        <div className="target-progress-bar">
+                            <span style={{ width: `${Math.min(deliveryAnalytics.plan.achievement, 100)}%` }} />
+                        </div>
+                        <div className="target-progress-meta">
+                            <strong>{deliveryAnalytics.plan.target ? formatRate(deliveryAnalytics.plan.achievement) : '0.0%'}</strong>
+                            <span>
+                                {deliveryAnalytics.plan.target
+                                    ? `${formatMoney(deliveryAnalytics.plan.actual)} бодит / ${formatMoney(deliveryAnalytics.plan.target)} зорилт`
+                                    : 'Achievement тооцоолохын тулд төлөвлөгөө оруулна уу'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
                 <div className="section-card summary-card-feature">
                     <div className="section-heading-row">
                         <div>
@@ -1233,28 +1336,6 @@ const Dashboard = () => {
                         <div className="mini-kpi">
                             <span>{deliveryAnalytics.meta.monthLabel} орлого</span>
                             <strong>{formatMoney(deliveryAnalytics.totals.monthRevenue)}</strong>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="section-card target-card">
-                    <div className="section-heading-row">
-                        <div>
-                            <h3>Төлөвлөгөө vs Гүйцэтгэл</h3>
-                            <p>Сонгосон хугацааны төлөвлөгөөт орлоготой бодит орлогыг харьцуулна</p>
-                        </div>
-                    </div>
-                    <div className="target-progress-wrap">
-                        <div className="target-progress-bar">
-                            <span style={{ width: `${Math.min(deliveryAnalytics.plan.achievement, 100)}%` }} />
-                        </div>
-                        <div className="target-progress-meta">
-                            <strong>{deliveryAnalytics.plan.target ? formatRate(deliveryAnalytics.plan.achievement) : '0.0%'}</strong>
-                            <span>
-                                {deliveryAnalytics.plan.target
-                                    ? `${formatMoney(deliveryAnalytics.plan.actual)} бодит / ${formatMoney(deliveryAnalytics.plan.target)} зорилт`
-                                    : 'Achievement тооцоолохын тулд төлөвлөгөө оруулна уу'}
-                            </span>
                         </div>
                     </div>
                 </div>
@@ -1498,14 +1579,6 @@ const Dashboard = () => {
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div className="section-card">
-                <RevenueTrendChart
-                    points={deliveryAnalytics.time.revenueTrendPoints}
-                    currentLabel={deliveryAnalytics.time.trendCurrentLabel}
-                    previousLabel={deliveryAnalytics.time.trendPreviousLabel}
-                />
             </div>
 
             <div className="dashboard-sections dashboard-sections-equal">
