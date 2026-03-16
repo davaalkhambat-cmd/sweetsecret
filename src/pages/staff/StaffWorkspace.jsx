@@ -22,7 +22,7 @@ const StaffWorkspace = () => {
     const navigate = useNavigate();
 
     const modules = [
-        { id: 'dashboard', name: 'Тойм', icon: <LayoutDashboard size={20} />, roles: ['admin', 'manager', 'sales', 'cashier'] },
+        { id: 'dashboard', name: 'Тойм', icon: <LayoutDashboard size={20} />, roles: ['admin', 'manager', 'cashier'] },
         { id: 'sales', name: 'Борлуулалт', icon: <ShoppingBag size={20} />, roles: ['admin', 'manager', 'sales', 'cashier'] },
         { id: 'customers', name: 'Хэрэглэгчид', icon: <Users size={20} />, roles: ['admin', 'manager', 'marketing_manager'] },
         { id: 'reports', name: 'Тайлан', icon: <BarChart3 size={20} />, roles: ['admin', 'manager'] },

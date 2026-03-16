@@ -132,8 +132,16 @@ function App() {
                     </RequireAdmin>
                 }
             >
-                <Route index element={<CommerceDashboard />} />
-                <Route path="delivery-dashboard" element={<DeliveryDashboard />} />
+                <Route index element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
+                        <CommerceDashboard />
+                    </RequireAdmin>
+                } />
+                <Route path="delivery-dashboard" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
+                        <DeliveryDashboard />
+                    </RequireAdmin>
+                } />
                 <Route path="products" element={
                     <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PRODUCTS}>
                         <Products />
