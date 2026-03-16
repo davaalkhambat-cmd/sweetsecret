@@ -120,11 +120,32 @@ export const ADMIN_MENU = [
         iconName: 'LayoutDashboard',
     },
     {
+        key: 'delivery-dashboard',
+        title: 'Хүргэлтийн хянах самбар',
+        path: '/admin/delivery-dashboard',
+        requiredPermission: PERMISSIONS.VIEW_DASHBOARD,
+        iconName: 'Truck',
+    },
+    {
         key: 'products',
         title: 'Бараа бүтээгдэхүүн',
         path: '/admin/products',
         requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
         iconName: 'Package',
+    },
+    {
+        key: 'inventory',
+        title: 'Үлдэгдэл',
+        path: '/admin/inventory',
+        requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
+        iconName: 'Boxes',
+    },
+    {
+        key: 'sales-revenue',
+        title: 'Борлуулалтын орлого',
+        path: '/admin/sales-revenue',
+        requiredPermission: PERMISSIONS.VIEW_DASHBOARD,
+        iconName: 'BarChart3',
     },
     {
         key: 'orders',

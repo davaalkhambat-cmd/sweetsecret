@@ -8,7 +8,10 @@ import Cart from './components/Cart';
 // Admin Imports
 import AdminLayout from './components/admin/AdminLayout';
 import RequireAdmin from './components/admin/RequireAdmin';
-import Dashboard from './pages/admin/Dashboard';
+import DeliveryDashboard from './pages/admin/Dashboard';
+import CommerceDashboard from './pages/admin/CommerceDashboard';
+import Inventory from './pages/admin/Inventory';
+import SalesRevenue from './pages/admin/SalesRevenue';
 import Products from './pages/admin/Products';
 import Orders from './pages/admin/Orders';
 import Users from './pages/admin/Users';
@@ -129,10 +132,21 @@ function App() {
                     </RequireAdmin>
                 }
             >
-                <Route index element={<Dashboard />} />
+                <Route index element={<CommerceDashboard />} />
+                <Route path="delivery-dashboard" element={<DeliveryDashboard />} />
                 <Route path="products" element={
                     <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PRODUCTS}>
                         <Products />
+                    </RequireAdmin>
+                } />
+                <Route path="inventory" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PRODUCTS}>
+                        <Inventory />
+                    </RequireAdmin>
+                } />
+                <Route path="sales-revenue" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
+                        <SalesRevenue />
                     </RequireAdmin>
                 } />
                 <Route path="orders" element={
