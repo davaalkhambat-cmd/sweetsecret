@@ -163,6 +163,7 @@ export const AuthProvider = ({ children }) => {
                 const dynamicRoles = {};
                 snapshot.docs.forEach((docSnap) => {
                     const data = docSnap.data();
+                    if (!data?.key || DEFAULT_ROLES[data.key]) return;
                     dynamicRoles[data.key] = data;
                 });
                 setRoles({ ...DEFAULT_ROLES, ...dynamicRoles });

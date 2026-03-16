@@ -62,10 +62,11 @@ export const DEFAULT_ROLES = {
         key: 'sales',
         label: 'Борлуулалтын ажилтан',
         labelEn: 'Sales',
-        description: 'Зөвхөн захиалга бүртгэх, засах эрхтэй',
+        description: 'Dashboard харах, захиалга удирдах эрхтэй',
         color: '#2563EB',
         icon: '💼',
         permissions: [
+            PERMISSIONS.VIEW_DASHBOARD,
             PERMISSIONS.VIEW_ORDERS,
             PERMISSIONS.EDIT_ORDERS,
         ],
@@ -74,12 +75,12 @@ export const DEFAULT_ROLES = {
         key: 'cashier',
         label: 'Дэлгүүрийн худалдагч',
         labelEn: 'Cashier',
-        description: 'Захиалга харах, хязгаарлагдмал dashboard',
+        description: 'Зөвхөн захиалга шивэх, засах эрхтэй',
         color: '#059669',
         icon: '🛒',
         permissions: [
-            PERMISSIONS.VIEW_DASHBOARD,
             PERMISSIONS.VIEW_ORDERS,
+            PERMISSIONS.EDIT_ORDERS,
         ],
     },
     manager: {
