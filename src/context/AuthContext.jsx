@@ -16,6 +16,7 @@ import { auth, db, googleProvider } from '../firebase';
 import { isStaffRole, getRoleInfo, DEFAULT_ROLES, resolveRoleKey } from '../config/roles';
 
 const AuthContext = createContext(null);
+const SUPER_ADMIN_EMAILS = new Set(['davaalkham.bat@gmail.com']);
 
 const AUTH_ERROR_MESSAGES = {
     'auth/invalid-email': 'И-мэйл хаягийн формат буруу байна.',
@@ -40,6 +41,14 @@ const getAuthMessage = (error) => {
     if (!error?.code) return 'Алдаа гарлаа. Дахин оролдоно уу.';
     const baseMessage = AUTH_ERROR_MESSAGES[error.code] || 'Нэвтрэх үед алдаа гарлаа.';
     return `${baseMessage} (${error.code})`;
+};
+
+const resolveUserRole = (roleKey, email = '') => {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    if (SUPER_ADMIN_EMAILS.has(normalizedEmail)) {
+        return 'super_admin';
+    }
+    return resolveRoleKey(roleKey || 'customer');
 };
 
 export const AuthProvider = ({ children }) => {
@@ -84,7 +93,7 @@ export const AuthProvider = ({ children }) => {
                 .map((provider) => provider?.providerId)
                 .filter(Boolean),
             updatedAt: serverTimestamp(),
-            role: resolveRoleKey(invitationData?.role || existingUIDData?.role || 'customer')
+            role: resolveUserRole(invitationData?.role || existingUIDData?.role || 'customer', firebaseUser.email)
         };
 
         if (invitationData) {
@@ -106,7 +115,7 @@ export const AuthProvider = ({ children }) => {
             payload.status = existingUIDData.status || 'active';
             payload.createdAt = existingUIDData.createdAt || serverTimestamp();
             payload.loyaltyPoints = existingUIDData.loyaltyPoints || 0;
-            payload.role = resolveRoleKey(existingUIDData.role || 'customer');
+            payload.role = resolveUserRole(existingUIDData.role || 'customer', firebaseUser.email);
         } else {
             // BRAND NEW USER: Initialize as customer
             payload.status = 'active';
@@ -181,7 +190,7 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
-    const userRole = resolveRoleKey(userProfile?.role || 'customer');
+    const userRole = resolveUserRole(userProfile?.role || 'customer', userProfile?.email || user?.email);
     const roleData = getRoleInfo(userRole, roles);
     const isStaff = isStaffRole(userRole);
     const isAdmin = roleData.permissions.includes('manage_roles') || roleData.permissions.includes('manage_settings');
