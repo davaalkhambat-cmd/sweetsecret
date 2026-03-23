@@ -13,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, query, where, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../firebase';
-import { isStaffRole, roleHasPermission, getRoleInfo, STAFF_ROLES, DEFAULT_ROLES } from '../config/roles';
+import { isStaffRole, getRoleInfo, DEFAULT_ROLES, resolveRoleKey } from '../config/roles';
 
 const AuthContext = createContext(null);
 
@@ -84,7 +84,7 @@ export const AuthProvider = ({ children }) => {
                 .map((provider) => provider?.providerId)
                 .filter(Boolean),
             updatedAt: serverTimestamp(),
-            role: invitationData?.role || existingUIDData?.role || 'customer'
+            role: resolveRoleKey(invitationData?.role || existingUIDData?.role || 'customer')
         };
 
         if (invitationData) {
@@ -106,7 +106,7 @@ export const AuthProvider = ({ children }) => {
             payload.status = existingUIDData.status || 'active';
             payload.createdAt = existingUIDData.createdAt || serverTimestamp();
             payload.loyaltyPoints = existingUIDData.loyaltyPoints || 0;
-            payload.role = existingUIDData.role || 'customer';
+            payload.role = resolveRoleKey(existingUIDData.role || 'customer');
         } else {
             // BRAND NEW USER: Initialize as customer
             payload.status = 'active';
@@ -181,10 +181,10 @@ export const AuthProvider = ({ children }) => {
         };
     }, []);
 
-    const userRole = userProfile?.role || 'customer';
-    const roleData = roles[userRole] || roles.customer;
-    const isStaff = STAFF_ROLES.includes(userRole) || (roleData && roleData.key !== 'customer');
-    const isAdmin = userRole === 'admin' || (roleData && roleData.permissions.includes('manage_staff_roles'));
+    const userRole = resolveRoleKey(userProfile?.role || 'customer');
+    const roleData = getRoleInfo(userRole, roles);
+    const isStaff = isStaffRole(userRole);
+    const isAdmin = roleData.permissions.includes('manage_roles') || roleData.permissions.includes('manage_settings');
 
     const hasPermission = useCallback(
         (permission) => {
