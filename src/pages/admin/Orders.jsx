@@ -33,6 +33,11 @@ import {
     Mail,
     ShoppingBag,
     ShieldCheck,
+    Target,
+    TrendingUp,
+    ChartNoAxesColumn,
+    Sparkles,
+    CircleDollarSign,
 } from 'lucide-react';
 import {
     collection,
@@ -56,6 +61,30 @@ const STATUS_CONFIG = {
     cancelled: { label: 'Цуцлагдсан', color: '#DC2626', icon: <AlertCircle size={16} />, class: 'cancelled' },
 };
 
+const DEFAULT_DAILY_TARGET = 1500000;
+const DAILY_TARGET_STORAGE_KEY = 'sweet-secret-orders-daily-target';
+const DAILY_REPORT_DELIVERY_FEE = 10000;
+
+const calculateSubtotalAmount = (items = []) =>
+    items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0);
+
+const getDiscountAmountValue = (items = [], discount, discountType) => {
+    const subtotal = calculateSubtotalAmount(items);
+    if (discountType === 'percent') {
+        return (subtotal * (Number(discount) || 0)) / 100;
+    }
+    return Number(discount) || 0;
+};
+
+const MONGOLIAN_MONTHS = [
+    '1-р сар', '2-р сар', '3-р сар', '4-р сар', '5-р сар', '6-р сар',
+    '7-р сар', '8-р сар', '9-р сар', '10-р сар', '11-р сар', '12-р сар'
+];
+
+const MONGOLIAN_WEEKDAYS = [
+    'Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'
+];
+
 const Orders = () => {
     const { user: currentUser, isAdmin } = useAuth();
     const [orders, setOrders] = useState([]);
@@ -71,6 +100,10 @@ const Orders = () => {
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+    const [isDailySummaryOpen, setIsDailySummaryOpen] = useState(false);
+    const [dailyTarget, setDailyTarget] = useState(DEFAULT_DAILY_TARGET);
+    const [dailyTargetDraft, setDailyTargetDraft] = useState(String(DEFAULT_DAILY_TARGET));
+    const [weatherSummary, setWeatherSummary] = useState('Цаг агаар уншиж байна...');
 
     // New Order Form State with Structured Address
     const [newOrder, setNewOrder] = useState({
@@ -89,7 +122,7 @@ const Orders = () => {
         status: 'pending',
         deliveryType: 'delivery',
         paymentMethod: 'bank_transfer',
-        deliveryFee: 5000,
+        deliveryFee: 10000,
         discount: 0,
         discountType: 'amount', // 'amount' or 'percent'
         source: '',
@@ -153,6 +186,77 @@ const Orders = () => {
         return () => { unsubOrders(); unsubProducts(); unsubUsers(); };
     }, []);
 
+    useEffect(() => {
+        try {
+            const storedTarget = window.localStorage.getItem(DAILY_TARGET_STORAGE_KEY);
+            if (storedTarget) {
+                const parsedTarget = Number(JSON.parse(storedTarget));
+                if (Number.isFinite(parsedTarget) && parsedTarget > 0) {
+                    setDailyTarget(parsedTarget);
+                    setDailyTargetDraft(String(parsedTarget));
+                }
+            }
+        } catch (error) {
+            console.error('Daily target read error:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            window.localStorage.setItem(DAILY_TARGET_STORAGE_KEY, JSON.stringify(dailyTarget));
+        } catch (error) {
+            console.error('Daily target write error:', error);
+        }
+    }, [dailyTarget]);
+
+    useEffect(() => {
+        let isMounted = true;
+
+        const weatherCodeMap = {
+            0: 'Цэлмэг',
+            1: 'Бага зэрэг үүлэрхэг',
+            2: 'Үүлэрхэг',
+            3: 'Бүрхэг',
+            45: 'Манантай',
+            48: 'Манантай',
+            51: 'Шиврээ',
+            53: 'Шиврээ',
+            55: 'Шиврээ',
+            61: 'Бороо',
+            63: 'Бороо',
+            65: 'Ширүүн бороо',
+            71: 'Цастай',
+            73: 'Цастай',
+            75: 'Цастай',
+            80: 'Аадар',
+            81: 'Аадар',
+            82: 'Ширүүн аадар',
+            95: 'Аянгатай',
+        };
+
+        const loadWeather = async () => {
+            try {
+                const response = await fetch(
+                    'https://api.open-meteo.com/v1/forecast?latitude=47.9184&longitude=106.9177&current=temperature_2m,weather_code&timezone=Asia%2FUlaanbaatar'
+                );
+                const data = await response.json();
+                const temperature = Math.round(data?.current?.temperature_2m ?? 0);
+                const weatherLabel = weatherCodeMap[data?.current?.weather_code] || 'Тогтуун';
+                if (isMounted) {
+                    setWeatherSummary(`${weatherLabel} • ${temperature}°C`);
+                }
+            } catch (error) {
+                if (isMounted) setWeatherSummary('Улаанбаатар • Цаг агааргүй');
+            }
+        };
+
+        loadWeather();
+
+        return () => {
+            isMounted = false;
+        };
+    }, []);
+
     const filteredOrders = useMemo(() => orders.filter(o => {
         const matchesSearch = o.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
             (o.customerName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -183,6 +287,198 @@ const Orders = () => {
         processingCount: orders.filter(o => o.status === 'processing').length,
         totalRevenue: orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
     }), [orders]);
+
+    const todaysPerformance = useMemo(() => {
+        const now = new Date();
+        const startOfDay = new Date(now);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(now);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const todaysOrders = orders.filter((order) => {
+            if (!order.createdAt) return false;
+            const createdAt = new Date(order.createdAt.toMillis());
+            return createdAt >= startOfDay && createdAt <= endOfDay;
+        });
+
+        const merchandiseSubtotal = todaysOrders.reduce(
+            (sum, order) => sum + calculateSubtotalAmount(order.items || []),
+            0
+        );
+        const totalDiscount = todaysOrders.reduce(
+            (sum, order) => sum + getDiscountAmountValue(order.items || [], order.discount, order.discountType),
+            0
+        );
+        const totalDelivery = todaysOrders.reduce((sum, order) => {
+            if ((order.deliveryType || 'delivery') !== 'delivery') return sum;
+            return sum + (Number(order.deliveryFee) || DAILY_REPORT_DELIVERY_FEE);
+        }, 0);
+        const totalSales = todaysOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+        const totalOrders = todaysOrders.length;
+        const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+        const progress = dailyTarget > 0 ? (totalSales / dailyTarget) * 100 : 0;
+        const gapAmount = Math.abs(dailyTarget - totalSales);
+
+        const paymentColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#14b8a6'];
+        const sourceColors = ['#1d4ed8', '#db2777', '#0f766e', '#ea580c', '#7c3aed', '#0891b2', '#16a34a', '#64748b'];
+
+        const paymentBreakdown = PAYMENT_METHODS.map((method, index) => {
+            const amount = todaysOrders
+                .filter((order) => order.paymentMethod === method.key)
+                .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+            const share = totalSales > 0 ? (amount / totalSales) * 100 : 0;
+            return {
+                ...method,
+                amount,
+                share,
+                color: paymentColors[index % paymentColors.length],
+            };
+        }).sort((a, b) => b.amount - a.amount);
+
+        const sourceBreakdown = SOURCE_OPTIONS.map((source, index) => {
+            const count = todaysOrders.filter((order) => order.source === source.key).length;
+            const share = totalOrders > 0 ? (count / totalOrders) * 100 : 0;
+            return {
+                ...source,
+                count,
+                share,
+                color: sourceColors[index % sourceColors.length],
+            };
+        }).sort((a, b) => b.count - a.count);
+
+        const buildPieSegments = (items) => {
+            const total = items.reduce((sum, item) => sum + (item.share || 0), 0);
+            if (total <= 0) return 'conic-gradient(#e2e8f0 0% 100%)';
+
+            let current = 0;
+            const segments = items
+                .filter((item) => item.share > 0)
+                .map((item) => {
+                    const start = current;
+                    current += item.share;
+                    return `${item.color} ${start}% ${current}%`;
+                });
+
+            return `conic-gradient(${segments.join(', ')})`;
+        };
+
+        const visiblePaymentBreakdown = paymentBreakdown.filter((item) => item.amount > 0);
+        const visibleSourceBreakdown = sourceBreakdown.filter((item) => item.count > 0);
+        const topProductsMap = new Map();
+
+        todaysOrders.forEach((order) => {
+            const orderItems = order.items || [];
+            const orderSubtotal = calculateSubtotalAmount(orderItems);
+            const orderDiscount = getDiscountAmountValue(orderItems, order.discount, order.discountType);
+            const orderDelivery =
+                (order.deliveryType || 'delivery') === 'delivery'
+                    ? (Number(order.deliveryFee) || DAILY_REPORT_DELIVERY_FEE)
+                    : 0;
+            const fallbackWeight = orderItems.length ? 1 / orderItems.length : 0;
+
+            orderItems.forEach((item) => {
+                const key = item.id || item.code || item.name;
+                const current = topProductsMap.get(key) || {
+                    key,
+                    name: item.name || 'Бүтээгдэхүүн',
+                    quantity: 0,
+                    revenue: 0,
+                    delivery: 0,
+                    discount: 0,
+                    payable: 0,
+                };
+                const quantity = Number(item.quantity) || 0;
+                const price = Number(item.price) || 0;
+                const itemSubtotal = quantity * price;
+                const weight = orderSubtotal > 0 ? itemSubtotal / orderSubtotal : fallbackWeight;
+                const allocatedDelivery = orderDelivery * weight;
+                const allocatedDiscount = orderDiscount * weight;
+
+                current.quantity += quantity;
+                current.revenue += itemSubtotal;
+                current.delivery += allocatedDelivery;
+                current.discount += allocatedDiscount;
+                current.payable += itemSubtotal + allocatedDelivery - allocatedDiscount;
+                topProductsMap.set(key, current);
+            });
+        });
+
+        const productBreakdown = [...topProductsMap.values()]
+            .sort((a, b) => b.payable - a.payable)
+            .map((item) => ({
+                ...item,
+                share: totalSales > 0 ? (item.payable / totalSales) * 100 : 0,
+            }));
+        const topProducts = productBreakdown.slice(0, 5);
+
+        let progressTone = 'neutral';
+        if (progress >= 100) progressTone = 'success';
+        else if (progress >= 80) progressTone = 'good';
+        else if (progress >= 50) progressTone = 'warning';
+
+        return {
+            totalSales,
+            merchandiseSubtotal,
+            totalDelivery,
+            totalDiscount,
+            totalOrders,
+            averageOrderValue,
+            target: dailyTarget,
+            progress,
+            progressTone,
+            gapAmount,
+            isTargetMet: totalSales >= dailyTarget,
+            paymentBreakdown,
+            visiblePaymentBreakdown,
+            paymentChartStyle: buildPieSegments(paymentBreakdown),
+            sourceBreakdown,
+            visibleSourceBreakdown,
+            sourceChartStyle: buildPieSegments(sourceBreakdown),
+            productBreakdown,
+            topProducts,
+        };
+    }, [dailyTarget, orders]);
+
+    const selectedCustomerPaymentInsights = useMemo(() => {
+        if (!selectedOrder) return null;
+
+        const customerOrders = orders.filter((order) =>
+            (selectedOrder.userId && order.userId === selectedOrder.userId) ||
+            (selectedOrder.phoneNumber && order.phoneNumber === selectedOrder.phoneNumber) ||
+            (selectedOrder.email && selectedOrder.email !== '' && order.email === selectedOrder.email)
+        );
+
+        const totalAmount = customerOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+        const paymentRows = PAYMENT_METHODS.map((method) => {
+            const amount = customerOrders
+                .filter((order) => order.paymentMethod === method.key)
+                .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+            const share = totalAmount > 0 ? (amount / totalAmount) * 100 : 0;
+            return {
+                ...method,
+                amount,
+                share,
+            };
+        }).sort((a, b) => b.amount - a.amount);
+
+        const preferredMethod = paymentRows[0] || null;
+        const secondaryMethod = paymentRows[1] || null;
+        const recommendation = preferredMethod && preferredMethod.amount > 0
+            ? preferredMethod.share >= 55
+                ? `${preferredMethod.label}-ийг түрүүлж санал болго.`
+                : secondaryMethod && secondaryMethod.amount > 0
+                    ? `${preferredMethod.label} эсвэл ${secondaryMethod.label} хоёрын аль нэгийг санал болго.`
+                    : `${preferredMethod.label}-ийг санал болго.`
+            : 'Төлбөрийн түүх хангалтгүй байна.';
+
+        return {
+            customerOrdersCount: customerOrders.length,
+            totalAmount,
+            paymentRows,
+            preferredMethod,
+            recommendation,
+        };
+    }, [orders, selectedOrder]);
 
     const getMembershipTier = (userRecord) => {
         if (!userRecord) return null;
@@ -280,7 +576,7 @@ const Orders = () => {
         setIsProductListOpen(false);
     };
 
-    const calculateSubtotal = (items) => items.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+    const calculateSubtotal = (items) => calculateSubtotalAmount(items);
     const calculateTotal = (items, fee, discount, discountType = 'amount') => {
         const subtotal = calculateSubtotal(items);
         let discountValue = Number(discount) || 0;
@@ -291,11 +587,7 @@ const Orders = () => {
     };
 
     const getDiscountAmount = (items, discount, discountType) => {
-        const subtotal = calculateSubtotal(items);
-        if (discountType === 'percent') {
-            return (subtotal * (Number(discount) || 0)) / 100;
-        }
-        return Number(discount) || 0;
+        return getDiscountAmountValue(items, discount, discountType);
     };
 
     // Number Formatting Helpers
@@ -310,6 +602,148 @@ const Orders = () => {
         if (!val) return 0;
         const num = val.toString().replace(/[^0-9]/g, '');
         return num === '' ? 0 : parseInt(num);
+    };
+
+    const formatCurrency = (value) => `₮${(Number(value) || 0).toLocaleString()}`;
+
+    const handleDailyTargetSave = () => {
+        const nextTarget = parseNumberInput(dailyTargetDraft);
+        if (!nextTarget) {
+            setDailyTarget(DEFAULT_DAILY_TARGET);
+            setDailyTargetDraft(String(DEFAULT_DAILY_TARGET));
+            return;
+        }
+        setDailyTarget(nextTarget);
+        setDailyTargetDraft(String(nextTarget));
+    };
+
+    const todayMeta = useMemo(() => {
+        const now = new Date();
+        return {
+            dateLabel: `${now.getFullYear()} оны ${MONGOLIAN_MONTHS[now.getMonth()]} ${now.getDate()}`,
+            weekdayLabel: MONGOLIAN_WEEKDAYS[now.getDay()],
+        };
+    }, []);
+
+    const activeStaffLabel = useMemo(() => {
+        const matchedUser = users.find((user) => user.uid === currentUser?.uid || user.id === currentUser?.uid);
+        return (
+            matchedUser?.displayName ||
+            currentUser?.displayName ||
+            matchedUser?.name ||
+            matchedUser?.email ||
+            currentUser?.email ||
+            'Тодорхойгүй'
+        );
+    }, [currentUser, users]);
+
+    const handleDownloadDailySummaryPdf = () => {
+        const paymentRows = (todaysPerformance.visiblePaymentBreakdown.length
+            ? todaysPerformance.visiblePaymentBreakdown
+            : todaysPerformance.paymentBreakdown.slice(0, 3))
+            .map((item) => `
+                <tr>
+                    <td>${item.label}</td>
+                    <td>${formatCurrency(item.amount)}</td>
+                    <td>${item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</td>
+                </tr>
+            `)
+            .join('');
+
+        const sourceRows = (todaysPerformance.visibleSourceBreakdown.length
+            ? todaysPerformance.visibleSourceBreakdown
+            : todaysPerformance.sourceBreakdown.slice(0, 3))
+            .map((item) => `
+                <tr>
+                    <td>${item.label}</td>
+                    <td>${item.count} захиалга</td>
+                    <td>${item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</td>
+                </tr>
+            `)
+            .join('');
+
+        const productRows = (todaysPerformance.productBreakdown.length
+            ? todaysPerformance.productBreakdown
+            : [{ name: 'Өнөөдөр хүргэлтийн бүтээгдэхүүнгүй', quantity: 0, revenue: 0, share: 0 }])
+            .map((item) => `
+                <tr>
+                    <td>${item.name}</td>
+                    <td>${item.quantity}ш</td>
+                    <td>${formatCurrency(item.revenue)}</td>
+                    <td>${item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</td>
+                </tr>
+            `)
+            .join('');
+
+        const printWindow = window.open('', '_blank', 'width=980,height=760');
+        if (!printWindow) return;
+
+        printWindow.document.write(`
+            <html lang="mn">
+                <head>
+                    <title>Өдрийн нэгтгэл</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; }
+                        h1 { margin: 0 0 8px; font-size: 28px; }
+                        .meta { color: #475569; margin-bottom: 24px; }
+                        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+                        .card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; background: #fff; }
+                        .label { font-size: 12px; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
+                        .value { font-size: 18px; font-weight: 700; }
+                        .note { border: 1px solid #fde68a; background: #fffbeb; border-radius: 14px; padding: 14px; margin-bottom: 18px; }
+                        .section { margin-bottom: 18px; }
+                        .section h2 { font-size: 15px; margin: 0 0 10px; text-transform: uppercase; color: #334155; }
+                        table { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
+                        th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+                        th { background: #f8fafc; font-size: 12px; text-transform: uppercase; color: #64748b; }
+                        tr:last-child td { border-bottom: none; }
+                        .total { margin-top: 20px; padding: 14px 16px; border-radius: 14px; background: #0f172a; color: white; display: flex; justify-content: space-between; align-items: center; }
+                        .total span { color: rgba(255,255,255,0.8); text-transform: uppercase; font-size: 12px; }
+                        .total strong { font-size: 22px; }
+                        @media print { body { margin: 20px; } }
+                    </style>
+                </head>
+                <body>
+                    <h1>Өдрийн нэгтгэл</h1>
+                    <div class="meta">${todayMeta.dateLabel} • ${todayMeta.weekdayLabel} • ${weatherSummary}</div>
+
+                    <div class="grid">
+                        <div class="card"><div class="label">Нийт борлуулалт</div><div class="value">${formatCurrency(todaysPerformance.totalSales)}</div></div>
+                        <div class="card"><div class="label">Нийт захиалга</div><div class="value">${todaysPerformance.totalOrders}</div></div>
+                        <div class="card"><div class="label">Дундаж сагс</div><div class="value">${formatCurrency(todaysPerformance.averageOrderValue)}</div></div>
+                        <div class="card"><div class="label">Гүйцэтгэл</div><div class="value">${Math.round(todaysPerformance.progress)}%</div></div>
+                        <div class="card"><div class="label">Ажилласан ажилтан</div><div class="value">${activeStaffLabel}</div></div>
+                        <div class="card"><div class="label">Өдрийн зорилго</div><div class="value">${formatCurrency(todaysPerformance.target)}</div></div>
+                    </div>
+
+                    <div class="note">${todaysPerformance.isTargetMet
+                        ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
+                        : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}</div>
+
+                    <div class="section">
+                        <h2>Төлбөрийн хуваалт</h2>
+                        <table><thead><tr><th>Төлбөр</th><th>Дүн</th><th>Share</th></tr></thead><tbody>${paymentRows}</tbody></table>
+                    </div>
+
+                    <div class="section">
+                        <h2>Сувгийн задаргаа</h2>
+                        <table><thead><tr><th>Суваг</th><th>Тоо</th><th>Share</th></tr></thead><tbody>${sourceRows}</tbody></table>
+                    </div>
+
+                    <div class="section">
+                        <h2>Бүтээгдэхүүний задаргаа</h2>
+                        <table><thead><tr><th>Бүтээгдэхүүн</th><th>Тоо</th><th>Дүн</th><th>Share</th></tr></thead><tbody>${productRows}</tbody></table>
+                    </div>
+
+                    <div class="total"><span>Нийт үнийн дүн</span><strong>${formatCurrency(todaysPerformance.totalSales)}</strong></div>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
+        printWindow.focus();
+        setTimeout(() => {
+            printWindow.print();
+        }, 300);
     };
 
     const handleSubmitOrder = async (e) => {
@@ -331,7 +765,7 @@ const Orders = () => {
                 customerName: '', phoneNumber: '', email: '',
                 address: { zone: 'Улаанбаатар', city: 'Улаанбаатар', district: '', khoroo: '', fullAddress: '', additionalInfo: '' },
                 items: [], status: 'pending', deliveryType: 'delivery', paymentMethod: 'bank_transfer',
-                deliveryFee: 5000, discount: 0, discountType: 'amount', source: ''
+                deliveryFee: 10000, discount: 0, discountType: 'amount', source: ''
             });
         } catch (error) {
             console.error("Submit order error:", error);
@@ -347,25 +781,189 @@ const Orders = () => {
                     <p>Нийт {stats.totalCount} захиалга бүртгэлтэй</p>
                 </div>
                 <div className="header-actions">
-                    <button className="export-btn"><Download size={18} /><span>Тайлан (Excel)</span></button>
+                    <button className="export-btn" onClick={() => setIsDailySummaryOpen(true)}>
+                        <Download size={18} />
+                        <span>Өдрийн нэгтгэл</span>
+                    </button>
                     <button className="staff-btn-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={18} />Захиалга шивэх</button>
                 </div>
             </div>
 
-            <div className="orders-stats-grid">
-                <div className="order-stat-card">
-                    <div className="order-stat-icon" style={{ background: '#EFF6FF', color: '#1D4ED8' }}><PackageCheck size={22} /></div>
-                    <div className="order-stat-info"><span>Нийт захиалга</span><h3>{stats.totalCount}</h3></div>
+            <section className="store-performance-panel">
+                <div className="store-performance-header">
+                    <div>
+                        <span className="store-performance-kicker">Өнөөдрийн дэлгүүрийн гүйцэтгэл</span>
+                        <div className="store-performance-meta">
+                            <span>{todayMeta.dateLabel}</span>
+                            <span>{todayMeta.weekdayLabel}</span>
+                            <span>{weatherSummary}</span>
+                        </div>
+                    </div>
+                    <div className="target-config-card">
+                        <label htmlFor="daily-target-input">Өдрийн зорилго</label>
+                        <div className="target-config-input">
+                            <span>₮</span>
+                            <input
+                                id="daily-target-input"
+                                type="text"
+                                value={formatNumberInput(dailyTargetDraft)}
+                                onChange={(e) => setDailyTargetDraft(e.target.value)}
+                            />
+                        </div>
+                        <button type="button" className="target-save-btn" onClick={handleDailyTargetSave}>
+                            Хадгалах
+                        </button>
+                        <small>Admin-аас өөрчлөгдөх target value</small>
+                    </div>
                 </div>
-                <div className="order-stat-card">
-                    <div className="order-stat-icon" style={{ background: '#FFF7ED', color: '#C2410C' }}><Clock size={22} /></div>
-                    <div className="order-stat-info"><span>Хүлээгдэж буй</span><h3>{stats.pendingCount}</h3></div>
+
+                <div className="store-performance-grid">
+                    <div className="performance-summary-card performance-summary-card--hero">
+                        <div className="performance-summary-topline">
+                            <div>
+                                <span>Нийт борлуулалт</span>
+                                <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                            </div>
+                            <div className="performance-summary-icon">
+                                <CircleDollarSign size={20} />
+                            </div>
+                        </div>
+                        <div className="performance-progress-meta">
+                            <span>Гүйцэтгэл</span>
+                            <strong>{Math.round(todaysPerformance.progress)}%</strong>
+                        </div>
+                        <div className={`performance-progress-track performance-progress-track--${todaysPerformance.progressTone}`}>
+                            <span
+                                className={`performance-progress-fill performance-progress-fill--${todaysPerformance.progressTone}`}
+                                style={{ width: `${Math.min(todaysPerformance.progress, 100)}%` }}
+                            />
+                        </div>
+                        <p className="performance-progress-note">
+                            {todaysPerformance.isTargetMet
+                                ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
+                                : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}
+                        </p>
+                    </div>
+
+                    <div className="performance-summary-card">
+                        <span>Нийт захиалга</span>
+                        <strong>{todaysPerformance.totalOrders}</strong>
+                        <small>Өнөөдөр бүртгэгдсэн захиалгын тоо</small>
+                        <div className="performance-mini-icon"><ShoppingBag size={16} /></div>
+                    </div>
+
+                    <div className="performance-summary-card">
+                        <span>Дундаж сагс (AOV)</span>
+                        <strong>{formatCurrency(todaysPerformance.averageOrderValue)}</strong>
+                        <small>Нэг захиалгад ногдох дундаж дүн</small>
+                        <div className="performance-mini-icon"><ChartNoAxesColumn size={16} /></div>
+                    </div>
+
+                    <div className="performance-summary-card">
+                        <span>Өдрийн зорилго</span>
+                        <strong>{formatCurrency(todaysPerformance.target)}</strong>
+                        <small>Configurable өдөр тутмын борлуулалтын target</small>
+                        <div className="performance-mini-icon"><Target size={16} /></div>
+                    </div>
+
+                    <div className="performance-summary-card">
+                        <span>Гүйцэтгэл</span>
+                        <strong>{Math.round(todaysPerformance.progress)}%</strong>
+                        <small>{todaysPerformance.isTargetMet ? 'Өдрийн борлуулалтын төлөвлөгөөг давсан' : 'Өдрийн борлуулалтын төлөвлөгөөнд дөхөж байна'}</small>
+                        <div className="performance-mini-icon"><TrendingUp size={16} /></div>
+                    </div>
+
+                    <div className="performance-summary-card performance-summary-card--chart">
+                        <div className="performance-chart-header">
+                            <div>
+                                <span>Нийт төлбөрийн хуваалт</span>
+                                <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                            </div>
+                        </div>
+                        <div className="performance-chart-layout">
+                            <div
+                                className="performance-pie-chart"
+                                style={{ background: todaysPerformance.paymentChartStyle }}
+                                aria-hidden="true"
+                            >
+                                <div className="performance-pie-chart__center">Төлбөр</div>
+                            </div>
+                            <div className="performance-chart-legend">
+                                {(todaysPerformance.visiblePaymentBreakdown.length
+                                    ? todaysPerformance.visiblePaymentBreakdown
+                                    : todaysPerformance.paymentBreakdown.slice(0, 3)
+                                ).map((item) => (
+                                    <div key={item.key} className="performance-legend-row">
+                                        <div className="performance-legend-label">
+                                            <span className="performance-legend-dot" style={{ background: item.color }} />
+                                            <strong>{item.label}</strong>
+                                        </div>
+                                        <div className="performance-legend-value">
+                                            <span>{formatCurrency(item.amount)}</span>
+                                            <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="performance-summary-card performance-summary-card--chart">
+                        <div className="performance-chart-header">
+                            <div>
+                                <span>Захиалгын суваг</span>
+                                <strong>{todaysPerformance.totalOrders}</strong>
+                            </div>
+                        </div>
+                        <div className="performance-chart-layout">
+                            <div
+                                className="performance-pie-chart"
+                                style={{ background: todaysPerformance.sourceChartStyle }}
+                                aria-hidden="true"
+                            >
+                                <div className="performance-pie-chart__center">Суваг</div>
+                            </div>
+                            <div className="performance-chart-legend">
+                                {(todaysPerformance.visibleSourceBreakdown.length
+                                    ? todaysPerformance.visibleSourceBreakdown
+                                    : todaysPerformance.sourceBreakdown.slice(0, 3)
+                                ).map((item) => (
+                                    <div key={item.key} className="performance-legend-row">
+                                        <div className="performance-legend-label">
+                                            <span className="performance-legend-dot" style={{ background: item.color }} />
+                                            <strong>{item.label}</strong>
+                                        </div>
+                                        <div className="performance-legend-value">
+                                            <span>{item.count} захиалга</span>
+                                            <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="performance-summary-card performance-summary-card--products">
+                        <div className="performance-chart-header">
+                            <div>
+                                <span>Top 5 бүтээгдэхүүн</span>
+                                <strong>{todaysPerformance.topProducts.length || 0}</strong>
+                            </div>
+                        </div>
+                        <div className="store-top-products-card-list">
+                            {(todaysPerformance.topProducts.length ? todaysPerformance.topProducts : [{ key: 'empty', name: 'Өнөөдөр борлуулалтгүй', quantity: 0 }]).map((product, index) => (
+                                <div key={product.key} className="store-top-product-row">
+                                    <div className="store-top-product-rank">{index + 1}</div>
+                                    <div className="store-top-product-content">
+                                        <strong>{product.name}</strong>
+                                        <small>{product.quantity}ш гарсан</small>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-                <div className="order-stat-card">
-                    <div className="order-stat-icon" style={{ background: '#ECFDF5', color: '#059669' }}><Truck size={22} /></div>
-                    <div className="order-stat-info"><span>Нийт борлуулалт</span><h3>₮{stats.totalRevenue.toLocaleString()}</h3></div>
-                </div>
-            </div>
+            </section>
 
             <div className="table-filters" style={{ marginBottom: '25px', gap: '15px', alignItems: 'flex-end' }}>
                 <div className="search-box" style={{ flex: 2 }}>
@@ -780,6 +1378,146 @@ const Orders = () => {
                 </div>
             )}
 
+            {isDailySummaryOpen && (
+                <div className="staff-confirm-overlay" onClick={() => setIsDailySummaryOpen(false)}>
+                    <div className="staff-role-modal order-modal daily-summary-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '820px' }}>
+                        <div className="modal-header">
+                            <div className="daily-summary-header-copy">
+                                <h3>Өдрийн нэгтгэл</h3>
+                                <p className="daily-summary-header-date">{todayMeta.dateLabel}</p>
+                                <p className="daily-summary-header-meta">{todayMeta.weekdayLabel} • {weatherSummary}</p>
+                            </div>
+                            <button className="close-btn" onClick={() => setIsDailySummaryOpen(false)}><X size={20} /></button>
+                        </div>
+
+                        <div className="daily-summary-report">
+                            <div className="daily-summary-topline">
+                                <div className="daily-summary-metric">
+                                    <span>Нийт борлуулалт</span>
+                                    <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                </div>
+                                <div className="daily-summary-metric">
+                                    <span>Нийт захиалга</span>
+                                    <strong>{todaysPerformance.totalOrders}</strong>
+                                </div>
+                                <div className="daily-summary-metric">
+                                    <span>Дундаж сагс</span>
+                                    <strong>{formatCurrency(todaysPerformance.averageOrderValue)}</strong>
+                                </div>
+                                <div className="daily-summary-metric">
+                                    <span>Гүйцэтгэл</span>
+                                    <strong>{Math.round(todaysPerformance.progress)}%</strong>
+                                </div>
+                                <div className="daily-summary-metric">
+                                    <span>Ажилласан ажилтан</span>
+                                    <strong>{activeStaffLabel}</strong>
+                                </div>
+                            </div>
+
+                            <div className="daily-summary-insight daily-summary-insight--plan">
+                                <span>Өдрийн тайлбар</span>
+                                <p>
+                                    {todaysPerformance.isTargetMet
+                                        ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
+                                        : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}
+                                </p>
+                            </div>
+
+                            <div className="daily-summary-grid">
+                                <div className="daily-summary-section daily-summary-section--compact daily-summary-section--payment">
+                                    <div className="sidebar-section-title">Төлбөрийн хуваалт</div>
+                                    <div className="payment-history-list">
+                                        {(todaysPerformance.visiblePaymentBreakdown.length ? todaysPerformance.visiblePaymentBreakdown : todaysPerformance.paymentBreakdown.slice(0, 3)).map((item) => (
+                                            <div key={item.key} className="payment-history-row">
+                                                <div className="payment-history-row-main">
+                                                    <div>
+                                                        <strong>{item.label}</strong>
+                                                        <span>{formatCurrency(item.amount)}</span>
+                                                    </div>
+                                                    <div className="payment-history-share">{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="daily-summary-section daily-summary-section--compact daily-summary-section--source">
+                                    <div className="sidebar-section-title">Сувгийн задаргаа</div>
+                                    <div className="payment-history-list">
+                                        {(todaysPerformance.visibleSourceBreakdown.length ? todaysPerformance.visibleSourceBreakdown : todaysPerformance.sourceBreakdown.slice(0, 3)).map((item) => (
+                                            <div key={item.key} className="payment-history-row">
+                                                <div className="payment-history-row-main">
+                                                    <div>
+                                                        <strong>{item.label}</strong>
+                                                        <span>{item.count} захиалга</span>
+                                                    </div>
+                                                    <div className="payment-history-share">{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="daily-summary-section daily-summary-section--product">
+                                <div className="sidebar-section-title">Бүтээгдэхүүний задаргаа</div>
+                                <p className="daily-section-note">Мөр бүрийн дүнд тухайн бүтээгдэхүүнд ногдох хүргэлт, хөнгөлөлтийг хувь тэнцүүлж оруулсан.</p>
+                                <div className="daily-report-table">
+                                    <div className="daily-report-head">
+                                        <span>Бүтээгдэхүүн</span>
+                                        <span>Тоо</span>
+                                        <span>Үндсэн үнийн дүн</span>
+                                        <span>Хөнгөлөлт</span>
+                                        <span>Хүргэлтийн дүн</span>
+                                        <span>Төлөх дүн</span>
+                                        <span>Share</span>
+                                    </div>
+                                    {(todaysPerformance.productBreakdown.length ? todaysPerformance.productBreakdown : [{ key: 'empty', name: 'Өнөөдөр хүргэлтийн бүтээгдэхүүнгүй', quantity: 0, revenue: 0, share: 0 }]).map((product) => (
+                                        <div key={product.key} className="daily-report-row">
+                                            <span className="daily-report-product">{product.name}</span>
+                                            <span>{product.quantity}ш</span>
+                                            <span>{formatCurrency(product.revenue || 0)}</span>
+                                            <span>{product.key !== 'empty' ? `- ${formatCurrency(product.discount || 0)}` : '-'}</span>
+                                            <span>{product.key !== 'empty' ? `+ ${formatCurrency(product.delivery || 0)}` : '-'}</span>
+                                            <span className="daily-report-amount">
+                                                <strong>{formatCurrency(product.payable ?? product.revenue)}</strong>
+                                            </span>
+                                            <span>{product.share.toFixed(product.share % 1 === 0 ? 0 : 1)}%</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="daily-financial-summary">
+                                <div className="daily-financial-ledger">
+                                    <div className="daily-financial-line">
+                                        <span>Үндсэн дүн</span>
+                                        <strong>{formatCurrency(todaysPerformance.merchandiseSubtotal)}</strong>
+                                    </div>
+                                    <div className="daily-financial-line">
+                                        <span>Хүргэлтийн дүн</span>
+                                        <strong>+ {formatCurrency(todaysPerformance.totalDelivery)}</strong>
+                                    </div>
+                                    <div className="daily-financial-line daily-financial-line--discount">
+                                        <span>Хөнгөлөлт</span>
+                                        <strong>- {formatCurrency(todaysPerformance.totalDiscount)}</strong>
+                                    </div>
+                                    <div className="daily-financial-total">
+                                        <span>Төлөх дүн</span>
+                                        <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="modal-actions" style={{ paddingTop: 0 }}>
+                                <button type="button" className="btn-cancel" onClick={() => setIsDailySummaryOpen(false)}>Хаах</button>
+                                <button type="button" className="btn-save" onClick={handleDownloadDailySummaryPdf}>PDF татах</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Order Details Modal (Previous Implementation Maintained) */}
             {isDetailsOpen && selectedOrder && (
                 <div className="staff-confirm-overlay" onClick={() => setIsDetailsOpen(false)}>
@@ -876,8 +1614,58 @@ const Orders = () => {
                                         )}
                                         <div className="pricing-line-item final" style={{ paddingBottom: 0 }}>
                                             <span>Нийт үнийн дүн</span>
-                                            <span>₮{(selectedOrder.totalAmount || 0).toLocaleString()}</span>
+                                            <span>{formatCurrency(selectedOrder.totalAmount || 0)}</span>
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="content-card">
+                                    <div className="payment-intelligence-header">
+                                        <div>
+                                            <div className="sidebar-section-title" style={{ marginBottom: 6 }}>
+                                                <Sparkles size={16} /> Төлбөрийн түүх
+                                            </div>
+                                            <p>
+                                                {selectedCustomerPaymentInsights?.customerOrdersCount || 0} захиалгын
+                                                {selectedCustomerPaymentInsights?.totalAmount
+                                                    ? ` ${formatCurrency(selectedCustomerPaymentInsights.totalAmount)}`
+                                                    : ''} дүн дээр тулгуурлав
+                                            </p>
+                                        </div>
+                                        {selectedCustomerPaymentInsights?.preferredMethod?.amount > 0 && (
+                                            <div className="payment-recommendation-pill">
+                                                Санал болгох: {selectedCustomerPaymentInsights.preferredMethod.label}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="payment-history-list">
+                                        {(selectedCustomerPaymentInsights?.paymentRows || PAYMENT_METHODS).map((method) => {
+                                            const amount = method.amount || 0;
+                                            const share = method.share || 0;
+                                            return (
+                                                <div key={method.key} className="payment-history-row">
+                                                    <div className="payment-history-row-main">
+                                                        <div>
+                                                            <strong>{method.label}</strong>
+                                                            <span>{formatCurrency(amount)}</span>
+                                                        </div>
+                                                        <div className="payment-history-share">{share.toFixed(share % 1 === 0 ? 0 : 1)}%</div>
+                                                    </div>
+                                                    <div className="payment-share-bar">
+                                                        <span style={{ width: `${Math.max(share, amount > 0 ? 6 : 0)}%` }} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+
+                                    <div className="payment-insight-card">
+                                        <div className="payment-insight-card-top">
+                                            <span>Төлбөрийн recommendation</span>
+                                            <strong>{selectedCustomerPaymentInsights?.preferredMethod?.label || 'Тодорхойгүй'}</strong>
+                                        </div>
+                                        <p>{selectedCustomerPaymentInsights?.recommendation || 'Төлбөрийн түүх хангалтгүй байна.'}</p>
                                     </div>
                                 </div>
                             </div>

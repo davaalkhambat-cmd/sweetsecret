@@ -15,6 +15,7 @@ import {
 
 const STORAGE_KEY = 'sales-revenue-dashboard-sheet';
 const DEFAULT_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1HA-z7UUj01FfReqb6lAFRgmk6ZNNd81A_HDX6laD1ik/edit?gid=0#gid=0';
+const ESTIMATED_COST_RATE = 0.38;
 
 const CHANNELS = [
     { key: 'delivery', label: 'Хүргэлт', aliases: ['хүргэлт', 'delivery'], color: '#7c3aed' },
@@ -446,6 +447,8 @@ const SalesRevenue = () => {
                 ])
             );
             const monthlyTotal = parsedRows.reduce((sum, row) => sum + toNumber(row.total), 0);
+            const estimatedCost = monthlyTotal * ESTIMATED_COST_RATE;
+            const estimatedGrossProfit = monthlyTotal - estimatedCost;
             const targetTotal = toNumber(parsedState.summary?.target?.total) || sumChannelValues(parsedState.summary?.target?.channels);
             const dailyAverage = parsedRows.length ? monthlyTotal / parsedRows.length : 0;
             const bestDay = [...parsedRows].sort((a, b) => toNumber(b.total) - toNumber(a.total))[0] || null;
@@ -546,6 +549,8 @@ const SalesRevenue = () => {
                 dailyRows: parsedRows,
                 trendRows,
                 monthlyTotal,
+                estimatedCost,
+                estimatedGrossProfit,
                 targetTotal,
                 achievementRate: targetTotal ? (monthlyTotal / targetTotal) * 100 : 0,
                 dailyAverage,
@@ -573,6 +578,8 @@ const SalesRevenue = () => {
             dailyRows: [],
             trendRows: [],
             monthlyTotal: 0,
+            estimatedCost: 0,
+            estimatedGrossProfit: 0,
             targetTotal: 0,
             achievementRate: 0,
             dailyAverage: 0,
@@ -782,6 +789,14 @@ const SalesRevenue = () => {
                         <span className="stat-title">Сарын нийт борлуулалт</span>
                         <h3 className="stat-value">{formatMoney(analytics.monthlyTotal)}</h3>
                         <small className="stat-footnote">Бодит гүйцэтгэл</small>
+                    </div>
+                </div>
+                <div className="stat-card">
+                    <div className="stat-icon"><CircleDollarSign size={22} color="#dc2626" /></div>
+                    <div className="stat-info">
+                        <span className="stat-title">Ойролцоо өртөг</span>
+                        <h3 className="stat-value">{formatMoney(analytics.estimatedCost)}</h3>
+                        <small className="stat-footnote">Сарын нийт борлуулалтын 38%</small>
                     </div>
                 </div>
                 <div className="stat-card">
