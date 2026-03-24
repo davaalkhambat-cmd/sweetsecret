@@ -53,6 +53,7 @@ import {
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import StickyNote from '../../components/admin/StickyNote';
+import TeamChat from '../../components/admin/TeamChat';
 
 const STATUS_CONFIG = {
     pending: { label: 'Хүлээгдэж буй', color: '#C2410C', icon: <Clock size={16} />, class: 'pending' },
@@ -1003,6 +1004,9 @@ const Orders = () => {
 
             {/* Floating Information Sticky Note */}
             <StickyNote />
+
+            {/* Team Chat Messenger Widget */}
+            <TeamChat />
 
             <section className="store-performance-panel">
                 <div className="store-performance-header">

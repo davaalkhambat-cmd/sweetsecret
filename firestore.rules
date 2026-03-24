@@ -24,6 +24,10 @@ service cloud.firestore {
       );
     }
 
+    function isStaff() {
+      return isSignedIn() && myRole() != 'customer';
+    }
+
     function canReadOwnInvitation() {
       return isSignedIn() &&
         resource.data.status == 'invited' &&
@@ -78,6 +82,10 @@ service cloud.firestore {
     match /role_definitions/{roleId} {
       allow read: if true;
       allow write: if isAdmin();
+    }
+
+    match /team_chats/{chatId} {
+      allow read, write: if isStaff() || isAdmin();
     }
 
     // Default: deny all
