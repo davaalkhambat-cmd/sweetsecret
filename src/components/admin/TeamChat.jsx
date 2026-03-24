@@ -1,63 +1,178 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, limit } from 'firebase/firestore';
-import { db } from '../../firebase';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { collection, query, orderBy, onSnapshot, addDoc, doc, setDoc, serverTimestamp, limit } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
-import { MessageCircle, X, Send } from 'lucide-react';
+import { MessageCircle, X, Send, Image as ImageIcon, Settings2, LoaderCircle, Edit3 } from 'lucide-react';
+
+const TEAM_CHAT_NICKNAME_KEY = 'sweet_secret_team_chat_nickname';
 
 const TeamChat = () => {
     const { user, userProfile } = useAuth();
     const [messages, setMessages] = useState([]);
     const [text, setText] = useState('');
     const [isOpen, setIsOpen] = useState(false);
-    const messagesEndRef = useRef(null);
+    const [isUploading, setIsUploading] = useState(false);
 
+    // Nickname State
+    const [nickname, setNickname] = useState('');
+    const [isEditingSettings, setIsEditingSettings] = useState(false);
+    const [draftNickname, setDraftNickname] = useState('');
+
+    // Typing state
+    const [typingUsers, setTypingUsers] = useState({});
+
+    // Refs
+    const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
+
+    // Initialize nickname
+    useEffect(() => {
+        const stored = window.localStorage.getItem(TEAM_CHAT_NICKNAME_KEY);
+        if (stored) {
+            setNickname(stored);
+        } else {
+            const defaultName = userProfile?.displayName || user?.email?.split('@')[0] || 'Ажилтан';
+            setNickname(defaultName);
+        }
+    }, [userProfile, user]);
+
+    // Handle incoming messages
     useEffect(() => {
         if (!isOpen) return;
         const q = query(
             collection(db, 'team_chats'),
             orderBy('createdAt', 'asc'),
-            limit(100)
+            limit(150)
         );
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const msgs = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            // Filter out 'typing_indicator' doc from the general messages list
+            const msgs = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() }))
+                .filter(doc => doc.id !== 'typing_indicator');
             setMessages(msgs);
             setTimeout(() => {
                 messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
             }, 100);
         });
-        return () => unsubscribe();
+
+        // Typing indicator listener
+        const typingUnsub = onSnapshot(doc(db, 'team_chats', 'typing_indicator'), (docSnap) => {
+            if (docSnap.exists()) {
+                setTypingUsers(docSnap.data() || {});
+            }
+        });
+
+        return () => {
+            unsubscribe();
+            typingUnsub();
+        };
     }, [isOpen]);
+
+    const handleSaveSettings = (e) => {
+        e.preventDefault();
+        const trimmed = draftNickname.trim() || userProfile?.displayName || 'Ажилтан';
+        setNickname(trimmed);
+        window.localStorage.setItem(TEAM_CHAT_NICKNAME_KEY, trimmed);
+        setIsEditingSettings(false);
+    };
+
+    const handleTyping = (val) => {
+        setText(val);
+        if (!user) return;
+
+        // Throttle Firestore writes
+        if (!typingTimeoutRef.current) {
+            setDoc(doc(db, 'team_chats', 'typing_indicator'), {
+                [user.uid]: {
+                    name: nickname,
+                    time: Date.now(),
+                    isTyping: val.length > 0
+                }
+            }, { merge: true }).catch(() => { }); // ignore minor errors
+
+            typingTimeoutRef.current = setTimeout(() => {
+                typingTimeoutRef.current = null;
+            }, 1500);
+        }
+    };
+
+    const sendFirestoreMessage = async (msgData) => {
+        try {
+            await addDoc(collection(db, 'team_chats'), {
+                ...msgData,
+                userId: user.uid,
+                userName: nickname,
+                userPhoto: userProfile?.photoURL || '',
+                createdAt: serverTimestamp()
+            });
+            // Stop typing status
+            setDoc(doc(db, 'team_chats', 'typing_indicator'), {
+                [user.uid]: { name: nickname, time: Date.now(), isTyping: false }
+            }, { merge: true }).catch(() => { });
+        } catch (error) {
+            console.error('Error sending message:', error);
+            alert("Илгээхэд алдаа гарлаа.");
+        }
+    };
 
     const handleSend = async (e) => {
         e.preventDefault();
         const trimmed = text.trim();
         if (!trimmed || !user) return;
+        setText('');
+        await sendFirestoreMessage({ text: trimmed });
+    };
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file || !user) return;
+
+        setIsUploading(true);
+        const fileName = `team_chats/${user.uid}_${Date.now()}_${file.name}`;
+        const storageRef = ref(storage, fileName);
 
         try {
-            await addDoc(collection(db, 'team_chats'), {
-                text: trimmed,
-                userId: user.uid,
-                userName: userProfile?.displayName || user.email?.split('@')[0] || 'Ажилтан',
-                userPhoto: userProfile?.photoURL || '',
-                createdAt: serverTimestamp()
-            });
-            setText('');
-        } catch (error) {
-            console.error('Error sending message:', error);
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            uploadTask.on(
+                'state_changed',
+                () => { },
+                (error) => {
+                    console.error('Image upload failed', error);
+                    setIsUploading(false);
+                    alert("Зураг хуулах үед алдаа гарлаа.");
+                },
+                async () => {
+                    const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                    await sendFirestoreMessage({ imageUrl: downloadURL, text: '' });
+                    setIsUploading(false);
+                    if (fileInputRef.current) fileInputRef.current.value = '';
+                }
+            );
+        } catch (err) {
+            console.error(err);
+            setIsUploading(false);
         }
     };
+
+    // Calculate active typing users (who typed in last 6 seconds)
+    const activeTypers = useMemo(() => {
+        const now = Date.now();
+        return Object.entries(typingUsers)
+            .filter(([uid, data]) => data.isTyping && uid !== user?.uid && (now - data.time) < 6000)
+            .map(([uid, data]) => data.name);
+    }, [typingUsers, user]);
 
     if (!isOpen) {
         return (
             <button
-                className="team-chat-fab"
+                className="team-chat-fab-messenger"
                 onClick={() => setIsOpen(true)}
             >
-                <MessageCircle size={24} />
-                <span>Багийн чат</span>
+                <div className="messenger-icon-bg">
+                    <MessageCircle size={28} fill="white" color="#0A7CFF" />
+                </div>
             </button>
         );
     }
@@ -66,128 +181,222 @@ const TeamChat = () => {
         <div className="team-chat-widget">
             <div className="team-chat-header">
                 <div className="team-chat-title">
-                    <MessageCircle size={18} />
-                    <span>Багийн чат (Ажилтнууд дунд)</span>
+                    <MessageCircle size={20} />
+                    <span>Ажилтнуудын чат</span>
                 </div>
-                <button className="team-chat-close" onClick={() => setIsOpen(false)}>
-                    <X size={18} />
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button className="team-chat-icon-btn" onClick={() => {
+                        setDraftNickname(nickname);
+                        setIsEditingSettings(!isEditingSettings);
+                    }}>
+                        <Edit3 size={16} />
+                    </button>
+                    <button className="team-chat-icon-btn" onClick={() => setIsOpen(false)}>
+                        <X size={20} />
+                    </button>
+                </div>
             </div>
+
+            {isEditingSettings && (
+                <form className="team-chat-settings" onSubmit={handleSaveSettings}>
+                    <label>Никнэйм:</label>
+                    <input
+                        autoFocus
+                        value={draftNickname}
+                        onChange={e => setDraftNickname(e.target.value)}
+                        placeholder="Өөрийн нэр..."
+                    />
+                    <button type="submit">Хадгалах</button>
+                </form>
+            )}
 
             <div className="team-chat-body">
                 {messages.length === 0 ? (
-                    <div className="team-chat-empty">Ажилтнуудын харилцсан зурвас алга байна.</div>
+                    <div className="team-chat-empty">Харилцсан зурвас олдсонгүй.</div>
                 ) : (
                     messages.map((msg) => {
                         const isMe = msg.userId === user?.uid;
                         return (
                             <div key={msg.id} className={`team-chat-msg ${isMe ? 'msg-me' : 'msg-other'}`}>
                                 {!isMe && (
-                                    <div className="msg-avatar">
+                                    <div className="msg-avatar" title={msg.userName}>
                                         {msg.userPhoto ? (
                                             <img src={msg.userPhoto} alt={msg.userName} />
                                         ) : (
-                                            <div className="msg-avatar-fallback">{msg.userName?.charAt(0) || 'А'}</div>
+                                            <div className="msg-avatar-fallback">{msg.userName?.charAt(0)?.toUpperCase()}</div>
                                         )}
                                     </div>
                                 )}
                                 <div className="msg-content-wrapper">
                                     {!isMe && <span className="msg-name">{msg.userName}</span>}
-                                    <div className="msg-bubble">
-                                        {msg.text}
+                                    <div className={`msg-bubble ${msg.imageUrl ? 'msg-bubble-image' : ''}`}>
+                                        {msg.imageUrl ? (
+                                            <a href={msg.imageUrl} target="_blank" rel="noreferrer">
+                                                <img src={msg.imageUrl} alt="chat attachment" className="chat-image-attachment" />
+                                            </a>
+                                        ) : (
+                                            <>{msg.text}</>
+                                        )}
                                     </div>
                                 </div>
                             </div>
                         );
                     })
                 )}
+                {activeTypers.length > 0 && (
+                    <div className="team-chat-typing-indicator">
+                        <LoaderCircle size={12} className="spin" />
+                        <span>{activeTypers.join(', ')} бичиж байна...</span>
+                    </div>
+                )}
                 <div ref={messagesEndRef} />
             </div>
 
             <form className="team-chat-input-area" onSubmit={handleSend}>
+                <button type="button" className="team-chat-action-btn" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                    {isUploading ? <LoaderCircle size={20} className="spin" /> : <ImageIcon size={20} />}
+                </button>
+                <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    ref={fileInputRef}
+                    onChange={handleImageUpload}
+                />
                 <input
                     type="text"
                     placeholder="Зурвас бичих..."
                     value={text}
-                    onChange={(e) => setText(e.target.value)}
+                    onChange={(e) => handleTyping(e.target.value)}
                 />
-                <button type="submit" disabled={!text.trim()} className="team-chat-send">
+                <button type="submit" disabled={!text.trim() && !isUploading} className="team-chat-send">
                     <Send size={18} />
                 </button>
             </form>
 
             <style aria-hidden="true">{`
-                .team-chat-fab {
+                .team-chat-fab-messenger {
                     position: fixed;
                     right: 32px;
                     bottom: 32px;
-                    background: #2563EB;
-                    color: white;
+                    width: 60px;
+                    height: 60px;
+                    background: transparent;
                     border: none;
-                    border-radius: 99px;
-                    padding: 14px 20px;
+                    border-radius: 50%;
+                    cursor: pointer;
                     display: flex;
                     align-items: center;
-                    gap: 10px;
-                    font-size: 0.95rem;
-                    font-weight: 600;
-                    cursor: pointer;
-                    box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3), 0 4px 6px -2px rgba(37, 99, 235, 0.15);
+                    justify-content: center;
                     z-index: 9999;
-                    transition: transform 0.2s, background 0.2s;
+                    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
                 }
-                .team-chat-fab:hover {
-                    background: #1D4ED8;
-                    transform: translateY(-2px);
+                .team-chat-fab-messenger:hover {
+                    transform: scale(1.08);
+                }
+                .messenger-icon-bg {
+                    background: #0A7CFF;
+                    width: 100%;
+                    height: 100%;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 10px 25px rgba(10, 124, 255, 0.4);
+                }
+                .messenger-icon-bg svg {
+                    stroke: white;
                 }
                 .team-chat-widget {
                     position: fixed;
                     right: 32px;
                     bottom: 32px;
-                    width: 320px;
-                    height: 450px;
+                    width: 340px;
+                    height: 500px;
                     background: white;
-                    border-radius: 16px;
-                    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.05);
+                    border-radius: 20px;
+                    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05);
                     z-index: 9999;
                     display: flex;
                     flex-direction: column;
                     overflow: hidden;
-                    animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+                    animation: slideUpFade 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+                    font-family: inherit;
                 }
-                @keyframes slideUp {
-                    from { transform: translateY(40px) scale(0.95); opacity: 0; }
+                @keyframes slideUpFade {
+                    from { transform: translateY(50px) scale(0.9); opacity: 0; }
                     to { transform: translateY(0) scale(1); opacity: 1; }
                 }
                 .team-chat-header {
-                    background: #2563EB;
+                    background: #0A7CFF;
                     color: white;
-                    padding: 14px 16px;
+                    padding: 12px 16px;
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
+                    flex-shrink: 0;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                    z-index: 2;
                 }
                 .team-chat-title {
                     display: flex;
                     align-items: center;
-                    gap: 8px;
+                    gap: 10px;
                     font-weight: 600;
-                    font-size: 0.95rem;
+                    font-size: 1rem;
                 }
-                .team-chat-close {
-                    background: transparent;
+                .team-chat-icon-btn {
+                    background: rgba(255,255,255,0);
                     border: none;
-                    color: rgba(255,255,255,0.8);
+                    color: white;
                     cursor: pointer;
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    padding: 4px;
-                    border-radius: 4px;
+                    padding: 6px;
+                    border-radius: 50%;
+                    transition: background 0.2s;
                 }
-                .team-chat-close:hover {
-                    background: rgba(255,255,255,0.15);
+                .team-chat-icon-btn:hover {
+                    background: rgba(255,255,255,0.2);
+                }
+                .team-chat-settings {
+                    background: #F8FAFC;
+                    padding: 12px 16px;
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    border-bottom: 1px solid #E2E8F0;
+                }
+                .team-chat-settings label {
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    color: #475569;
+                }
+                .team-chat-settings input {
+                    flex: 1;
+                    padding: 6px 10px;
+                    border-radius: 6px;
+                    border: 1px solid #CBD5E1;
+                    font-size: 0.9rem;
+                    outline: none;
+                }
+                .team-chat-settings input:focus {
+                    border-color: #0A7CFF;
+                }
+                .team-chat-settings button {
+                    background: #10B981;
                     color: white;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 6px 12px;
+                    font-weight: 600;
+                    font-size: 0.85rem;
+                    cursor: pointer;
+                    transition: background 0.2s;
+                }
+                .team-chat-settings button:hover {
+                    background: #059669;
                 }
                 .team-chat-body {
                     flex: 1;
@@ -195,14 +404,14 @@ const TeamChat = () => {
                     overflow-y: auto;
                     display: flex;
                     flex-direction: column;
-                    gap: 12px;
-                    background: #F8FAFC;
+                    gap: 16px;
+                    background: #fff;
                 }
                 .team-chat-empty {
                     text-align: center;
                     color: #94A3B8;
                     margin: auto;
-                    font-size: 0.9rem;
+                    font-size: 0.95rem;
                     max-width: 80%;
                 }
                 .team-chat-msg {
@@ -214,12 +423,13 @@ const TeamChat = () => {
                     justify-content: flex-end;
                 }
                 .msg-avatar {
-                    width: 28px;
-                    height: 28px;
+                    width: 32px;
+                    height: 32px;
                     flex-shrink: 0;
                     border-radius: 50%;
                     overflow: hidden;
                     background: #E2E8F0;
+                    border: 1px solid #f1f5f9;
                 }
                 .msg-avatar img {
                     width: 100%;
@@ -234,8 +444,7 @@ const TeamChat = () => {
                     justify-content: center;
                     font-weight: bold;
                     color: #64748B;
-                    font-size: 0.75rem;
-                    text-transform: uppercase;
+                    font-size: 0.85rem;
                 }
                 .msg-content-wrapper {
                     max-width: 75%;
@@ -246,71 +455,108 @@ const TeamChat = () => {
                     align-items: flex-end;
                 }
                 .msg-name {
-                    font-size: 0.7rem;
-                    color: #64748B;
+                    font-size: 0.75rem;
+                    color: #94A3B8;
                     margin-bottom: 4px;
-                    padding-left: 2px;
+                    padding-left: 4px;
                 }
                 .msg-bubble {
                     padding: 10px 14px;
-                    border-radius: 16px;
-                    font-size: 0.9rem;
+                    border-radius: 18px;
+                    font-size: 0.95rem;
                     line-height: 1.4;
                     word-break: break-word;
                 }
+                .msg-bubble-image {
+                    padding: 0;
+                    overflow: hidden;
+                    background: transparent !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                }
+                .chat-image-attachment {
+                    max-width: 100%;
+                    border-radius: 14px;
+                    display: block;
+                    border: 1px solid #E2E8F0;
+                }
                 .msg-other .msg-bubble {
-                    background: white;
+                    background: #F1F5F9;
                     color: #1E293B;
                     border-bottom-left-radius: 4px;
-                    border: 1px solid #E2E8F0;
-                    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
                 }
                 .msg-me .msg-bubble {
-                    background: #2563EB;
+                    background: #0A7CFF;
                     color: white;
                     border-bottom-right-radius: 4px;
-                    box-shadow: 0 1px 2px rgba(37,99,235,0.2);
+                }
+                .team-chat-typing-indicator {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 4px 8px;
+                    color: #94A3B8;
+                    font-size: 0.8rem;
+                    margin-top: -4px;
+                }
+                .team-chat-typing-indicator .spin {
+                    animation: spin 1s linear infinite;
+                }
+                @keyframes spin {
+                    100% { transform: rotate(360deg); }
                 }
                 .team-chat-input-area {
                     display: flex;
                     padding: 12px;
-                    gap: 8px;
+                    gap: 10px;
                     background: white;
-                    border-top: 1px solid #E2E8F0;
+                    border-top: 1px solid #F1F5F9;
+                    align-items: center;
                 }
-                .team-chat-input-area input {
+                .team-chat-action-btn {
+                    background: transparent;
+                    color: #0A7CFF;
+                    border: none;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 6px;
+                    border-radius: 50%;
+                }
+                .team-chat-action-btn:hover {
+                    background: #F1F5F9;
+                }
+                .team-chat-input-area input[type="text"] {
                     flex: 1;
-                    border: 1px solid #E2E8F0;
-                    border-radius: 99px;
-                    padding: 8px 16px;
-                    font-size: 0.9rem;
+                    background: #F1F5F9;
+                    border: none;
+                    border-radius: 20px;
+                    padding: 10px 16px;
+                    font-size: 0.95rem;
                     outline: none;
-                    transition: border-color 0.2s;
+                    color: #1E293B;
                 }
-                .team-chat-input-area input:focus {
-                    border-color: #3B82F6;
+                .team-chat-input-area input[type="text"]::placeholder {
+                    color: #94A3B8;
                 }
                 .team-chat-send {
-                    background: #2563EB;
-                    color: white;
+                    background: transparent;
+                    color: #0A7CFF;
                     border: none;
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 50%;
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     cursor: pointer;
-                    flex-shrink: 0;
-                    transition: all 0.2s;
+                    padding: 6px;
+                    border-radius: 50%;
                 }
                 .team-chat-send:disabled {
-                    background: #E2E8F0;
-                    color: #94A3B8;
+                    color: #CBD5E1;
                     cursor: not-allowed;
                 }
                 .team-chat-send:not(:disabled):hover {
-                    background: #1D4ED8;
+                    background: #F1F5F9;
                 }
             `}</style>
         </div>
