@@ -63,6 +63,7 @@ const STATUS_CONFIG = {
 
 const DEFAULT_DAILY_TARGET = 1500000;
 const DAILY_TARGET_STORAGE_KEY = 'sweet-secret-orders-daily-target';
+const DAILY_NEWS_STORAGE_KEY = 'sweet-secret-orders-daily-news';
 const DAILY_REPORT_DELIVERY_FEE = 10000;
 
 const calculateSubtotalAmount = (items = []) =>
@@ -76,6 +77,52 @@ const getDiscountAmountValue = (items = [], discount, discountType) => {
     return Number(discount) || 0;
 };
 
+const itemCountLabel = (count) => `${count} захиалга`;
+const SELLER_AVATARS = ['👩🏻', '👩🏽', '👩🏾', '👩🏼', '👩🏿', '👩'];
+
+const getSavedDeliveryFee = (order) => {
+    if ((order?.deliveryType || 'delivery') !== 'delivery') return 0;
+    const deliveryFee = Number(order?.deliveryFee);
+    return Number.isFinite(deliveryFee) ? deliveryFee : 0;
+};
+
+const allocateAmountByWeight = (weights = [], totalAmount = 0) => {
+    const normalizedTotal = Math.round(Number(totalAmount) || 0);
+    if (!weights.length || normalizedTotal === 0) {
+        return weights.map(() => 0);
+    }
+
+    const totalWeight = weights.reduce((sum, weight) => sum + (Number(weight) || 0), 0);
+    if (totalWeight <= 0) {
+        const base = Math.trunc(normalizedTotal / weights.length);
+        const remainder = normalizedTotal - (base * weights.length);
+        return weights.map((_, index) => base + (index < remainder ? 1 : 0));
+    }
+
+    const allocations = weights.map((weight, index) => {
+        const raw = (normalizedTotal * (Number(weight) || 0)) / totalWeight;
+        const floorValue = Math.floor(raw);
+        return {
+            index,
+            floorValue,
+            fraction: raw - floorValue,
+        };
+    });
+
+    let remainder = normalizedTotal - allocations.reduce((sum, item) => sum + item.floorValue, 0);
+    allocations
+        .sort((a, b) => b.fraction - a.fraction)
+        .forEach((item) => {
+            if (remainder <= 0) return;
+            item.floorValue += 1;
+            remainder -= 1;
+        });
+
+    return allocations
+        .sort((a, b) => a.index - b.index)
+        .map((item) => item.floorValue);
+};
+
 const MONGOLIAN_MONTHS = [
     '1-р сар', '2-р сар', '3-р сар', '4-р сар', '5-р сар', '6-р сар',
     '7-р сар', '8-р сар', '9-р сар', '10-р сар', '11-р сар', '12-р сар'
@@ -84,6 +131,64 @@ const MONGOLIAN_MONTHS = [
 const MONGOLIAN_WEEKDAYS = [
     'Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'
 ];
+
+const DAILY_MOTIVATION_MESSAGES = [
+    'Өнөөдрийн борлуулалтандаа амжилт. Тодорхой, хурдан ажиллаарай.',
+    'Өнөөдрийн борлуулалтандаа амжилт. Захиалга бүрийг цэгцтэй хаагаарай.',
+    'Өнөөдрийн борлуулалтандаа амжилт. Харилцагч бүрт итгэлтэй санал өгөөрэй.',
+    'Өнөөдрийн борлуулалтандаа амжилт. Өдрийн хэмнэлээ сайн бариарай.',
+    'Өнөөдрийн борлуулалтандаа амжилт. Сайн эхэлбэл өдөр цэгцтэй явна.',
+    'Өнөөдрийн борлуулалтандаа амжилт. Жижиг шийдвэр бүр үр дүн авчирна.',
+    'Өнөөдрийн борлуулалтандаа амжилт. Өнөөдрийн зорилгоо тайван, нягт гүйцээгээрэй.',
+];
+
+const buildPieCallouts = (items = []) => {
+    const total = items.reduce((sum, item) => sum + (Number(item.share) || 0), 0);
+    if (!total) return [];
+
+    let currentAngle = -90;
+    return items.map((item) => {
+        const sliceAngle = ((Number(item.share) || 0) / total) * 360;
+        const midAngle = currentAngle + sliceAngle / 2;
+        const radians = (midAngle * Math.PI) / 180;
+        const centerX = 110;
+        const centerY = 68;
+        const radiusX = 66;
+        const radiusY = 42;
+        currentAngle += sliceAngle;
+
+        return {
+            ...item,
+            anchorX: centerX + Math.cos(radians) * radiusX,
+            anchorY: centerY + Math.sin(radians) * radiusY,
+            align: Math.cos(radians) >= 0 ? 'right' : 'left',
+        };
+    });
+};
+
+const getSellerAvatar = (seed = '', index = 0) => {
+    const source = String(seed || index);
+    const hash = [...source].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+    return SELLER_AVATARS[hash % SELLER_AVATARS.length];
+};
+
+const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const renderHighlightedText = (value, query) => {
+    const text = String(value ?? '');
+    const normalizedQuery = String(query || '').trim();
+    if (!normalizedQuery) return text;
+
+    const matcher = new RegExp(`(${escapeRegExp(normalizedQuery)})`, 'ig');
+    const parts = text.split(matcher);
+    const lowerQuery = normalizedQuery.toLowerCase();
+
+    return parts.map((part, index) => (
+        part.toLowerCase() === lowerQuery
+            ? <mark key={`${part}-${index}`} className="orders-search-highlight">{part}</mark>
+            : <React.Fragment key={`${part}-${index}`}>{part}</React.Fragment>
+    ));
+};
 
 const Orders = () => {
     const { user: currentUser, isAdmin } = useAuth();
@@ -103,7 +208,12 @@ const Orders = () => {
     const [isDailySummaryOpen, setIsDailySummaryOpen] = useState(false);
     const [dailyTarget, setDailyTarget] = useState(DEFAULT_DAILY_TARGET);
     const [dailyTargetDraft, setDailyTargetDraft] = useState(String(DEFAULT_DAILY_TARGET));
+    const [dailyTargetSaved, setDailyTargetSaved] = useState(true);
+    const [isDailyTargetEditing, setIsDailyTargetEditing] = useState(false);
     const [weatherSummary, setWeatherSummary] = useState('Цаг агаар уншиж байна...');
+    const [dailyNews, setDailyNews] = useState('');
+    const [dailyNewsDraft, setDailyNewsDraft] = useState('');
+    const [isDailyNewsEditing, setIsDailyNewsEditing] = useState(false);
 
     // New Order Form State with Structured Address
     const [newOrder, setNewOrder] = useState({
@@ -198,6 +308,18 @@ const Orders = () => {
             }
         } catch (error) {
             console.error('Daily target read error:', error);
+        }
+    }, []);
+
+    useEffect(() => {
+        try {
+            const storedNews = JSON.parse(window.localStorage.getItem(DAILY_NEWS_STORAGE_KEY) || '{}');
+            const todayKey = new Date().toISOString().slice(0, 10);
+            const todayNews = storedNews[todayKey] || '';
+            setDailyNews(todayNews);
+            setDailyNewsDraft(todayNews);
+        } catch (error) {
+            console.error('Daily news read error:', error);
         }
     }, []);
 
@@ -310,8 +432,7 @@ const Orders = () => {
             0
         );
         const totalDelivery = todaysOrders.reduce((sum, order) => {
-            if ((order.deliveryType || 'delivery') !== 'delivery') return sum;
-            return sum + (Number(order.deliveryFee) || DAILY_REPORT_DELIVERY_FEE);
+            return sum + getSavedDeliveryFee(order);
         }, 0);
         const totalSales = todaysOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
         const totalOrders = todaysOrders.length;
@@ -370,13 +491,15 @@ const Orders = () => {
             const orderItems = order.items || [];
             const orderSubtotal = calculateSubtotalAmount(orderItems);
             const orderDiscount = getDiscountAmountValue(orderItems, order.discount, order.discountType);
-            const orderDelivery =
-                (order.deliveryType || 'delivery') === 'delivery'
-                    ? (Number(order.deliveryFee) || DAILY_REPORT_DELIVERY_FEE)
-                    : 0;
-            const fallbackWeight = orderItems.length ? 1 / orderItems.length : 0;
+            const orderDelivery = getSavedDeliveryFee(order);
+            const itemSubtotals = orderItems.map((item) => (Number(item.quantity) || 0) * (Number(item.price) || 0));
+            const itemWeights = orderSubtotal > 0
+                ? itemSubtotals
+                : orderItems.map(() => 1);
+            const allocatedDeliveries = allocateAmountByWeight(itemWeights, orderDelivery);
+            const allocatedDiscounts = allocateAmountByWeight(itemWeights, orderDiscount);
 
-            orderItems.forEach((item) => {
+            orderItems.forEach((item, index) => {
                 const key = item.id || item.code || item.name;
                 const current = topProductsMap.get(key) || {
                     key,
@@ -389,10 +512,9 @@ const Orders = () => {
                 };
                 const quantity = Number(item.quantity) || 0;
                 const price = Number(item.price) || 0;
-                const itemSubtotal = quantity * price;
-                const weight = orderSubtotal > 0 ? itemSubtotal / orderSubtotal : fallbackWeight;
-                const allocatedDelivery = orderDelivery * weight;
-                const allocatedDiscount = orderDiscount * weight;
+                const itemSubtotal = itemSubtotals[index] || (quantity * price);
+                const allocatedDelivery = allocatedDeliveries[index] || 0;
+                const allocatedDiscount = allocatedDiscounts[index] || 0;
 
                 current.quantity += quantity;
                 current.revenue += itemSubtotal;
@@ -438,6 +560,46 @@ const Orders = () => {
             topProducts,
         };
     }, [dailyTarget, orders]);
+
+    const monthlyTopSellers = useMemo(() => {
+        const now = new Date();
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        const sellerMap = new Map();
+
+        orders.forEach((order) => {
+            if (!order.createdAt || !order.createdBy) return;
+            const createdAt =
+                typeof order.createdAt?.toMillis === 'function'
+                    ? new Date(order.createdAt.toMillis())
+                    : new Date(order.createdAt);
+            if (Number.isNaN(createdAt.getTime()) || createdAt < monthStart || createdAt > monthEnd) return;
+
+            const sellerKey = order.createdBy;
+            const matchedUser = users.find((user) => user.uid === sellerKey || user.id === sellerKey);
+            const current = sellerMap.get(sellerKey) || {
+                key: sellerKey,
+                name: matchedUser?.displayName || matchedUser?.email || 'Ажилтан',
+                photoURL: matchedUser?.photoURL || '',
+                totalSales: 0,
+                orderCount: 0,
+            };
+
+            current.totalSales += Number(order.totalAmount) || 0;
+            current.orderCount += 1;
+            sellerMap.set(sellerKey, current);
+        });
+
+        const rankedSellers = [...sellerMap.values()]
+            .sort((a, b) => b.totalSales - a.totalSales)
+            .slice(0, 2);
+        const topSellerTotal = rankedSellers.reduce((sum, seller) => sum + seller.totalSales, 0);
+
+        return rankedSellers.map((seller) => ({
+            ...seller,
+            share: topSellerTotal > 0 ? (seller.totalSales / topSellerTotal) * 100 : 0,
+        }));
+    }, [orders, users]);
 
     const selectedCustomerPaymentInsights = useMemo(() => {
         if (!selectedOrder) return null;
@@ -611,11 +773,41 @@ const Orders = () => {
         if (!nextTarget) {
             setDailyTarget(DEFAULT_DAILY_TARGET);
             setDailyTargetDraft(String(DEFAULT_DAILY_TARGET));
+            setDailyTargetSaved(true);
+            setIsDailyTargetEditing(false);
             return;
         }
         setDailyTarget(nextTarget);
         setDailyTargetDraft(String(nextTarget));
+        setDailyTargetSaved(true);
+        setIsDailyTargetEditing(false);
     };
+
+    const handleDailyNewsSave = () => {
+        const nextNews = String(dailyNewsDraft || '').trim();
+        const todayKey = new Date().toISOString().slice(0, 10);
+        try {
+            const storedNews = JSON.parse(window.localStorage.getItem(DAILY_NEWS_STORAGE_KEY) || '{}');
+            storedNews[todayKey] = nextNews;
+            window.localStorage.setItem(DAILY_NEWS_STORAGE_KEY, JSON.stringify(storedNews));
+        } catch (error) {
+            console.error('Daily news write error:', error);
+        }
+        setDailyNews(nextNews);
+        setDailyNewsDraft(nextNews);
+        setIsDailyNewsEditing(false);
+    };
+
+    const paymentChartItems = todaysPerformance.visiblePaymentBreakdown.length
+        ? todaysPerformance.visiblePaymentBreakdown
+        : todaysPerformance.paymentBreakdown.slice(0, 3);
+
+    const sourceChartItems = todaysPerformance.visibleSourceBreakdown.length
+        ? todaysPerformance.visibleSourceBreakdown
+        : todaysPerformance.sourceBreakdown.slice(0, 3);
+
+    const paymentCallouts = useMemo(() => buildPieCallouts(paymentChartItems), [paymentChartItems]);
+    const sourceCallouts = useMemo(() => buildPieCallouts(sourceChartItems), [sourceChartItems]);
 
     const todayMeta = useMemo(() => {
         const now = new Date();
@@ -636,6 +828,18 @@ const Orders = () => {
             'Тодорхойгүй'
         );
     }, [currentUser, users]);
+
+    const greetingName = useMemo(() => {
+        const baseName = String(activeStaffLabel || '').trim();
+        if (!baseName || baseName === 'Тодорхойгүй') return 'Танд';
+        return baseName.split(' ')[0] || baseName;
+    }, [activeStaffLabel]);
+
+    const dailyMotivation = useMemo(() => {
+        const now = new Date();
+        const dayIndex = now.getDay();
+        return DAILY_MOTIVATION_MESSAGES[dayIndex] || DAILY_MOTIVATION_MESSAGES[0];
+    }, []);
 
     const handleDownloadDailySummaryPdf = () => {
         const paymentRows = (todaysPerformance.visiblePaymentBreakdown.length
@@ -774,7 +978,7 @@ const Orders = () => {
     };
 
     return (
-        <div className="admin-page">
+        <div className="admin-page orders-page">
             <div className="page-header">
                 <div className="header-info">
                     <h1>Захиалга Удирдах</h1>
@@ -789,6 +993,43 @@ const Orders = () => {
                 </div>
             </div>
 
+            <section className="store-performance-intro">
+                <div className="store-performance-greeting">
+                    <span>Сайн уу, {greetingName}</span>
+                    <p>{dailyMotivation}</p>
+                </div>
+            </section>
+
+            <section className="daily-news-board">
+                <div className="daily-news-board__header">
+                    <div>
+                        <span>Өнөөдрийн мэдээ</span>
+                        <strong>Борлуулалтын менежерийн самбар</strong>
+                    </div>
+                    {isDailyNewsEditing ? (
+                        <button type="button" className="daily-news-board__action" onClick={handleDailyNewsSave}>
+                            Хадгалах
+                        </button>
+                    ) : (
+                        <button type="button" className="daily-news-board__action" onClick={() => setIsDailyNewsEditing(true)}>
+                            Засах
+                        </button>
+                    )}
+                </div>
+                {isDailyNewsEditing ? (
+                    <textarea
+                        className="daily-news-board__editor"
+                        value={dailyNewsDraft}
+                        onChange={(e) => setDailyNewsDraft(e.target.value)}
+                        placeholder="Өнөөдрийн мэдээллээ энд оруулна уу..."
+                    />
+                ) : (
+                    <p className={`daily-news-board__content${dailyNews ? '' : ' is-empty'}`}>
+                        {dailyNews || 'Өнөөдрийн мэдээлэл ороогүй байна.'}
+                    </p>
+                )}
+            </section>
+
             <section className="store-performance-panel">
                 <div className="store-performance-header">
                     <div>
@@ -798,22 +1039,6 @@ const Orders = () => {
                             <span>{todayMeta.weekdayLabel}</span>
                             <span>{weatherSummary}</span>
                         </div>
-                    </div>
-                    <div className="target-config-card">
-                        <label htmlFor="daily-target-input">Өдрийн зорилго</label>
-                        <div className="target-config-input">
-                            <span>₮</span>
-                            <input
-                                id="daily-target-input"
-                                type="text"
-                                value={formatNumberInput(dailyTargetDraft)}
-                                onChange={(e) => setDailyTargetDraft(e.target.value)}
-                            />
-                        </div>
-                        <button type="button" className="target-save-btn" onClick={handleDailyTargetSave}>
-                            Хадгалах
-                        </button>
-                        <small>Admin-аас өөрчлөгдөх target value</small>
                     </div>
                 </div>
 
@@ -861,9 +1086,48 @@ const Orders = () => {
 
                     <div className="performance-summary-card">
                         <span>Өдрийн зорилго</span>
-                        <strong>{formatCurrency(todaysPerformance.target)}</strong>
+                        {isDailyTargetEditing ? (
+                            <button
+                                type="button"
+                                className="performance-target-inline is-editing"
+                                onClick={() => setIsDailyTargetEditing(true)}
+                            >
+                                <span>₮</span>
+                                <input
+                                    id="daily-target-input"
+                                    type="text"
+                                    value={formatNumberInput(dailyTargetDraft)}
+                                    readOnly={false}
+                                    onChange={(e) => {
+                                        setDailyTargetDraft(e.target.value);
+                                        setDailyTargetSaved(false);
+                                    }}
+                                    onFocus={() => setIsDailyTargetEditing(true)}
+                                    autoFocus
+                                />
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                className="performance-target-display"
+                                onClick={() => setIsDailyTargetEditing(true)}
+                            >
+                                {formatCurrency(dailyTarget)}
+                            </button>
+                        )}
                         <small>Configurable өдөр тутмын борлуулалтын target</small>
-                        <div className="performance-mini-icon"><Target size={16} /></div>
+                        <div className="performance-target-footer">
+                            <div className="performance-mini-icon"><Target size={16} /></div>
+                            {isDailyTargetEditing ? (
+                                <button type="button" className="target-corner-save-btn" onClick={handleDailyTargetSave}>
+                                    Хадгалах
+                                </button>
+                            ) : (
+                                <button type="button" className="target-corner-save-btn" onClick={() => setIsDailyTargetEditing(true)}>
+                                    Засах
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="performance-summary-card">
@@ -872,7 +1136,9 @@ const Orders = () => {
                         <small>{todaysPerformance.isTargetMet ? 'Өдрийн борлуулалтын төлөвлөгөөг давсан' : 'Өдрийн борлуулалтын төлөвлөгөөнд дөхөж байна'}</small>
                         <div className="performance-mini-icon"><TrendingUp size={16} /></div>
                     </div>
+                </div>
 
+                <div className="performance-secondary-grid">
                     <div className="performance-summary-card performance-summary-card--chart">
                         <div className="performance-chart-header">
                             <div>
@@ -881,24 +1147,22 @@ const Orders = () => {
                             </div>
                         </div>
                         <div className="performance-chart-layout">
-                            <div
-                                className="performance-pie-chart"
-                                style={{ background: todaysPerformance.paymentChartStyle }}
-                                aria-hidden="true"
-                            >
-                                <div className="performance-pie-chart__center">Төлбөр</div>
-                            </div>
-                            <div className="performance-chart-legend">
-                                {(todaysPerformance.visiblePaymentBreakdown.length
-                                    ? todaysPerformance.visiblePaymentBreakdown
-                                    : todaysPerformance.paymentBreakdown.slice(0, 3)
-                                ).map((item) => (
-                                    <div key={item.key} className="performance-legend-row">
-                                        <div className="performance-legend-label">
-                                            <span className="performance-legend-dot" style={{ background: item.color }} />
+                            <div className="performance-pie-chart-panel">
+                                <div
+                                    className="performance-pie-chart"
+                                    style={{ background: todaysPerformance.paymentChartStyle }}
+                                >
+                                    <div className="performance-pie-chart__center">Төлбөр</div>
+                                </div>
+                                {paymentCallouts.map((item) => (
+                                    <div
+                                        key={item.key}
+                                        className={`performance-pie-callout performance-pie-callout--${item.align}`}
+                                        style={{ left: `${item.anchorX}px`, top: `${item.anchorY}px` }}
+                                    >
+                                        <span className="performance-pie-callout-dot" style={{ background: item.color }} />
+                                        <div className="performance-pie-callout-copy">
                                             <strong>{item.label}</strong>
-                                        </div>
-                                        <div className="performance-legend-value">
                                             <span>{formatCurrency(item.amount)}</span>
                                             <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
                                         </div>
@@ -916,25 +1180,23 @@ const Orders = () => {
                             </div>
                         </div>
                         <div className="performance-chart-layout">
-                            <div
-                                className="performance-pie-chart"
-                                style={{ background: todaysPerformance.sourceChartStyle }}
-                                aria-hidden="true"
-                            >
-                                <div className="performance-pie-chart__center">Суваг</div>
-                            </div>
-                            <div className="performance-chart-legend">
-                                {(todaysPerformance.visibleSourceBreakdown.length
-                                    ? todaysPerformance.visibleSourceBreakdown
-                                    : todaysPerformance.sourceBreakdown.slice(0, 3)
-                                ).map((item) => (
-                                    <div key={item.key} className="performance-legend-row">
-                                        <div className="performance-legend-label">
-                                            <span className="performance-legend-dot" style={{ background: item.color }} />
+                            <div className="performance-pie-chart-panel">
+                                <div
+                                    className="performance-pie-chart"
+                                    style={{ background: todaysPerformance.sourceChartStyle }}
+                                >
+                                    <div className="performance-pie-chart__center">Суваг</div>
+                                </div>
+                                {sourceCallouts.map((item) => (
+                                    <div
+                                        key={item.key}
+                                        className={`performance-pie-callout performance-pie-callout--${item.align}`}
+                                        style={{ left: `${item.anchorX}px`, top: `${item.anchorY}px` }}
+                                    >
+                                        <span className="performance-pie-callout-dot" style={{ background: item.color }} />
+                                        <div className="performance-pie-callout-copy">
                                             <strong>{item.label}</strong>
-                                        </div>
-                                        <div className="performance-legend-value">
-                                            <span>{item.count} захиалга</span>
+                                            <span>{itemCountLabel(item.count)}</span>
                                             <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
                                         </div>
                                     </div>
@@ -963,81 +1225,120 @@ const Orders = () => {
                         </div>
                     </div>
                 </div>
+
+                <div className="sales-leaderboard">
+                    <div className="sales-leaderboard-header">
+                        <div>
+                            <span>Сарын борлуулалтын лидер</span>
+                            <strong>Top 2 борлуулагч</strong>
+                        </div>
+                        <small>{MONGOLIAN_MONTHS[new Date().getMonth()]}-ийн борлуулалтын дүн</small>
+                    </div>
+
+                    <div className="sales-leaderboard-grid">
+                        {(monthlyTopSellers.length ? monthlyTopSellers : [
+                            { key: 'empty-1', name: 'Одоогоор бүртгэлгүй', totalSales: 0, orderCount: 0, share: 0 },
+                            { key: 'empty-2', name: 'Одоогоор бүртгэлгүй', totalSales: 0, orderCount: 0, share: 0 },
+                        ]).map((seller, index) => (
+                            <div key={seller.key} className={`sales-leader-card sales-leader-card--${index === 0 ? 'primary' : 'secondary'}`}>
+                                <div className="sales-leader-rank">
+                                    <span>{index === 0 ? '👑' : '✨'}</span>
+                                    <strong>#{index + 1}</strong>
+                                </div>
+                                <div className="sales-leader-profile">
+                                    <div className="sales-leader-avatar">
+                                        <span>{getSellerAvatar(seller.key || seller.name, index)}</span>
+                                    </div>
+                                    <div className="sales-leader-meta">
+                                        <strong>{seller.name}</strong>
+                                        <span>{seller.orderCount} захиалга шивсэн</span>
+                                    </div>
+                                </div>
+                                <div className="sales-leader-amount">
+                                    <span>Сарын борлуулалт</span>
+                                    <strong>{formatCurrency(seller.totalSales)}</strong>
+                                    <div className="sales-leader-share">
+                                        <div className="sales-leader-share-topline">
+                                            <span>Орлогын share</span>
+                                            <strong>{seller.share.toFixed(seller.share % 1 === 0 ? 0 : 1)}%</strong>
+                                        </div>
+                                        <div className="sales-leader-share-track">
+                                            <span style={{ width: `${seller.share}%` }} />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </section>
 
-            <div className="table-filters" style={{ marginBottom: '25px', gap: '15px', alignItems: 'flex-end' }}>
-                <div className="search-box" style={{ flex: 2 }}>
+            <div className="orders-filter-toolbar">
+                <div className="search-box orders-filter-search">
                     <Search size={18} />
                     <input type="text" placeholder="ID, Нэр, Утас..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                 </div>
-                <div className="filter-group" style={{ flex: 3, display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+
+                <div className="orders-filter-controls">
                     <div className="filter-item">
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Төлөв</label>
-                        <div style={{ position: 'relative' }}>
-                            <select className="form-select" style={{ width: '140px', padding: '10px 12px' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                                <option value="all">Бүх төлөв</option>
-                                {Object.entries(STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
-                            </select>
-                        </div>
+                        <label>Төлөв</label>
+                        <select className="form-select orders-filter-select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+                            <option value="all">Бүх төлөв</option>
+                            {Object.entries(STATUS_CONFIG).map(([key, cfg]) => <option key={key} value={key}>{cfg.label}</option>)}
+                        </select>
                     </div>
 
                     <div className="filter-item">
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Суваг</label>
-                        <div style={{ position: 'relative' }}>
-                            <select className="form-select" style={{ width: '140px', padding: '10px 12px' }} value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
-                                <option value="all">Бүх суваг</option>
-                                {SOURCE_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
-                            </select>
-                        </div>
+                        <label>Суваг</label>
+                        <select className="form-select orders-filter-select" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}>
+                            <option value="all">Бүх суваг</option>
+                            {SOURCE_OPTIONS.map(opt => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                        </select>
                     </div>
 
                     <div className="filter-item">
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Төлбөр</label>
-                        <div style={{ position: 'relative' }}>
-                            <select className="form-select" style={{ width: '140px', padding: '10px 12px' }} value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)}>
-                                <option value="all">Бүх төлбөр</option>
-                                {PAYMENT_METHODS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                            </select>
-                        </div>
+                        <label>Төлбөр</label>
+                        <select className="form-select orders-filter-select" value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)}>
+                            <option value="all">Бүх төлбөр</option>
+                            {PAYMENT_METHODS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                        </select>
                     </div>
 
-                    <div className="filter-item">
-                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, marginBottom: '4px', color: '#666', textTransform: 'uppercase' }}>Хугацаа (Эхлэх - Дуусах)</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ position: 'relative' }}>
+                    <div className="filter-item orders-filter-dates">
+                        <label>Хугацаа</label>
+                        <div className="orders-date-range">
+                            <div className="orders-date-field">
+                                <Calendar size={14} />
                                 <input
                                     type="date"
-                                    className="form-input"
-                                    style={{ width: '150px', padding: '10px 12px', paddingLeft: '35px' }}
+                                    className="form-input orders-date-input"
                                     value={startDate}
                                     onChange={(e) => setStartDate(e.target.value)}
                                 />
-                                <Calendar size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
                             </div>
-                            <span style={{ color: '#999' }}>-</span>
-                            <div style={{ position: 'relative' }}>
+                            <span className="orders-date-separator">-</span>
+                            <div className="orders-date-field">
+                                <Calendar size={14} />
                                 <input
                                     type="date"
-                                    className="form-input"
-                                    style={{ width: '150px', padding: '10px 12px', paddingLeft: '35px' }}
+                                    className="form-input orders-date-input"
                                     value={endDate}
                                     min={startDate}
                                     max={startDate ? new Date(new Date(startDate).setFullYear(new Date(startDate).getFullYear() + 1)).toISOString().split('T')[0] : undefined}
                                     onChange={(e) => setEndDate(e.target.value)}
                                 />
-                                <Calendar size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
                             </div>
-                            {(startDate || endDate || statusFilter !== 'all' || sourceFilter !== 'all' || paymentFilter !== 'all') && (
-                                <button
-                                    className="btn-text-only"
-                                    onClick={() => { setStartDate(''); setEndDate(''); setStatusFilter('all'); setSourceFilter('all'); setPaymentFilter('all'); }}
-                                    style={{ color: '#DC2626', fontSize: '0.8rem', fontWeight: 600, padding: '5px' }}
-                                >
-                                    Арилгах
-                                </button>
-                            )}
                         </div>
                     </div>
+
+                    {(startDate || endDate || statusFilter !== 'all' || sourceFilter !== 'all' || paymentFilter !== 'all') && (
+                        <button
+                            className="orders-filter-reset"
+                            onClick={() => { setStartDate(''); setEndDate(''); setStatusFilter('all'); setSourceFilter('all'); setPaymentFilter('all'); }}
+                        >
+                            Арилгах
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -1059,11 +1360,13 @@ const Orders = () => {
                         {loading ? <tr><td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>Уншиж байна...</td></tr> :
                             filteredOrders.map(order => (
                                 <tr key={order.id}>
-                                    <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>#{order.id.slice(-6).toUpperCase()}</td>
+                                    <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>
+                                        {renderHighlightedText(`#${order.id.slice(-6).toUpperCase()}`, searchTerm)}
+                                    </td>
                                     <td>
                                         <div className="customer-cell">
                                             <div style={{ display: 'flex', alignItems: 'center' }}>
-                                                <strong>{order.customerName || 'Зочин'}</strong>
+                                                <strong>{renderHighlightedText(order.customerName || 'Зочин', searchTerm)}</strong>
                                                 {(() => {
                                                     const userDoc = users.find(u => u.uid === order.userId || u.phoneNumber === order.phoneNumber || u.email === order.email);
                                                     return renderMembershipTier(getMembershipTier(userDoc));
@@ -1090,7 +1393,7 @@ const Orders = () => {
                                                     return null;
                                                 })()}
                                             </div>
-                                            <span className="email">{order.phoneNumber || order.email}</span>
+                                            <span className="email">{renderHighlightedText(order.phoneNumber || order.email, searchTerm)}</span>
                                         </div>
                                     </td>
                                     <td><strong>₮{(Number(order.totalAmount) || 0).toLocaleString()}</strong></td>
@@ -1461,26 +1764,19 @@ const Orders = () => {
 
                             <div className="daily-summary-section daily-summary-section--product">
                                 <div className="sidebar-section-title">Бүтээгдэхүүний задаргаа</div>
-                                <p className="daily-section-note">Мөр бүрийн дүнд тухайн бүтээгдэхүүнд ногдох хүргэлт, хөнгөлөлтийг хувь тэнцүүлж оруулсан.</p>
                                 <div className="daily-report-table">
                                     <div className="daily-report-head">
                                         <span>Бүтээгдэхүүн</span>
                                         <span>Тоо</span>
-                                        <span>Үндсэн үнийн дүн</span>
-                                        <span>Хөнгөлөлт</span>
-                                        <span>Хүргэлтийн дүн</span>
-                                        <span>Төлөх дүн</span>
+                                        <span>Дүн</span>
                                         <span>Share</span>
                                     </div>
                                     {(todaysPerformance.productBreakdown.length ? todaysPerformance.productBreakdown : [{ key: 'empty', name: 'Өнөөдөр хүргэлтийн бүтээгдэхүүнгүй', quantity: 0, revenue: 0, share: 0 }]).map((product) => (
                                         <div key={product.key} className="daily-report-row">
                                             <span className="daily-report-product">{product.name}</span>
                                             <span>{product.quantity}ш</span>
-                                            <span>{formatCurrency(product.revenue || 0)}</span>
-                                            <span>{product.key !== 'empty' ? `- ${formatCurrency(product.discount || 0)}` : '-'}</span>
-                                            <span>{product.key !== 'empty' ? `+ ${formatCurrency(product.delivery || 0)}` : '-'}</span>
                                             <span className="daily-report-amount">
-                                                <strong>{formatCurrency(product.payable ?? product.revenue)}</strong>
+                                                <strong>{formatCurrency(product.revenue || 0)}</strong>
                                             </span>
                                             <span>{product.share.toFixed(product.share % 1 === 0 ? 0 : 1)}%</span>
                                         </div>
