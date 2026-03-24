@@ -461,7 +461,8 @@ export const getMenuForRole = (roleKey, rolesSource = ROLES) => {
 };
 
 export const isStaffRole = (roleKey) => {
-    return STAFF_ROLES.includes(resolveRoleKey(roleKey));
+    const resolved = resolveRoleKey(roleKey);
+    return resolved !== 'customer';
 };
 
 export const getRoleInfo = (roleKey, rolesSource = ROLES) => {
