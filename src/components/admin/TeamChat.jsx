@@ -4,7 +4,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, doc, setDoc, serverTime
 import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
-import { MessageCircle, X, Send, Image as ImageIcon, Settings2, LoaderCircle, Edit3 } from 'lucide-react';
+import { MessageCircle, Minus, Send, Image as ImageIcon, Settings2, LoaderCircle, Edit3 } from 'lucide-react';
 
 const TEAM_CHAT_NICKNAME_KEY = 'sweet_secret_team_chat_nickname';
 
@@ -181,7 +181,7 @@ const TeamChat = () => {
                     <div className="team-chat-header">
                         <div className="team-chat-title">
                             <MessageCircle size={20} />
-                            <span>Ажилтнуудын чат</span>
+                            <span>Дотоод чат</span>
                         </div>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <button className="team-chat-icon-btn" onClick={() => {
@@ -191,7 +191,7 @@ const TeamChat = () => {
                                 <Edit3 size={16} />
                             </button>
                             <button className="team-chat-icon-btn" onClick={() => setIsOpen(false)}>
-                                <X size={20} />
+                                <Minus size={22} />
                             </button>
                         </div>
                     </div>
