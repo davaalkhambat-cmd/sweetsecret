@@ -52,6 +52,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
+import StickyNote from '../../components/admin/StickyNote';
 
 const STATUS_CONFIG = {
     pending: { label: 'Хүлээгдэж буй', color: '#C2410C', icon: <Clock size={16} />, class: 'pending' },
@@ -921,8 +922,8 @@ const Orders = () => {
                     </div>
 
                     <div class="note">${todaysPerformance.isTargetMet
-                        ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
-                        : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}</div>
+                ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
+                : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}</div>
 
                     <div class="section">
                         <h2>Төлбөрийн хуваалт</h2>
@@ -1000,35 +1001,8 @@ const Orders = () => {
                 </div>
             </section>
 
-            <section className="daily-news-board">
-                <div className="daily-news-board__header">
-                    <div>
-                        <span>Өнөөдрийн мэдээ</span>
-                        <strong>Борлуулалтын менежерийн самбар</strong>
-                    </div>
-                    {isDailyNewsEditing ? (
-                        <button type="button" className="daily-news-board__action" onClick={handleDailyNewsSave}>
-                            Хадгалах
-                        </button>
-                    ) : (
-                        <button type="button" className="daily-news-board__action" onClick={() => setIsDailyNewsEditing(true)}>
-                            Засах
-                        </button>
-                    )}
-                </div>
-                {isDailyNewsEditing ? (
-                    <textarea
-                        className="daily-news-board__editor"
-                        value={dailyNewsDraft}
-                        onChange={(e) => setDailyNewsDraft(e.target.value)}
-                        placeholder="Өнөөдрийн мэдээллээ энд оруулна уу..."
-                    />
-                ) : (
-                    <p className={`daily-news-board__content${dailyNews ? '' : ' is-empty'}`}>
-                        {dailyNews || 'Өнөөдрийн мэдээлэл ороогүй байна.'}
-                    </p>
-                )}
-            </section>
+            {/* Floating Information Sticky Note */}
+            <StickyNote />
 
             <section className="store-performance-panel">
                 <div className="store-performance-header">
