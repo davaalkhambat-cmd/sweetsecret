@@ -3,6 +3,7 @@ import { Settings2 } from 'lucide-react';
 
 const DAILY_NEWS_STORAGE_KEY = 'sweet-secret-orders-daily-news';
 const STICKY_NOTE_POS_KEY = 'sweet-secret-sticky-pos';
+const STICKY_NOTE_SIZE_KEY = 'sweet-secret-sticky-size';
 const STICKY_NOTE_COLOR_KEY = 'sweet-secret-sticky-color';
 
 const COLORS = [
@@ -22,6 +23,10 @@ const StickyNote = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
+    const [size, setSize] = useState({ width: 280, height: 200 });
+    const [isResizing, setIsResizing] = useState(false);
+    const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, w: 0, h: 0 });
+
     const [color, setColor] = useState(COLORS[0]);
     const [showColors, setShowColors] = useState(false);
 
@@ -37,6 +42,9 @@ const StickyNote = () => {
 
             const storedPos = JSON.parse(window.localStorage.getItem(STICKY_NOTE_POS_KEY) || 'null');
             if (storedPos) setPos(storedPos);
+
+            const storedSize = JSON.parse(window.localStorage.getItem(STICKY_NOTE_SIZE_KEY) || 'null');
+            if (storedSize) setSize(storedSize);
 
             const storedColor = window.localStorage.getItem(STICKY_NOTE_COLOR_KEY);
             if (storedColor) {
@@ -101,6 +109,29 @@ const StickyNote = () => {
         } catch (error) { }
     };
 
+    const handleResizeDown = (e) => {
+        e.stopPropagation();
+        setIsResizing(true);
+        setResizeStart({ x: e.clientX, y: e.clientY, w: size.width, h: size.height });
+        e.target.setPointerCapture(e.pointerId);
+    };
+
+    const handleResizeMove = (e) => {
+        if (!isResizing) return;
+        const newWidth = Math.max(200, resizeStart.w + (e.clientX - resizeStart.x));
+        const newHeight = Math.max(150, resizeStart.h + (e.clientY - resizeStart.y));
+        setSize({ width: newWidth, height: newHeight });
+    };
+
+    const handleResizeUp = (e) => {
+        if (!isResizing) return;
+        setIsResizing(false);
+        e.target.releasePointerCapture(e.pointerId);
+        try {
+            window.localStorage.setItem(STICKY_NOTE_SIZE_KEY, JSON.stringify(size));
+        } catch (error) { }
+    };
+
     return (
         <div
             ref={noteRef}
@@ -108,6 +139,8 @@ const StickyNote = () => {
             style={{
                 left: pos.x,
                 top: pos.y,
+                width: size.width,
+                height: size.height,
                 backgroundColor: color.bg,
                 borderColor: color.headerBg,
                 color: color.text,
@@ -173,11 +206,17 @@ const StickyNote = () => {
                 )}
             </div>
 
+            <div
+                className="sticky-note-resize-handle"
+                onPointerDown={handleResizeDown}
+                onPointerMove={handleResizeMove}
+                onPointerUp={handleResizeUp}
+                onPointerCancel={handleResizeUp}
+            />
+
             <style aria-hidden="true">{`
                 .sticky-note-widget {
                     position: fixed;
-                    width: 280px;
-                    min-height: 200px;
                     border-radius: 8px;
                     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
                     z-index: 9999;
@@ -278,6 +317,25 @@ const StickyNote = () => {
                     flex: 1;
                     cursor: text;
                     user-select: text;
+                }
+                .sticky-note-resize-handle {
+                    position: absolute;
+                    bottom: 0;
+                    right: 0;
+                    width: 16px;
+                    height: 16px;
+                    cursor: nwse-resize;
+                    z-index: 10;
+                }
+                .sticky-note-resize-handle::after {
+                    content: '';
+                    position: absolute;
+                    bottom: 4px;
+                    right: 4px;
+                    width: 6px;
+                    height: 6px;
+                    border-right: 2px solid rgba(0,0,0,0.15);
+                    border-bottom: 2px solid rgba(0,0,0,0.15);
                 }
             `}</style>
         </div>
