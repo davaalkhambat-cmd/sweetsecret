@@ -1,10 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Settings2 } from 'lucide-react';
-
-const DAILY_NEWS_STORAGE_KEY = 'sweet-secret-orders-daily-news';
-const STICKY_NOTE_POS_KEY = 'sweet-secret-sticky-pos';
-const STICKY_NOTE_SIZE_KEY = 'sweet-secret-sticky-size';
-const STICKY_NOTE_COLOR_KEY = 'sweet-secret-sticky-color';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 
 const COLORS = [
     { bg: '#FEF08A', headerBg: '#FDE047', text: '#854D0E', name: 'yellow' },
@@ -33,46 +30,41 @@ const StickyNote = () => {
     const noteRef = useRef(null);
 
     useEffect(() => {
-        try {
-            const todayKey = new Date().toISOString().slice(0, 10);
-            const storedNews = JSON.parse(window.localStorage.getItem(DAILY_NEWS_STORAGE_KEY) || '{}');
-            const todayNews = storedNews[todayKey] || '';
-            setNews(todayNews);
-            setDraft(todayNews);
-
-            const storedPos = JSON.parse(window.localStorage.getItem(STICKY_NOTE_POS_KEY) || 'null');
-            if (storedPos) setPos(storedPos);
-
-            const storedSize = JSON.parse(window.localStorage.getItem(STICKY_NOTE_SIZE_KEY) || 'null');
-            if (storedSize) setSize(storedSize);
-
-            const storedColor = window.localStorage.getItem(STICKY_NOTE_COLOR_KEY);
-            if (storedColor) {
-                const found = COLORS.find(c => c.name === storedColor);
-                if (found) setColor(found);
+        const docRef = doc(db, 'sticky_notes', 'main_note');
+        const unsub = onSnapshot(docRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                if (!isEditing && data.text !== undefined) {
+                    setNews(data.text);
+                    setDraft(data.text);
+                }
+                if (!isDragging && data.pos) setPos(data.pos);
+                if (!isResizing && data.size) setSize(data.size);
+                if (data.colorName) {
+                    const found = COLORS.find(c => c.name === data.colorName);
+                    if (found) setColor(found);
+                }
             }
-        } catch (e) { console.error('Error loading sticky note data', e); }
-    }, []);
+        });
+        return () => unsub();
+    }, [isEditing, isDragging, isResizing]);
+
+    const saveToFirestore = (updates) => {
+        const docRef = doc(db, 'sticky_notes', 'main_note');
+        setDoc(docRef, updates, { merge: true }).catch(err => console.error("Firestore Error:", err));
+    };
 
     const handleSave = () => {
         const nextNews = String(draft || '').trim();
-        const todayKey = new Date().toISOString().slice(0, 10);
-        try {
-            const storedNews = JSON.parse(window.localStorage.getItem(DAILY_NEWS_STORAGE_KEY) || '{}');
-            storedNews[todayKey] = nextNews;
-            window.localStorage.setItem(DAILY_NEWS_STORAGE_KEY, JSON.stringify(storedNews));
-        } catch (e) { }
         setNews(nextNews);
-        setDraft(nextNews);
+        saveToFirestore({ text: nextNews });
         setIsEditing(false);
     };
 
     const handleColorChange = (c) => {
         setColor(c);
         setShowColors(false);
-        try {
-            window.localStorage.setItem(STICKY_NOTE_COLOR_KEY, c.name);
-        } catch (e) { }
+        saveToFirestore({ colorName: c.name });
     }
 
     const handlePointerDown = (e) => {
@@ -104,9 +96,7 @@ const StickyNote = () => {
         if (!isDragging) return;
         setIsDragging(false);
         e.target.releasePointerCapture(e.pointerId);
-        try {
-            window.localStorage.setItem(STICKY_NOTE_POS_KEY, JSON.stringify(pos));
-        } catch (error) { }
+        saveToFirestore({ pos });
     };
 
     const handleResizeDown = (e) => {
@@ -127,9 +117,7 @@ const StickyNote = () => {
         if (!isResizing) return;
         setIsResizing(false);
         e.target.releasePointerCapture(e.pointerId);
-        try {
-            window.localStorage.setItem(STICKY_NOTE_SIZE_KEY, JSON.stringify(size));
-        } catch (error) { }
+        saveToFirestore({ size });
     };
 
     return (

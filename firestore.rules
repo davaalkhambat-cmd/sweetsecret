@@ -88,6 +88,10 @@ service cloud.firestore {
       allow read, write: if isStaff() || isAdmin();
     }
 
+    match /sticky_notes/{noteId} {
+      allow read, write: if isStaff() || isAdmin();
+    }
+
     // Default: deny all
     match /{document=**} {
       allow read, write: if false;
