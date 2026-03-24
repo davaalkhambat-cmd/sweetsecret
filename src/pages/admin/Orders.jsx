@@ -1432,7 +1432,7 @@ const Orders = () => {
                         </div>
 
                         <form onSubmit={handleSubmitOrder} style={{ maxHeight: '75vh', overflowY: 'auto', paddingRight: '10px' }}>
-                            <div className="modal-section-title"><User size={18} style={{ marginRight: 8 }} /> Үйлчлүүлэгч & Суваг</div>
+                            <div className="modal-section-title"><User size={18} style={{ marginRight: 8 }} /> Үйлчлүүлэгч ба суваг</div>
                             <div className="address-grid">
                                 <div className="form-group">
                                     <label>Үйлчлүүлэгчийн нэр *</label>
