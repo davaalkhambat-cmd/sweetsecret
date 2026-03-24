@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import SalesModule from '../../components/staff/SalesModule';
 import {
@@ -14,22 +14,30 @@ import {
     Briefcase
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { PERMISSIONS, getRoleInfo } from '../../config/roles';
 
 const StaffWorkspace = () => {
-    const { userProfile, logout, role } = useAuth();
+    const { userProfile, logout, role, hasPermission } = useAuth();
     const [activeModule, setActiveModule] = useState('sales');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const navigate = useNavigate();
 
     const modules = [
-        { id: 'dashboard', name: 'Тойм', icon: <LayoutDashboard size={20} />, roles: ['admin', 'manager', 'sales'] },
-        { id: 'sales', name: 'Борлуулалт', icon: <ShoppingBag size={20} />, roles: ['admin', 'manager', 'sales', 'cashier'] },
-        { id: 'customers', name: 'Хэрэглэгчид', icon: <Users size={20} />, roles: ['admin', 'manager', 'marketing_manager'] },
-        { id: 'reports', name: 'Тайлан', icon: <BarChart3 size={20} />, roles: ['admin', 'manager'] },
-        { id: 'settings', name: 'Тохиргоо', icon: <Settings size={20} />, roles: ['admin'] },
+        { id: 'dashboard', name: 'Тойм', icon: <LayoutDashboard size={20} />, permission: PERMISSIONS.VIEW_OVERVIEW },
+        { id: 'sales', name: 'Борлуулалт', icon: <ShoppingBag size={20} />, permission: PERMISSIONS.VIEW_ORDERS },
+        { id: 'customers', name: 'Хэрэглэгчид', icon: <Users size={20} />, permission: PERMISSIONS.VIEW_CUSTOMERS },
+        { id: 'reports', name: 'Тайлан', icon: <BarChart3 size={20} />, permission: PERMISSIONS.VIEW_FINANCE },
+        { id: 'settings', name: 'Тохиргоо', icon: <Settings size={20} />, permission: PERMISSIONS.VIEW_SETTINGS },
     ];
 
-    const allowedModules = modules.filter(m => m.roles.includes(role));
+    const allowedModules = modules.filter((module) => hasPermission(module.permission));
+    const roleInfo = getRoleInfo(role);
+
+    useEffect(() => {
+        if (!allowedModules.some((module) => module.id === activeModule)) {
+            setActiveModule(allowedModules[0]?.id || 'dashboard');
+        }
+    }, [activeModule, allowedModules]);
 
     const handleLogout = async () => {
         await logout();
@@ -79,7 +87,7 @@ const StaffWorkspace = () => {
                         <button className="icon-btn"><Bell size={20} /></button>
                         <div className="user-info">
                             <span className="user-name">{userProfile?.displayName || 'Ажилтан'}</span>
-                            <span className="user-role">{role === 'admin' ? 'Админ' : role === 'sales' ? 'Борлуулалт' : 'Менежер'}</span>
+                            <span className="user-role">{roleInfo.label}</span>
                         </div>
                         <img
                             src={userProfile?.photoURL || `https://api.dicebear.com/7.x/initials/svg?seed=${userProfile?.displayName}`}

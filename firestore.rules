@@ -13,14 +13,27 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function myRole() {
+      return exists(myUserDocPath()) ? get(myUserDocPath()).data.role : null;
+    }
+
     function isAdmin() {
       return isSignedIn() && (
         request.auth.token.admin == true ||
-        (
-          exists(myUserDocPath()) &&
-          get(myUserDocPath()).data.role in ['admin', 'manager']
-        )
+        myRole() in ['admin', 'manager', 'super_admin', 'system_admin', 'operation_admin', 'branch_manager']
       );
+    }
+
+    function canReadOwnInvitation() {
+      return isSignedIn() &&
+        resource.data.status == 'invited' &&
+        resource.data.email == request.auth.token.email;
+    }
+
+    function isOwnProfilePayload(userId) {
+      return isOwner(userId) &&
+        request.resource.data.uid == request.auth.uid &&
+        request.resource.data.email == request.auth.token.email;
     }
 
     // Public catalog
@@ -31,14 +44,14 @@ service cloud.firestore {
 
     // Private user profile
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow create: if isAdmin() || (
-        isOwner(userId) &&
-        request.resource.data.role == 'customer'
-      );
+      allow read: if isOwner(userId) || isAdmin() || canReadOwnInvitation();
+      // NOTE: This allows client-side invite activation on first login.
+      // For stricter security, move invitation acceptance to trusted backend code.
+      allow create: if isAdmin() || isOwnProfilePayload(userId);
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.role == resource.data.role
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.uid == resource.data.uid
       );
       allow delete: if isAdmin();
     }

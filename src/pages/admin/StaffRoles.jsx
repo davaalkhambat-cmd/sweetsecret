@@ -28,8 +28,11 @@ import {
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
 import {
+    ADMIN_MENU,
     PERMISSIONS,
     STAFF_ROLES,
+    getAssignableRoles,
+    resolveRoleKey,
 } from '../../config/roles';
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -43,45 +46,90 @@ const toMs = (timestamp) => {
 
 const PERMISSION_GROUPS = [
     {
-        title: 'Хянах самбар',
-        permissions: [PERMISSIONS.VIEW_DASHBOARD, PERMISSIONS.VIEW_FULL_ANALYTICS],
+        title: 'Удирдлагын самбар',
+        permissions: [PERMISSIONS.VIEW_OVERVIEW, PERMISSIONS.VIEW_EXECUTIVE_DASHBOARD, PERMISSIONS.VIEW_BRANCH_DASHBOARD],
     },
     {
-        title: 'Бараа бүтээгдэхүүн',
-        permissions: [PERMISSIONS.VIEW_PRODUCTS, PERMISSIONS.EDIT_PRODUCTS, PERMISSIONS.DELETE_PRODUCTS],
+        title: 'Худалдаа ба нөөц',
+        permissions: [
+            PERMISSIONS.VIEW_PRODUCTS,
+            PERMISSIONS.MANAGE_PRODUCTS,
+            PERMISSIONS.VIEW_INVENTORY,
+            PERMISSIONS.MANAGE_INVENTORY,
+        ],
     },
     {
-        title: 'Захиалга',
-        permissions: [PERMISSIONS.VIEW_ORDERS, PERMISSIONS.EDIT_ORDERS],
+        title: 'Захиалга ба ажиллагаа',
+        permissions: [
+            PERMISSIONS.VIEW_ORDERS,
+            PERMISSIONS.MANAGE_ORDERS,
+            PERMISSIONS.VIEW_OPERATIONS,
+            PERMISSIONS.MANAGE_OPERATIONS,
+        ],
     },
     {
-        title: 'Хэрэглэгч',
-        permissions: [PERMISSIONS.VIEW_USERS, PERMISSIONS.EDIT_USER_ROLES],
+        title: 'Харилцагч ба маркетинг',
+        permissions: [
+            PERMISSIONS.VIEW_CUSTOMERS,
+            PERMISSIONS.MANAGE_CUSTOMERS,
+            PERMISSIONS.VIEW_MARKETING,
+            PERMISSIONS.MANAGE_MARKETING,
+        ],
     },
     {
-        title: 'Урамшуулал',
-        permissions: [PERMISSIONS.VIEW_PROMOTIONS, PERMISSIONS.EDIT_PROMOTIONS],
+        title: 'Санхүү ба салбар',
+        permissions: [
+            PERMISSIONS.VIEW_FINANCE,
+            PERMISSIONS.MANAGE_FINANCE,
+            PERMISSIONS.VIEW_BRANCHES,
+            PERMISSIONS.MANAGE_BRANCHES,
+        ],
     },
     {
-        title: 'Систем',
-        permissions: [PERMISSIONS.MANAGE_STAFF_ROLES, PERMISSIONS.VIEW_SETTINGS],
+        title: 'Хүний нөөц ба систем',
+        permissions: [
+            PERMISSIONS.VIEW_HR,
+            PERMISSIONS.MANAGE_HR,
+            PERMISSIONS.VIEW_USERS,
+            PERMISSIONS.MANAGE_USERS,
+            PERMISSIONS.VIEW_ROLES,
+            PERMISSIONS.MANAGE_ROLES,
+            PERMISSIONS.VIEW_SETTINGS,
+            PERMISSIONS.MANAGE_SETTINGS,
+            PERMISSIONS.VIEW_AUDIT,
+        ],
     },
 ];
 
 const PERMISSION_LABELS = {
-    [PERMISSIONS.VIEW_DASHBOARD]: 'Dashboard харах',
-    [PERMISSIONS.VIEW_FULL_ANALYTICS]: 'Бүх аналитик харах',
+    [PERMISSIONS.VIEW_OVERVIEW]: 'Ерөнхий самбар харах',
+    [PERMISSIONS.VIEW_EXECUTIVE_DASHBOARD]: 'Executive KPI харах',
+    [PERMISSIONS.VIEW_BRANCH_DASHBOARD]: 'Салбарын самбар харах',
     [PERMISSIONS.VIEW_PRODUCTS]: 'Бараа харах',
-    [PERMISSIONS.EDIT_PRODUCTS]: 'Бараа засах',
-    [PERMISSIONS.DELETE_PRODUCTS]: 'Бараа устгах',
+    [PERMISSIONS.MANAGE_PRODUCTS]: 'Бараа удирдах',
+    [PERMISSIONS.VIEW_INVENTORY]: 'Нөөц харах',
+    [PERMISSIONS.MANAGE_INVENTORY]: 'Нөөц удирдах',
     [PERMISSIONS.VIEW_ORDERS]: 'Захиалга харах',
-    [PERMISSIONS.EDIT_ORDERS]: 'Захиалга засах',
+    [PERMISSIONS.MANAGE_ORDERS]: 'Захиалга удирдах',
+    [PERMISSIONS.VIEW_OPERATIONS]: 'Ажиллагаа харах',
+    [PERMISSIONS.MANAGE_OPERATIONS]: 'Ажиллагаа удирдах',
+    [PERMISSIONS.VIEW_CUSTOMERS]: 'Харилцагч харах',
+    [PERMISSIONS.MANAGE_CUSTOMERS]: 'Харилцагч удирдах',
+    [PERMISSIONS.VIEW_MARKETING]: 'Маркетинг харах',
+    [PERMISSIONS.MANAGE_MARKETING]: 'Маркетинг удирдах',
+    [PERMISSIONS.VIEW_FINANCE]: 'Санхүү харах',
+    [PERMISSIONS.MANAGE_FINANCE]: 'Санхүү удирдах',
+    [PERMISSIONS.VIEW_BRANCHES]: 'Салбар харах',
+    [PERMISSIONS.MANAGE_BRANCHES]: 'Салбар удирдах',
+    [PERMISSIONS.VIEW_HR]: 'HR харах',
+    [PERMISSIONS.MANAGE_HR]: 'HR удирдах',
     [PERMISSIONS.VIEW_USERS]: 'Хэрэглэгч харах',
-    [PERMISSIONS.EDIT_USER_ROLES]: 'Role өөрчлөх',
-    [PERMISSIONS.VIEW_PROMOTIONS]: 'Урамшуулал харах',
-    [PERMISSIONS.EDIT_PROMOTIONS]: 'Урамшуулал засах',
-    [PERMISSIONS.MANAGE_STAFF_ROLES]: 'Ажилтны эрх удирдах',
+    [PERMISSIONS.MANAGE_USERS]: 'Хэрэглэгч удирдах',
+    [PERMISSIONS.VIEW_ROLES]: 'Role харах',
+    [PERMISSIONS.MANAGE_ROLES]: 'Role удирдах',
     [PERMISSIONS.VIEW_SETTINGS]: 'Тохиргоо харах',
+    [PERMISSIONS.MANAGE_SETTINGS]: 'Тохиргоо өөрчлөх',
+    [PERMISSIONS.VIEW_AUDIT]: 'Аудит харах',
 };
 
 // ─── Main Component ─────────────────────────────────────────────
@@ -111,7 +159,7 @@ const StaffRoles = () => {
     const [newStaff, setNewStaff] = useState({
         email: '',
         displayName: '',
-        role: 'sales' // Default role for new staff
+        role: 'staff_operator'
     });
     // Firestore listener
     useEffect(() => {
@@ -125,7 +173,7 @@ const StaffRoles = () => {
                             id: docSnap.id,
                             displayName: data.displayName || '',
                             email: data.email || '',
-                            role: data.role || 'customer',
+                            role: resolveRoleKey(data.role || 'customer'),
                             status: String(data.status || 'active').toLowerCase(),
                             photoURL: data.photoURL || '',
                             createdAtMs: toMs(data.createdAt),
@@ -148,7 +196,7 @@ const StaffRoles = () => {
 
     // Staff users filtering
     const staffUsers = useMemo(
-        () => users.filter((u) => STAFF_ROLES.includes(u.role)),
+        () => users.filter((u) => STAFF_ROLES.includes(resolveRoleKey(u.role))),
         [users]
     );
 
@@ -170,7 +218,8 @@ const StaffRoles = () => {
         const counts = {};
         STAFF_ROLES.forEach((r) => (counts[r] = 0));
         users.forEach((u) => {
-            if (STAFF_ROLES.includes(u.role)) counts[u.role] = (counts[u.role] || 0) + 1;
+            const normalizedRole = resolveRoleKey(u.role);
+            if (STAFF_ROLES.includes(normalizedRole)) counts[normalizedRole] = (counts[normalizedRole] || 0) + 1;
         });
         return {
             totalStaff: staffUsers.length,
@@ -253,9 +302,7 @@ const StaffRoles = () => {
         }
     };
 
-    const assignableRoles = useMemo(() =>
-        Object.values(roles).filter(r => r.key !== 'customer'),
-        [roles]);
+    const assignableRoles = useMemo(() => getAssignableRoles(roles), [roles]);
 
     const handleCreateRole = async (e) => {
         e.preventDefault();
@@ -335,7 +382,7 @@ const StaffRoles = () => {
 
             setSuccessMessage(`✅ "${newStaff.email}" ажилтан амжилттай бүртгэгдлээ. Тэр энэ и-мэйлээрээ нэвтрэхэд эрх нь шууд идэвхжинэ.`);
             setIsAddStaffModalOpen(false);
-            setNewStaff({ email: '', displayName: '', role: 'sales' });
+            setNewStaff({ email: '', displayName: '', role: 'staff_operator' });
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
             console.error('Error adding staff:', error);
@@ -386,8 +433,14 @@ const StaffRoles = () => {
                         <UserRoundCog size={20} />
                     </div>
                     <div>
-                        <span>Админ</span>
-                        <strong>{(summary.admin || 0) + (summary.manager || 0)}</strong>
+                        <span>Удирдах түвшин</span>
+                        <strong>
+                            {(summary.super_admin || 0) +
+                                (summary.executive_ceo || 0) +
+                                (summary.system_admin || 0) +
+                                (summary.operation_admin || 0) +
+                                (summary.branch_manager || 0)}
+                        </strong>
                     </div>
                 </div>
                 <div className="staff-summary-card">
@@ -395,9 +448,16 @@ const StaffRoles = () => {
                         <ShieldCheck size={20} />
                     </div>
                     <div>
-                        <span>Бусад ажилтан</span>
+                        <span>Функцийн баг</span>
                         <strong>
-                            {(summary.marketing_manager || 0) + (summary.sales || 0) + (summary.cashier || 0)}
+                            {(summary.finance || 0) +
+                                (summary.inventory_warehouse || 0) +
+                                (summary.sales_customer_service || 0) +
+                                (summary.marketing_crm || 0) +
+                                (summary.hr_people_admin || 0) +
+                                (summary.supervisor_team_lead || 0) +
+                                (summary.staff_operator || 0) +
+                                (summary.viewer_auditor || 0)}
                         </strong>
                     </div>
                 </div>
@@ -642,7 +702,7 @@ const StaffRoles = () => {
                                     </tr>
                                 ) : filteredUsers.length ? (
                                     filteredUsers.map((u) => {
-                                        const info = roles[u.role] || roles.customer;
+                                        const info = roles[resolveRoleKey(u.role)] || roles.customer;
                                         const isSelf = u.id === currentUser?.uid;
                                         const isUpdating = updatingUid === u.id;
 
@@ -716,7 +776,7 @@ const StaffRoles = () => {
                                                             value={u.role}
                                                             onChange={(e) => handleRoleChange(u, e.target.value)}
                                                         >
-                                                            {Object.values(roles).map((r) => (
+                                                            {assignableRoles.map((r) => (
                                                                 <option key={r.key} value={r.key}>
                                                                     {r.icon} {r.label}
                                                                 </option>
@@ -750,7 +810,7 @@ const StaffRoles = () => {
                         <div className="staff-confirm-meta">
                             <div className="staff-confirm-from">
                                 <span>Одоогийн:</span>
-                                <strong>{(roles[confirmDialog.targetUser.role] || roles.customer).label}</strong>
+                                <strong>{(roles[resolveRoleKey(confirmDialog.targetUser.role)] || roles.customer).label}</strong>
                             </div>
                             <span className="staff-confirm-arrow">→</span>
                             <div className="staff-confirm-to">
@@ -794,7 +854,7 @@ const StaffRoles = () => {
                         <form onSubmit={handleCreateRole}>
                             <div className="role-form-grid">
                                 <div className="form-group-full">
-                                    <label>Түлхүүр үг (Key) — *Заавал, Англи хэл дээр, жишээ: manager*</label>
+                                    <label>Түлхүүр үг (Key) — *Заавал, Англи хэл дээр, жишээ: branch_support*</label>
                                     <input
                                         type="text"
                                         placeholder="жишээ: logistics"

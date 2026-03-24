@@ -7,6 +7,7 @@ import Cart from './components/Cart';
 
 // Admin Imports
 import AdminLayout from './components/admin/AdminLayout';
+import AdminHomeRedirect from './components/admin/AdminHomeRedirect';
 import RequireAdmin from './components/admin/RequireAdmin';
 import DeliveryDashboard from './pages/admin/Dashboard';
 import CommerceDashboard from './pages/admin/CommerceDashboard';
@@ -132,13 +133,9 @@ function App() {
                     </RequireAdmin>
                 }
             >
-                <Route index element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
-                        <CommerceDashboard />
-                    </RequireAdmin>
-                } />
+                <Route index element={<AdminHomeRedirect />} />
                 <Route path="delivery-dashboard" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_OPERATIONS}>
                         <DeliveryDashboard />
                     </RequireAdmin>
                 } />
@@ -148,12 +145,12 @@ function App() {
                     </RequireAdmin>
                 } />
                 <Route path="inventory" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PRODUCTS}>
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_INVENTORY}>
                         <Inventory />
                     </RequireAdmin>
                 } />
                 <Route path="sales-revenue" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_DASHBOARD}>
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_FINANCE}>
                         <SalesRevenue />
                     </RequireAdmin>
                 } />
@@ -163,17 +160,17 @@ function App() {
                     </RequireAdmin>
                 } />
                 <Route path="users" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_USERS}>
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_CUSTOMERS}>
                         <Users />
                     </RequireAdmin>
                 } />
                 <Route path="promotions" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PROMOTIONS}>
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_MARKETING}>
                         <Promotions />
                     </RequireAdmin>
                 } />
                 <Route path="staff-roles" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.MANAGE_STAFF_ROLES}>
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_ROLES}>
                         <StaffRoles />
                     </RequireAdmin>
                 } />

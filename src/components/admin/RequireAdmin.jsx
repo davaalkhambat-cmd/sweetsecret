@@ -4,10 +4,8 @@ import { LoaderCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 /**
- * Бүх staff role-тэй хэрэглэгчдийг нэвтрүүлнэ.
- * (admin, manager, marketing_manager, sales, cashier)
- *
- * requiredPermission prop-оор тодорхой permission шаардаж болно.
+ * Backoffice-ийн staff role-тэй хэрэглэгчийг нэвтрүүлнэ.
+ * requiredPermission өгвөл module-level permission давхар шалгана.
  */
 const RequireAdmin = ({ children, requiredPermission }) => {
     const location = useLocation();

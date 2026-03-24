@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { LoaderCircle, Search, ShieldCheck, Users as UsersIcon, UserRoundCog } from 'lucide-react';
 import { db } from '../../firebase';
+import { useAuth } from '../../context/AuthContext';
+import { getAssignableRoles, getRoleInfo, resolveRoleKey } from '../../config/roles';
 
 const toNumber = (value) => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -22,13 +24,6 @@ const toMs = (timestamp) => {
 };
 
 const formatMoney = (value) => `₮${Math.round(value || 0).toLocaleString()}`;
-
-const normalizeRole = (role) => {
-    const normalized = String(role || 'customer').toLowerCase();
-    if (normalized === 'admin') return 'admin';
-    if (normalized === 'manager') return 'manager';
-    return 'customer';
-};
 
 const normalizeTier = (rawTier) => {
     const tier = String(rawTier || '').toLowerCase();
@@ -67,6 +62,7 @@ const tierClassName = (tier) => {
 };
 
 const Users = () => {
+    const { roles } = useAuth();
     const [users, setUsers] = useState([]);
     const [totalSpentByUser, setTotalSpentByUser] = useState({});
     const [loading, setLoading] = useState(true);
@@ -89,7 +85,7 @@ const Users = () => {
                                 id: docSnap.id,
                                 displayName: data.displayName || '',
                                 email: data.email || '',
-                                role: normalizeRole(data.role),
+                                role: resolveRoleKey(data.role),
                                 status: String(data.status || 'active').toLowerCase(),
                                 loyaltyPoints: toNumber(data.loyaltyPoints),
                                 membershipTier: getMembershipTier(data),
@@ -173,7 +169,7 @@ const Users = () => {
     );
 
     const summary = useMemo(() => {
-        const adminCount = users.filter((user) => ['admin', 'manager'].includes(user.role)).length;
+        const adminCount = users.filter((user) => user.role !== 'customer').length;
         const activeCount = users.filter((user) => user.status === 'active').length;
         const avgPoints = users.length
             ? Math.round(users.reduce((sum, user) => sum + user.loyaltyPoints, 0) / users.length)
@@ -213,7 +209,7 @@ const Users = () => {
                 <div className="users-summary-card">
                     <div className="users-summary-icon"><UserRoundCog size={18} /></div>
                     <div>
-                        <span>Админ/менежер</span>
+                        <span>Backoffice эрхтэй</span>
                         <strong>{summary.admin.toLocaleString()}</strong>
                     </div>
                 </div>
@@ -254,8 +250,9 @@ const Users = () => {
                 <select className="form-select users-filter-select" value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}>
                     <option value="all">Бүх role</option>
                     <option value="customer">Customer</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
+                    {getAssignableRoles(roles).map((role) => (
+                        <option key={role.key} value={role.key}>{role.label}</option>
+                    ))}
                 </select>
 
                 <select className="form-select users-filter-select" value={tierFilter} onChange={(event) => setTierFilter(event.target.value)}>
@@ -308,14 +305,15 @@ const Users = () => {
                                 const byUid = totalSpentByUser[user.id.toLowerCase()] || 0;
                                 const byEmail = totalSpentByUser[user.email.toLowerCase()] || 0;
                                 const totalSpent = Math.max(byUid, byEmail);
+                                const roleInfo = getRoleInfo(user.role, roles);
 
                                 return (
                                     <tr key={user.id}>
                                         <td className="product-name-cell">{user.displayName || 'Нэр оруулаагүй'}</td>
                                         <td>{user.email || '-'}</td>
                                         <td>
-                                            <span className={`status-pill ${user.role === 'admin' ? 'inactive' : user.role === 'manager' ? 'processing' : 'active'}`}>
-                                                {user.role}
+                                            <span className={`status-pill ${user.role === 'customer' ? 'active' : 'processing'}`}>
+                                                {roleInfo.label}
                                             </span>
                                         </td>
                                         <td>
