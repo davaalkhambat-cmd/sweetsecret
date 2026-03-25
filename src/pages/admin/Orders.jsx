@@ -49,6 +49,7 @@ import {
     serverTimestamp,
     addDoc,
     deleteDoc,
+    Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -176,6 +177,12 @@ const getSellerAvatar = (seed = '', index = 0) => {
 
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+const getTodayDateValue = () => {
+    const today = new Date();
+    const timezoneOffsetMs = today.getTimezoneOffset() * 60 * 1000;
+    return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+};
+
 const renderHighlightedText = (value, query) => {
     const text = String(value ?? '');
     const normalizedQuery = String(query || '').trim();
@@ -222,6 +229,7 @@ const Orders = () => {
         customerName: '',
         phoneNumber: '',
         email: '',
+        orderDate: getTodayDateValue(),
         address: {
             zone: 'Улаанбаатар',
             city: 'Улаанбаатар',
@@ -956,19 +964,22 @@ const Orders = () => {
         e.preventDefault();
         if (newOrder.items.length === 0) return alert("Бараа сонгоно уу.");
         if (!newOrder.source) return alert("Захиалгын суваг сонгоно уу.");
+        if (!newOrder.orderDate) return alert("Захиалгын огноо сонгоно уу.");
 
         try {
             const totalAmount = calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType);
+            const createdAt = Timestamp.fromDate(new Date(`${newOrder.orderDate}T12:00:00`));
             await addDoc(collection(db, 'orders'), {
                 ...newOrder,
                 totalAmount,
-                createdAt: serverTimestamp(),
+                createdAt,
                 entryType: 'admin_manual',
                 createdBy: currentUser?.uid || 'admin'
             });
             setIsAddModalOpen(false);
             setNewOrder({
                 customerName: '', phoneNumber: '', email: '',
+                orderDate: getTodayDateValue(),
                 address: { zone: 'Улаанбаатар', city: 'Улаанбаатар', district: '', khoroo: '', fullAddress: '', additionalInfo: '' },
                 items: [], status: 'pending', deliveryType: 'delivery', paymentMethod: 'bank_transfer',
                 deliveryFee: 10000, discount: 0, discountType: 'amount', source: ''
@@ -1419,6 +1430,17 @@ const Orders = () => {
                                 <div className="form-group">
                                     <label>Утасны дугаар *</label>
                                     <input className="form-input" type="tel" value={newOrder.phoneNumber} onChange={e => setNewOrder({ ...newOrder, phoneNumber: e.target.value })} required />
+                                </div>
+                                <div className="form-group">
+                                    <label>Захиалгын огноо *</label>
+                                    <input
+                                        className="form-input"
+                                        type="date"
+                                        value={newOrder.orderDate}
+                                        max={getTodayDateValue()}
+                                        onChange={e => setNewOrder({ ...newOrder, orderDate: e.target.value })}
+                                        required
+                                    />
                                 </div>
                                 <div className="form-group-full">
                                     <label>Захиалгын суваг сонгох *</label>
