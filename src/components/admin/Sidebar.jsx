@@ -112,7 +112,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false })
                         const isOpen = sectionState[section.key] ?? true;
 
                         return (
-                            <div key={section.key} className={`sidebar-section ${isOpen ? 'open' : 'closed'}`}>
+                            <div key={section.key} className={`sidebar-section ${isOpen ? 'open' : 'closed'}`} data-section={section.key}>
                                 <button
                                     type="button"
                                     className="sidebar-section-toggle"
@@ -135,6 +135,7 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false })
                                             to={item.path}
                                             end={item.path === '/admin'}
                                             className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                                            data-section={section.key}
                                         >
                                             <span className="nav-icon">
                                                 {ICON_MAP[item.iconName] || <LayoutDashboard size={20} />}

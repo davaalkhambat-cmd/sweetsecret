@@ -412,8 +412,16 @@ export const ADMIN_MENU = [
     },
     {
         key: 'promotions',
-        title: 'Маркетинг',
+        title: 'Урамшуулалын код',
         path: '/admin/promotions',
+        section: 'growth',
+        requiredPermission: PERMISSIONS.VIEW_MARKETING,
+        iconName: 'BadgePercent',
+    },
+    {
+        key: 'social-business-suite',
+        title: 'Social Business Suite',
+        path: '/admin/social-business-suite',
         section: 'growth',
         requiredPermission: PERMISSIONS.VIEW_MARKETING,
         iconName: 'BadgePercent',

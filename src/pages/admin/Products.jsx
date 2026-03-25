@@ -141,6 +141,267 @@ const detectColumn = (headers, field) => {
     return headers.find((header) => candidates.includes(normalizeHeader(header))) || '';
 };
 
+const applyInlinePattern = (nodes, pattern, renderMatch) =>
+    nodes.flatMap((node, index) => {
+        if (typeof node !== 'string') return [node];
+
+        const matches = Array.from(node.matchAll(pattern));
+        if (!matches.length) return [node];
+
+        const parts = [];
+        let lastIndex = 0;
+
+        matches.forEach((match, matchIndex) => {
+            const start = match.index ?? 0;
+            if (start > lastIndex) {
+                parts.push(node.slice(lastIndex, start));
+            }
+            parts.push(renderMatch(match, `${index}-${matchIndex}`));
+            lastIndex = start + match[0].length;
+        });
+
+        if (lastIndex < node.length) {
+            parts.push(node.slice(lastIndex));
+        }
+
+        return parts;
+    });
+
+const renderRichTextInline = (value) => {
+    let nodes = [String(value || '')];
+
+    nodes = applyInlinePattern(nodes, /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (match, key) => (
+        <img key={`img-${key}`} src={match[2]} alt={match[1] || 'image'} className="rich-text-rendered-image" />
+    ));
+    nodes = applyInlinePattern(nodes, /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (match, key) => (
+        <a key={`link-${key}`} href={match[2]} target="_blank" rel="noreferrer">
+            {match[1]}
+        </a>
+    ));
+    nodes = applyInlinePattern(nodes, /\[color=(#[0-9a-fA-F]{3,8})\]([\s\S]+?)\[\/color\]/g, (match, key) => (
+        <span key={`color-${key}`} style={{ color: match[1] }}>
+            {renderRichTextInline(match[2])}
+        </span>
+    ));
+    nodes = applyInlinePattern(nodes, /\[bg=(#[0-9a-fA-F]{3,8})\]([\s\S]+?)\[\/bg\]/g, (match, key) => (
+        <mark key={`bg-${key}`} style={{ backgroundColor: match[1], padding: '0 0.2em', borderRadius: '0.25em' }}>
+            {renderRichTextInline(match[2])}
+        </mark>
+    ));
+    nodes = applyInlinePattern(nodes, /`([^`]+)`/g, (match, key) => (
+        <code key={`code-${key}`}>{match[1]}</code>
+    ));
+    nodes = applyInlinePattern(nodes, /\*\*([^*]+)\*\*/g, (match, key) => (
+        <strong key={`bold-${key}`}>{renderRichTextInline(match[1])}</strong>
+    ));
+    nodes = applyInlinePattern(nodes, /(?<!\*)\*([^*]+)\*(?!\*)/g, (match, key) => (
+        <em key={`italic-${key}`}>{renderRichTextInline(match[1])}</em>
+    ));
+    nodes = applyInlinePattern(nodes, /__([^_]+)__/g, (match, key) => (
+        <span key={`underline-${key}`} style={{ textDecoration: 'underline' }}>
+            {renderRichTextInline(match[1])}
+        </span>
+    ));
+    nodes = applyInlinePattern(nodes, /~~([^~]+)~~/g, (match, key) => (
+        <del key={`strike-${key}`}>{renderRichTextInline(match[1])}</del>
+    ));
+    nodes = applyInlinePattern(nodes, /\^\(([^)]+)\)/g, (match, key) => (
+        <sup key={`sup-${key}`}>{renderRichTextInline(match[1])}</sup>
+    ));
+    nodes = applyInlinePattern(nodes, /~\(([^)]+)\)/g, (match, key) => (
+        <sub key={`sub-${key}`}>{renderRichTextInline(match[1])}</sub>
+    ));
+
+    return nodes;
+};
+
+const renderRichTextContent = (value) => {
+    const lines = String(value || '').replace(/\r\n/g, '\n').split('\n');
+    const blocks = [];
+    let paragraphLines = [];
+    let listItems = [];
+    let listType = null;
+    let align = 'left';
+    let size = 'medium';
+
+    const flushParagraph = () => {
+        if (!paragraphLines.length) return;
+        blocks.push({
+            type: 'paragraph',
+            content: paragraphLines.join(' '),
+            align,
+            size,
+        });
+        paragraphLines = [];
+    };
+
+    const flushList = () => {
+        if (!listItems.length) return;
+        blocks.push({
+            type: listType,
+            items: [...listItems],
+            align,
+            size,
+        });
+        listItems = [];
+        listType = null;
+    };
+
+    lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+
+        if (!line) {
+            flushParagraph();
+            flushList();
+            return;
+        }
+
+        const alignMatch = line.match(/^\[Align:\s*(left|center|right)\]$/i);
+        if (alignMatch) {
+            flushParagraph();
+            flushList();
+            align = alignMatch[1].toLowerCase();
+            return;
+        }
+
+        const sizeMatch = line.match(/^\[Size:\s*(small|medium|large)\]$/i);
+        if (sizeMatch) {
+            flushParagraph();
+            flushList();
+            size = sizeMatch[1].toLowerCase();
+            return;
+        }
+
+        if (/^#\s+/.test(line)) {
+            flushParagraph();
+            flushList();
+            blocks.push({ type: 'title', content: line.replace(/^#\s+/, ''), align, size });
+            return;
+        }
+
+        if (/^##\s+/.test(line)) {
+            flushParagraph();
+            flushList();
+            blocks.push({ type: 'heading', content: line.replace(/^##\s+/, ''), align, size });
+            return;
+        }
+
+        if (/^>\s+/.test(line)) {
+            flushParagraph();
+            flushList();
+            blocks.push({ type: 'quote', content: line.replace(/^>\s+/, ''), align, size });
+            return;
+        }
+
+        const orderedMatch = line.match(/^\d+\.\s+(.+)$/);
+        if (orderedMatch) {
+            flushParagraph();
+            if (listType && listType !== 'ordered') {
+                flushList();
+            }
+            listType = 'ordered';
+            listItems.push(orderedMatch[1]);
+            return;
+        }
+
+        const unorderedMatch = line.match(/^-\s+(.+)$/);
+        if (unorderedMatch) {
+            flushParagraph();
+            if (listType && listType !== 'unordered') {
+                flushList();
+            }
+            listType = 'unordered';
+            listItems.push(unorderedMatch[1]);
+            return;
+        }
+
+        if (/^!\[[^\]]*\]\((https?:\/\/[^\s)]+)\)$/.test(line)) {
+            flushParagraph();
+            flushList();
+            blocks.push({ type: 'paragraph', content: line, align, size });
+            return;
+        }
+
+        paragraphLines.push(line);
+    });
+
+    flushParagraph();
+    flushList();
+
+    if (!blocks.length) {
+        return <p className="rich-text-empty">Тайлбарын preview энд харагдана.</p>;
+    }
+
+    return blocks.map((block, index) => {
+        const className = `rich-text-rendered rich-text-rendered--${block.size}`;
+        const style = { textAlign: block.align };
+
+        if (block.type === 'title') {
+            return (
+                <h2 key={`block-${index}`} className={`${className} rich-text-rendered-title`} style={style}>
+                    {renderRichTextInline(block.content)}
+                </h2>
+            );
+        }
+
+        if (block.type === 'heading') {
+            return (
+                <h3 key={`block-${index}`} className={`${className} rich-text-rendered-heading`} style={style}>
+                    {renderRichTextInline(block.content)}
+                </h3>
+            );
+        }
+
+        if (block.type === 'quote') {
+            return (
+                <blockquote key={`block-${index}`} className={`${className} rich-text-rendered-quote`} style={style}>
+                    {renderRichTextInline(block.content)}
+                </blockquote>
+            );
+        }
+
+        if (block.type === 'ordered' || block.type === 'unordered') {
+            const ListTag = block.type === 'ordered' ? 'ol' : 'ul';
+            return (
+                <ListTag key={`block-${index}`} className={`${className} rich-text-rendered-list`} style={style}>
+                    {block.items.map((item, itemIndex) => (
+                        <li key={`item-${itemIndex}`}>{renderRichTextInline(item)}</li>
+                    ))}
+                </ListTag>
+            );
+        }
+
+        return (
+            <p key={`block-${index}`} className={className} style={style}>
+                {renderRichTextInline(block.content)}
+            </p>
+        );
+    });
+};
+
+const stripDescriptionFormatting = (value) =>
+    String(value || '')
+        .replace(/\[color=#[0-9a-fA-F]{3,8}\]([\s\S]+?)\[\/color\]/g, '$1')
+        .replace(/\[bg=#[0-9a-fA-F]{3,8}\]([\s\S]+?)\[\/bg\]/g, '$1')
+        .replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, '$1 $2'.trim())
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, '$1')
+        .replace(/__([^_]+)__/g, '$1')
+        .replace(/~~([^~]+)~~/g, '$1')
+        .replace(/\^\(([^)]+)\)/g, '$1')
+        .replace(/~\(([^)]+)\)/g, '$1')
+        .replace(/^\[Align:\s*(left|center|right)\]\s*$/gim, '')
+        .replace(/^\[Size:\s*(small|medium|large)\]\s*$/gim, '')
+        .replace(/^##\s+/gim, '')
+        .replace(/^#\s+/gim, '')
+        .replace(/^>\s+/gim, '')
+        .replace(/^\d+\.\s+/gim, '')
+        .replace(/^-\s+/gim, '')
+        .replace(/^\<\s+/gim, '')
+        .trim();
+
 const toNumber = (value) => {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
     if (typeof value === 'string') {
@@ -329,6 +590,9 @@ const Products = () => {
     const [selectedImageFile, setSelectedImageFile] = useState(null);
     const [previewImageUrl, setPreviewImageUrl] = useState('');
     const descriptionTextareaRef = useRef(null);
+    const descriptionSelectionRef = useRef({ start: 0, end: 0 });
+    const descriptionHistoryRef = useRef([]);
+    const descriptionFutureRef = useRef([]);
     const [activeTab, setActiveTab] = useState('info');
     const [categoryDocs, setCategoryDocs] = useState([]);
     const [categoryLoading, setCategoryLoading] = useState(true);
@@ -539,6 +803,8 @@ const Products = () => {
 
     const handleOpenModal = (product = null) => {
         resetMessages();
+        descriptionHistoryRef.current = [];
+        descriptionFutureRef.current = [];
 
         if (product) {
             const primaryCategoryIds =
@@ -570,9 +836,14 @@ const Products = () => {
                 image: product.image || '',
             });
             setPreviewImageUrl(product.image || '');
+            descriptionSelectionRef.current = {
+                start: (product.description || '').length,
+                end: (product.description || '').length,
+            };
         } else {
             setNewProduct(initialFormState);
             setPreviewImageUrl('');
+            descriptionSelectionRef.current = { start: 0, end: 0 };
         }
 
         setSelectedImageFile(null);
@@ -585,6 +856,9 @@ const Products = () => {
         setNewProduct(initialFormState);
         setSelectedImageFile(null);
         setPreviewImageUrl('');
+        descriptionSelectionRef.current = { start: 0, end: 0 };
+        descriptionHistoryRef.current = [];
+        descriptionFutureRef.current = [];
         setIsSaving(false);
         setActiveTab('info');
         setCategoryDialog({
@@ -614,7 +888,40 @@ const Products = () => {
         setNewProduct((prev) => ({ ...prev, [name]: value }));
     };
 
-    const updateDescriptionValue = (nextValue, selectionStart, selectionEnd = selectionStart) => {
+    const syncDescriptionSelection = () => {
+        const textarea = descriptionTextareaRef.current;
+        if (!textarea) return descriptionSelectionRef.current;
+
+        const nextSelection = {
+            start: textarea.selectionStart || 0,
+            end: textarea.selectionEnd || 0,
+        };
+        descriptionSelectionRef.current = nextSelection;
+        return nextSelection;
+    };
+
+    const pushDescriptionHistory = (value) => {
+        const history = descriptionHistoryRef.current;
+        if (history[history.length - 1] === value) return;
+        history.push(value);
+        if (history.length > 100) {
+            history.shift();
+        }
+    };
+
+    const updateDescriptionValue = (nextValue, selectionStart, selectionEnd = selectionStart, options = {}) => {
+        const { skipHistory = false, clearFuture = true } = options;
+        if (!skipHistory) {
+            pushDescriptionHistory(newProduct.description || '');
+        }
+        if (clearFuture) {
+            descriptionFutureRef.current = [];
+        }
+
+        descriptionSelectionRef.current = {
+            start: selectionStart,
+            end: selectionEnd,
+        };
         setNewProduct((prev) => ({ ...prev, description: nextValue }));
 
         requestAnimationFrame(() => {
@@ -626,11 +933,7 @@ const Products = () => {
     };
 
     const wrapDescriptionSelection = (prefix, suffix = prefix, placeholder = 'text') => {
-        const textarea = descriptionTextareaRef.current;
-        if (!textarea) return;
-
-        const start = textarea.selectionStart || 0;
-        const end = textarea.selectionEnd || 0;
+        const { start, end } = syncDescriptionSelection();
         const value = newProduct.description || '';
         const selected = value.slice(start, end) || placeholder;
         const nextValue = `${value.slice(0, start)}${prefix}${selected}${suffix}${value.slice(end)}`;
@@ -641,11 +944,7 @@ const Products = () => {
     };
 
     const prefixDescriptionLines = (prefix, placeholder = 'text') => {
-        const textarea = descriptionTextareaRef.current;
-        if (!textarea) return;
-
-        const start = textarea.selectionStart || 0;
-        const end = textarea.selectionEnd || 0;
+        const { start, end } = syncDescriptionSelection();
         const value = newProduct.description || '';
         const selected = value.slice(start, end) || placeholder;
         const transformed = selected
@@ -657,14 +956,52 @@ const Products = () => {
     };
 
     const insertDescriptionBlock = (block, cursorOffset = block.length) => {
-        const textarea = descriptionTextareaRef.current;
-        if (!textarea) return;
-
-        const start = textarea.selectionStart || 0;
-        const end = textarea.selectionEnd || 0;
+        const { start, end } = syncDescriptionSelection();
         const value = newProduct.description || '';
         const nextValue = `${value.slice(0, start)}${block}${value.slice(end)}`;
         updateDescriptionValue(nextValue, start + cursorOffset);
+    };
+
+    const clearDescriptionFormatting = () => {
+        const { start, end } = syncDescriptionSelection();
+        const value = newProduct.description || '';
+        const selected = value.slice(start, end);
+        const baseText = selected || value;
+        const cleaned = stripDescriptionFormatting(baseText);
+
+        if (selected) {
+            const nextValue = `${value.slice(0, start)}${cleaned}${value.slice(end)}`;
+            updateDescriptionValue(nextValue, start, start + cleaned.length);
+            return;
+        }
+
+        updateDescriptionValue(cleaned, 0, cleaned.length);
+    };
+
+    const undoDescriptionChange = () => {
+        const history = descriptionHistoryRef.current;
+        if (!history.length) return;
+
+        const currentValue = newProduct.description || '';
+        const previousValue = history.pop();
+        descriptionFutureRef.current.push(currentValue);
+        updateDescriptionValue(previousValue, previousValue.length, previousValue.length, {
+            skipHistory: true,
+            clearFuture: false,
+        });
+    };
+
+    const redoDescriptionChange = () => {
+        const future = descriptionFutureRef.current;
+        if (!future.length) return;
+
+        const currentValue = newProduct.description || '';
+        const nextValue = future.pop();
+        pushDescriptionHistory(currentValue);
+        updateDescriptionValue(nextValue, nextValue.length, nextValue.length, {
+            skipHistory: true,
+            clearFuture: false,
+        });
     };
 
     const descriptionToolbarRows = [
@@ -677,7 +1014,7 @@ const Products = () => {
             { type: 'button', label: 'Strike', content: <span className="rich-text-symbol">S</span>, onClick: () => wrapDescriptionSelection('~~', '~~', 'strike') },
             { type: 'button', label: 'Numbered List', content: <ListOrdered size={16} />, onClick: () => prefixDescriptionLines('1. ', 'item') },
             { type: 'button', label: 'Bullet List', content: <List size={16} />, onClick: () => prefixDescriptionLines('- ', 'item') },
-            { type: 'button', label: 'Indent Left', content: <span className="rich-text-symbol">⇤</span>, onClick: () => prefixDescriptionLines('< ', 'text') },
+            { type: 'button', label: 'Indent Left', content: <span className="rich-text-symbol">⇤</span>, onClick: () => insertDescriptionBlock('\n[Align: left]\n') },
             { type: 'button', label: 'Indent Right', content: <span className="rich-text-symbol">⇥</span>, onClick: () => prefixDescriptionLines('> ', 'text') },
             { type: 'button', label: 'Superscript', content: <span className="rich-text-symbol">x²</span>, onClick: () => wrapDescriptionSelection('^(', ')', '2') },
             { type: 'button', label: 'Subscript', content: <span className="rich-text-symbol">x₂</span>, onClick: () => wrapDescriptionSelection('~(', ')', '2') },
@@ -692,9 +1029,9 @@ const Products = () => {
         [
             { type: 'button', label: 'Formula', content: <span className="rich-text-symbol">ƒx</span>, onClick: () => insertDescriptionBlock('{{ formula }}', 3) },
             { type: 'button', label: 'Code', content: <span className="rich-text-symbol">&lt;/&gt;</span>, onClick: () => wrapDescriptionSelection('`', '`', 'code') },
-            { type: 'button', label: 'Clear Format', content: <span className="rich-text-symbol">T×</span>, onClick: () => wrapDescriptionSelection('', '', 'text') },
-            { type: 'button', label: 'Undo', content: <Undo2 size={16} />, onClick: () => {} },
-            { type: 'button', label: 'Redo', content: <Redo2 size={16} />, onClick: () => {} },
+            { type: 'button', label: 'Clear Format', content: <span className="rich-text-symbol">T×</span>, onClick: clearDescriptionFormatting },
+            { type: 'button', label: 'Undo', content: <Undo2 size={16} />, onClick: undoDescriptionChange },
+            { type: 'button', label: 'Redo', content: <Redo2 size={16} />, onClick: redoDescriptionChange },
             { type: 'button', label: 'Align Center', content: <AlignCenter size={16} />, onClick: () => insertDescriptionBlock('\n[Align: center]\n') },
             { type: 'button', label: 'Align Right', content: <AlignRight size={16} />, onClick: () => insertDescriptionBlock('\n[Align: right]\n') },
             { type: 'button', label: 'Heading', content: <Heading2 size={16} />, onClick: () => prefixDescriptionLines('## ', 'Heading') },
@@ -1520,6 +1857,8 @@ const Products = () => {
                                                                     key={action.label}
                                                                     className="rich-text-select"
                                                                     defaultValue={action.label}
+                                                                    onMouseDown={syncDescriptionSelection}
+                                                                    onFocus={syncDescriptionSelection}
                                                                     onChange={(event) => {
                                                                         action.onChange(event.target.value);
                                                                         event.target.value = action.label;
@@ -1537,6 +1876,10 @@ const Products = () => {
                                                                     key={action.label}
                                                                     type="button"
                                                                     className="rich-text-tool"
+                                                                    onMouseDown={(event) => {
+                                                                        syncDescriptionSelection();
+                                                                        event.preventDefault();
+                                                                    }}
                                                                     onClick={action.onClick}
                                                                     title={action.label}
                                                                 >
@@ -1555,7 +1898,17 @@ const Products = () => {
                                                 placeholder="Дэлгэрэнгүй тайлбар оруулна уу"
                                                 value={newProduct.description}
                                                 onChange={handleInputChange}
+                                                onSelect={syncDescriptionSelection}
+                                                onClick={syncDescriptionSelection}
+                                                onKeyUp={syncDescriptionSelection}
+                                                onFocus={syncDescriptionSelection}
                                             ></textarea>
+                                            <div className="rich-text-preview">
+                                                <div className="rich-text-preview-label">Preview</div>
+                                                <div className="rich-text-preview-body">
+                                                    {renderRichTextContent(newProduct.description)}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1848,7 +2201,17 @@ const Products = () => {
                                 <span>Барааны мэдээлэл уншиж байна...</span>
                             </div>
                         ) : (
-                            <table>
+                            <table className="products-list-table">
+                                <colgroup>
+                                    <col className="products-col-index" />
+                                    <col className="products-col-name" />
+                                    <col className="products-col-sku" />
+                                    <col className="products-col-category" />
+                                    <col className="products-col-price" />
+                                    <col className="products-col-stock" />
+                                    <col className="products-col-status" />
+                                    <col className="products-col-actions" />
+                                </colgroup>
                                 <thead>
                                     <tr>
                                         <th>#</th>
@@ -1881,10 +2244,14 @@ const Products = () => {
                                                         </div>
                                                     </div>
                                                 </td>
-                                                <td>{product.sku || '-'}</td>
-                                                <td>{toDisplayList(getProductPrimaryNames(product)) || '-'}</td>
-                                                <td>{formatMoney(product.price)}</td>
-                                                <td>{product.stock.toLocaleString()} ш</td>
+                                                <td className="products-sku-cell" title={product.sku || '-'}>
+                                                    {product.sku || '-'}
+                                                </td>
+                                                <td className="products-category-cell" title={toDisplayList(getProductPrimaryNames(product)) || '-'}>
+                                                    {toDisplayList(getProductPrimaryNames(product)) || '-'}
+                                                </td>
+                                                <td className="products-number-cell">{formatMoney(product.price)}</td>
+                                                <td className="products-number-cell">{product.stock.toLocaleString()} ш</td>
                                                 <td>
                                                     <span className={`status-pill ${product.status === 'Active' ? 'active' : 'inactive'}`}>
                                                         {product.status}
@@ -2013,7 +2380,9 @@ const Products = () => {
                                         </div>
                                         <div className="product-view-meta-item product-view-meta-item-wide">
                                             <span>Дэлгэрэнгүй тайлбар</span>
-                                            <strong>{valueOrDash(viewingProduct.description)}</strong>
+                                            <div className="product-view-rich-text">
+                                                {renderRichTextContent(viewingProduct.description)}
+                                            </div>
                                         </div>
                                     </div>
                             </div>

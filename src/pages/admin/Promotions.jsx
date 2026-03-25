@@ -10,7 +10,7 @@ import {
     serverTimestamp,
     updateDoc,
 } from 'firebase/firestore';
-import { AlertTriangle, BadgePercent, Gift, LoaderCircle, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { AlertTriangle, BadgePercent, Gift, LoaderCircle, Pencil, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
 import { db } from '../../firebase';
 
 const couponInitial = {
@@ -34,6 +34,20 @@ const giftCardInitial = {
     status: 'active',
 };
 
+const promotionInitial = {
+    id: null,
+    title: '',
+    type: 'buy_x_get_y',
+    triggerProductId: '',
+    minQuantity: '1',
+    giftProductId: '',
+    giftQuantity: '1',
+    minOrderAmount: '',
+    startsAt: '',
+    endsAt: '',
+    isActive: true,
+};
+
 const normalizeCode = (value) => value.trim().toUpperCase().replace(/\s+/g, '');
 const toNumber = (value) => Number(String(value || '').replace(/[^\d.-]/g, '')) || 0;
 const toDateInput = (timestamp) => {
@@ -42,6 +56,20 @@ const toDateInput = (timestamp) => {
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${d.getFullYear()}-${month}-${day}`;
+};
+
+const getProductImage = (product) =>
+    product?.image || product?.images?.[0] || 'https://placehold.co/100x100?text=Product';
+
+const getPromotionErrorMessage = (error, fallbackMessage) => {
+    const errorCode = error?.code || '';
+    if (errorCode === 'permission-denied') {
+        return 'Firestore permission denied. `promotions` collection-ийн rules-ээ deploy хийгээгүй байна.';
+    }
+    if (errorCode === 'failed-precondition') {
+        return 'Firestore тохиргоо дутуу байна. Collection query эсвэл rule-ээ шалгана уу.';
+    }
+    return fallbackMessage;
 };
 
 const Promotions = () => {
@@ -53,12 +81,20 @@ const Promotions = () => {
 
     const [coupons, setCoupons] = useState([]);
     const [giftCards, setGiftCards] = useState([]);
+    const [promotionRules, setPromotionRules] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [triggerProductSearch, setTriggerProductSearch] = useState('');
+    const [giftProductSearch, setGiftProductSearch] = useState('');
+    const [isTriggerSearchOpen, setIsTriggerSearchOpen] = useState(false);
+    const [isGiftSearchOpen, setIsGiftSearchOpen] = useState(false);
     const [couponForm, setCouponForm] = useState(couponInitial);
     const [giftCardForm, setGiftCardForm] = useState(giftCardInitial);
+    const [promotionForm, setPromotionForm] = useState(promotionInitial);
 
     useEffect(() => {
         const couponQuery = query(collection(db, 'coupons'), orderBy('createdAt', 'desc'));
         const giftCardQuery = query(collection(db, 'giftCards'), orderBy('createdAt', 'desc'));
+        const promotionQuery = query(collection(db, 'promotions'), orderBy('createdAt', 'desc'));
 
         const unsubscribers = [
             onSnapshot(
@@ -115,6 +151,45 @@ const Promotions = () => {
                     setErrorMessage('Бэлгийн картын мэдээлэл уншихад алдаа гарлаа.');
                 }
             ),
+            onSnapshot(
+                promotionQuery,
+                (snapshot) => {
+                    setPromotionRules(
+                        snapshot.docs.map((docSnap) => {
+                            const data = docSnap.data();
+                            return {
+                                id: docSnap.id,
+                                title: data.title || '',
+                                type: data.type || 'buy_x_get_y',
+                                triggerProductId: data.triggerProductId || '',
+                                triggerProductName: data.triggerProductName || '',
+                                minQuantity: toNumber(data.minQuantity) || 1,
+                                giftProductId: data.giftProductId || '',
+                                giftProductName: data.giftProductName || '',
+                                giftQuantity: toNumber(data.giftQuantity) || 1,
+                                minOrderAmount: toNumber(data.minOrderAmount),
+                                isActive: Boolean(data.isActive),
+                                startsAt: data.startsAt || null,
+                                endsAt: data.endsAt || null,
+                                createdAtMs: data.createdAt?.toMillis?.() || 0,
+                            };
+                        })
+                    );
+                },
+                (error) => {
+                    console.error('Promotions snapshot error:', error);
+                    setErrorMessage('Автомат урамшууллын мэдээлэл уншихад алдаа гарлаа.');
+                }
+            ),
+            onSnapshot(
+                collection(db, 'products'),
+                (snapshot) => {
+                    setProducts(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+                },
+                (error) => {
+                    console.error('Products snapshot error:', error);
+                }
+            ),
         ];
 
         return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
@@ -138,6 +213,16 @@ const Promotions = () => {
             value: giftCards.reduce((sum, card) => sum + card.balance, 0),
         }),
         [giftCards]
+    );
+
+    const promotionStats = useMemo(
+        () => ({
+            total: promotionRules.length,
+            active: promotionRules.filter((promotion) => promotion.isActive).length,
+            buyGet: promotionRules.filter((promotion) => promotion.type === 'buy_x_get_y').length,
+            freeGift: promotionRules.filter((promotion) => promotion.type === 'free_gift_over_amount').length,
+        }),
+        [promotionRules]
     );
 
     const filteredCoupons = useMemo(
@@ -164,6 +249,21 @@ const Promotions = () => {
         [giftCards, searchTerm]
     );
 
+    const filteredPromotions = useMemo(
+        () =>
+            promotionRules.filter((promotion) => {
+                const q = searchTerm.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                    promotion.title.toLowerCase().includes(q) ||
+                    promotion.type.toLowerCase().includes(q) ||
+                    promotion.triggerProductName.toLowerCase().includes(q) ||
+                    promotion.giftProductName.toLowerCase().includes(q)
+                );
+            }),
+        [promotionRules, searchTerm]
+    );
+
     const handleCouponChange = (event) => {
         const { name, type, checked, value } = event.target;
         setCouponForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
@@ -174,8 +274,42 @@ const Promotions = () => {
         setGiftCardForm((prev) => ({ ...prev, [name]: value }));
     };
 
+    const handlePromotionChange = (event) => {
+        const { name, type, checked, value } = event.target;
+        setPromotionForm((prev) => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+    };
+
+    const selectedTriggerProduct = useMemo(
+        () => products.find((product) => product.id === promotionForm.triggerProductId) || null,
+        [products, promotionForm.triggerProductId]
+    );
+
+    const selectedGiftProduct = useMemo(
+        () => products.find((product) => product.id === promotionForm.giftProductId) || null,
+        [products, promotionForm.giftProductId]
+    );
+
+    const filteredTriggerProducts = useMemo(() => {
+        const q = triggerProductSearch.trim().toLowerCase();
+        if (!q) return products.slice(0, 8);
+        return products.filter((product) => product.name?.toLowerCase().includes(q)).slice(0, 8);
+    }, [products, triggerProductSearch]);
+
+    const filteredGiftProducts = useMemo(() => {
+        const q = giftProductSearch.trim().toLowerCase();
+        if (!q) return products.slice(0, 8);
+        return products.filter((product) => product.name?.toLowerCase().includes(q)).slice(0, 8);
+    }, [products, giftProductSearch]);
+
     const resetCouponForm = () => setCouponForm(couponInitial);
     const resetGiftCardForm = () => setGiftCardForm(giftCardInitial);
+    const resetPromotionForm = () => {
+        setPromotionForm(promotionInitial);
+        setTriggerProductSearch('');
+        setGiftProductSearch('');
+        setIsTriggerSearchOpen(false);
+        setIsGiftSearchOpen(false);
+    };
 
     const handleSaveCoupon = async (event) => {
         event.preventDefault();
@@ -217,7 +351,7 @@ const Promotions = () => {
             resetCouponForm();
         } catch (error) {
             console.error('Save coupon error:', error);
-            setErrorMessage('Купон хадгалах үед алдаа гарлаа.');
+            setErrorMessage(getPromotionErrorMessage(error, 'Купон хадгалах үед алдаа гарлаа.'));
         } finally {
             setIsSaving(false);
         }
@@ -262,7 +396,74 @@ const Promotions = () => {
             resetGiftCardForm();
         } catch (error) {
             console.error('Save gift card error:', error);
-            setErrorMessage('Бэлгийн карт хадгалах үед алдаа гарлаа.');
+            setErrorMessage(getPromotionErrorMessage(error, 'Бэлгийн карт хадгалах үед алдаа гарлаа.'));
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSavePromotion = async (event) => {
+        event.preventDefault();
+        setErrorMessage('');
+
+        const title = promotionForm.title.trim();
+        const triggerProduct = products.find((product) => product.id === promotionForm.triggerProductId);
+        const giftProduct = products.find((product) => product.id === promotionForm.giftProductId);
+        const minQuantity = Math.max(1, toNumber(promotionForm.minQuantity));
+        const giftQuantity = Math.max(1, toNumber(promotionForm.giftQuantity));
+        const minOrderAmount = toNumber(promotionForm.minOrderAmount);
+
+        if (!title) {
+            setErrorMessage('Урамшууллын нэр заавал оруулна.');
+            return;
+        }
+
+        if (!giftProduct) {
+            setErrorMessage('Бэлгэнд өгөх бүтээгдэхүүнээ сонгоно уу.');
+            return;
+        }
+
+        if (promotionForm.type === 'buy_x_get_y' && !triggerProduct) {
+            setErrorMessage('1+1 нөхцөлд trigger бүтээгдэхүүн сонгоно уу.');
+            return;
+        }
+
+        if (promotionForm.type === 'free_gift_over_amount' && minOrderAmount <= 0) {
+            setErrorMessage('Доод худалдан авалтын дүн 0-оос их байх ёстой.');
+            return;
+        }
+
+        setIsSaving(true);
+        const payload = {
+            title,
+            type: promotionForm.type,
+            triggerProductId: triggerProduct?.id || '',
+            triggerProductName: triggerProduct?.name || '',
+            minQuantity,
+            giftProductId: giftProduct.id,
+            giftProductName: giftProduct.name || '',
+            giftProductImage: getProductImage(giftProduct),
+            giftQuantity,
+            minOrderAmount,
+            isActive: Boolean(promotionForm.isActive),
+            startsAt: promotionForm.startsAt ? new Date(`${promotionForm.startsAt}T00:00:00`) : null,
+            endsAt: promotionForm.endsAt ? new Date(`${promotionForm.endsAt}T23:59:59`) : null,
+            updatedAt: serverTimestamp(),
+        };
+
+        try {
+            if (promotionForm.id) {
+                await updateDoc(doc(db, 'promotions', promotionForm.id), payload);
+            } else {
+                await addDoc(collection(db, 'promotions'), {
+                    ...payload,
+                    createdAt: serverTimestamp(),
+                });
+            }
+            resetPromotionForm();
+        } catch (error) {
+            console.error('Save promotion error:', error);
+            setErrorMessage(getPromotionErrorMessage(error, 'Автомат урамшуулал хадгалах үед алдаа гарлаа.'));
         } finally {
             setIsSaving(false);
         }
@@ -295,6 +496,25 @@ const Promotions = () => {
         setActiveTab('giftCards');
     };
 
+    const handleEditPromotion = (promotion) => {
+        setPromotionForm({
+            id: promotion.id,
+            title: promotion.title,
+            type: promotion.type,
+            triggerProductId: promotion.triggerProductId || '',
+            minQuantity: String(promotion.minQuantity || 1),
+            giftProductId: promotion.giftProductId || '',
+            giftQuantity: String(promotion.giftQuantity || 1),
+            minOrderAmount: String(promotion.minOrderAmount || ''),
+            startsAt: toDateInput(promotion.startsAt),
+            endsAt: toDateInput(promotion.endsAt),
+            isActive: promotion.isActive,
+        });
+        setTriggerProductSearch(promotion.triggerProductName || '');
+        setGiftProductSearch(promotion.giftProductName || '');
+        setActiveTab('rules');
+    };
+
     const handleDelete = async (collectionName, id) => {
         if (!window.confirm('Энэ мэдээллийг устгахдаа итгэлтэй байна уу?')) return;
         try {
@@ -305,12 +525,90 @@ const Promotions = () => {
         }
     };
 
+    const renderRuleDescription = (promotion) => {
+        if (promotion.type === 'buy_x_get_y') {
+            return `${promotion.triggerProductName || 'Trigger бараа'} ${promotion.minQuantity}+ авбал ${promotion.giftProductName || 'бэлэг бараа'} ${promotion.giftQuantity}ш үнэгүй`;
+        }
+        return `₮${promotion.minOrderAmount.toLocaleString()}-с дээш захиалгад ${promotion.giftProductName || 'бэлэг бараа'} ${promotion.giftQuantity}ш үнэгүй`;
+    };
+
+    const renderProductSearchField = ({
+        label,
+        searchValue,
+        setSearchValue,
+        isOpen,
+        setIsOpen,
+        productsToShow,
+        selectedProduct,
+        onSelect,
+    }) => (
+        <div className="promotions-product-picker">
+            <label>{label}</label>
+            <div className="product-search-container promotions-product-search">
+                <div className="input-with-icon">
+                    <Search size={16} className="field-icon" />
+                    <input
+                        className="form-input"
+                        type="text"
+                        placeholder="Бүтээгдэхүүн хайх..."
+                        value={searchValue}
+                        onFocus={() => setIsOpen(true)}
+                        onChange={(event) => {
+                            setSearchValue(event.target.value);
+                            setIsOpen(true);
+                        }}
+                    />
+                </div>
+                {selectedProduct && (
+                    <div className="promotion-selected-product">
+                        <img src={getProductImage(selectedProduct)} alt={selectedProduct.name} />
+                        <div>
+                            <strong>{selectedProduct.name}</strong>
+                            <span>{selectedProduct.code || selectedProduct.sku || 'Кодгүй бүтээгдэхүүн'}</span>
+                        </div>
+                    </div>
+                )}
+                {isOpen && (
+                    <div className="search-results-dropdown promotions-search-results">
+                        {productsToShow.length > 0 ? (
+                            productsToShow.map((product) => (
+                                <button
+                                    key={product.id}
+                                    type="button"
+                                    className="search-result-item promotions-search-result-item"
+                                    onClick={() => {
+                                        onSelect(product);
+                                        setSearchValue(product.name || '');
+                                        setIsOpen(false);
+                                    }}
+                                >
+                                    <div className="promotions-search-result-main">
+                                        <img src={getProductImage(product)} alt={product.name} />
+                                        <div>
+                                            <strong>{product.name}</strong>
+                                            <div className="p-stock">Үлдэгдэл: {product.stock || 0} ш</div>
+                                        </div>
+                                    </div>
+                                    <div className="p-price">₮{Number(product.price || product.salePrice || 0).toLocaleString()}</div>
+                                </button>
+                            ))
+                        ) : (
+                            <div className="search-result-item" style={{ justifyContent: 'center', color: '#999' }}>
+                                Ийм бүтээгдэхүүн олдсонгүй
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
     return (
         <div className="admin-page">
             <div className="page-header">
                 <div className="header-info">
                     <h1>Урамшуулал</h1>
-                    <p>Купон код, бэлгийн карт болон урамшууллын хэрэгслүүдийг удирдана.</p>
+                    <p>Купон код, бэлгийн карт болон захиалгад санал болгох автомат урамшууллыг удирдана.</p>
                 </div>
             </div>
 
@@ -330,15 +628,25 @@ const Promotions = () => {
                     <Gift size={16} />
                     <span>Бэлгийн карт</span>
                 </button>
+                <button className={`promotions-tab ${activeTab === 'rules' ? 'active' : ''}`} onClick={() => setActiveTab('rules')}>
+                    <Sparkles size={16} />
+                    <span>Автомат урамшуулал</span>
+                </button>
             </div>
 
             <div className="promotions-layout">
-                <div className="section-card">
+                <div className="section-card promotions-form-card">
                     <div className="search-box" style={{ marginBottom: '1rem' }}>
                         <Search size={18} />
                         <input
                             type="text"
-                            placeholder={activeTab === 'coupons' ? 'Купон хайх...' : 'Бэлгийн карт хайх...'}
+                            placeholder={
+                                activeTab === 'coupons'
+                                    ? 'Купон хайх...'
+                                    : activeTab === 'giftCards'
+                                        ? 'Бэлгийн карт хайх...'
+                                        : 'Автомат урамшуулал хайх...'
+                            }
                             value={searchTerm}
                             onChange={(event) => setSearchTerm(event.target.value)}
                         />
@@ -387,7 +695,7 @@ const Promotions = () => {
                                 </table>
                             </div>
                         </>
-                    ) : (
+                    ) : activeTab === 'giftCards' ? (
                         <>
                             <div className="promotions-mini-stats">
                                 <div className="promotion-stat-item"><span>Нийт</span><strong>{giftCardStats.total}</strong></div>
@@ -430,11 +738,59 @@ const Promotions = () => {
                                 </table>
                             </div>
                         </>
+                    ) : (
+                        <>
+                            <div className="promotions-mini-stats">
+                                <div className="promotion-stat-item"><span>Нийт</span><strong>{promotionStats.total}</strong></div>
+                                <div className="promotion-stat-item"><span>Идэвхтэй</span><strong>{promotionStats.active}</strong></div>
+                                <div className="promotion-stat-item"><span>1+1</span><strong>{promotionStats.buyGet}</strong></div>
+                                <div className="promotion-stat-item"><span>Threshold Gift</span><strong>{promotionStats.freeGift}</strong></div>
+                            </div>
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Нэр</th>
+                                            <th>Нөхцөл</th>
+                                            <th>Бэлэг</th>
+                                            <th>Төлөв</th>
+                                            <th>Үйлдэл</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {loading ? (
+                                            <tr><td colSpan={5}><LoaderCircle size={16} className="spin" /> Уншиж байна...</td></tr>
+                                        ) : filteredPromotions.length ? (
+                                            filteredPromotions.map((promotion) => (
+                                                <tr key={promotion.id}>
+                                                    <td className="product-name-cell">{promotion.title}</td>
+                                                    <td>{renderRuleDescription(promotion)}</td>
+                                                    <td>{promotion.giftProductName} x{promotion.giftQuantity}</td>
+                                                    <td><span className={`status-pill ${promotion.isActive ? 'active' : 'inactive'}`}>{promotion.isActive ? 'active' : 'inactive'}</span></td>
+                                                    <td className="actions-cell">
+                                                        <button className="action-icon edit" type="button" onClick={() => handleEditPromotion(promotion)}><Pencil size={15} /></button>
+                                                        <button className="action-icon delete" type="button" onClick={() => handleDelete('promotions', promotion.id)}><Trash2 size={15} /></button>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        ) : (
+                                            <tr><td colSpan={5}>Илэрц олдсонгүй</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </>
                     )}
                 </div>
 
                 <div className="section-card">
-                    <h3>{activeTab === 'coupons' ? 'Купон бүртгэх' : 'Бэлгийн карт бүртгэх'}</h3>
+                    <h3>
+                        {activeTab === 'coupons'
+                            ? 'Купон бүртгэх'
+                            : activeTab === 'giftCards'
+                                ? 'Бэлгийн карт бүртгэх'
+                                : 'Автомат урамшуулал бүртгэх'}
+                    </h3>
                     {activeTab === 'coupons' ? (
                         <form className="promotions-form" onSubmit={handleSaveCoupon}>
                             <label>Код<input name="code" value={couponForm.code} onChange={handleCouponChange} required /></label>
@@ -464,7 +820,7 @@ const Promotions = () => {
                                 <button type="button" className="filter-btn" onClick={resetCouponForm}>Цэвэрлэх</button>
                             </div>
                         </form>
-                    ) : (
+                    ) : activeTab === 'giftCards' ? (
                         <form className="promotions-form" onSubmit={handleSaveGiftCard}>
                             <label>Код<input name="code" value={giftCardForm.code} onChange={handleGiftCardChange} required /></label>
                             <label>Дүн<input name="amount" type="number" min="0" value={giftCardForm.amount} onChange={handleGiftCardChange} required /></label>
@@ -484,6 +840,65 @@ const Promotions = () => {
                                     <span>{isSaving ? 'Хадгалж байна...' : giftCardForm.id ? 'Шинэчлэх' : 'Хадгалах'}</span>
                                 </button>
                                 <button type="button" className="filter-btn" onClick={resetGiftCardForm}>Цэвэрлэх</button>
+                            </div>
+                        </form>
+                    ) : (
+                        <form className="promotions-form" onSubmit={handleSavePromotion}>
+                            <label>Урамшууллын нэр<input name="title" value={promotionForm.title} onChange={handlePromotionChange} required /></label>
+                            <label>Төрөл
+                                <select className="form-select" name="type" value={promotionForm.type} onChange={handlePromotionChange}>
+                                    <option value="buy_x_get_y">1+1 / Buy X Get Y</option>
+                                    <option value="free_gift_over_amount">Тодорхой дүнгээс дээш бэлэг</option>
+                                </select>
+                            </label>
+                            {promotionForm.type === 'buy_x_get_y' ? (
+                                <>
+                                    {renderProductSearchField({
+                                        label: 'Нөхцөл хангах бүтээгдэхүүн',
+                                        searchValue: triggerProductSearch,
+                                        setSearchValue: setTriggerProductSearch,
+                                        isOpen: isTriggerSearchOpen,
+                                        setIsOpen: setIsTriggerSearchOpen,
+                                        productsToShow: filteredTriggerProducts,
+                                        selectedProduct: selectedTriggerProduct,
+                                        onSelect: (product) => setPromotionForm((prev) => ({ ...prev, triggerProductId: product.id })),
+                                    })}
+                                    <label>Хэд авахаар идэвхжих вэ
+                                        <input name="minQuantity" type="number" min="1" value={promotionForm.minQuantity} onChange={handlePromotionChange} required />
+                                    </label>
+                                </>
+                            ) : (
+                                <label>Доод худалдан авалт
+                                    <input name="minOrderAmount" type="number" min="0" value={promotionForm.minOrderAmount} onChange={handlePromotionChange} required />
+                                </label>
+                            )}
+                            {renderProductSearchField({
+                                label: 'Бэлгэнд өгөх бүтээгдэхүүн',
+                                searchValue: giftProductSearch,
+                                setSearchValue: setGiftProductSearch,
+                                isOpen: isGiftSearchOpen,
+                                setIsOpen: setIsGiftSearchOpen,
+                                productsToShow: filteredGiftProducts,
+                                selectedProduct: selectedGiftProduct,
+                                onSelect: (product) => setPromotionForm((prev) => ({ ...prev, giftProductId: product.id })),
+                            })}
+                            <label>Бэлгийн тоо
+                                <input name="giftQuantity" type="number" min="1" value={promotionForm.giftQuantity} onChange={handlePromotionChange} required />
+                            </label>
+                            <div className="promotions-form-row">
+                                <label>Эхлэх огноо<input name="startsAt" type="date" value={promotionForm.startsAt} onChange={handlePromotionChange} /></label>
+                                <label>Дуусах огноо<input name="endsAt" type="date" value={promotionForm.endsAt} onChange={handlePromotionChange} /></label>
+                            </div>
+                            <label className="promotions-check">
+                                <input name="isActive" type="checkbox" checked={promotionForm.isActive} onChange={handlePromotionChange} />
+                                <span>Идэвхтэй</span>
+                            </label>
+                            <div className="promotions-actions">
+                                <button className="add-btn" type="submit" disabled={isSaving}>
+                                    <Plus size={16} />
+                                    <span>{isSaving ? 'Хадгалж байна...' : promotionForm.id ? 'Шинэчлэх' : 'Хадгалах'}</span>
+                                </button>
+                                <button type="button" className="filter-btn" onClick={resetPromotionForm}>Цэвэрлэх</button>
                             </div>
                         </form>
                     )}

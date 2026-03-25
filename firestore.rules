@@ -42,13 +42,11 @@ service cloud.firestore {
 
     // Public catalog
     match /products/{productId} {
-      allow read: if true;
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /catalog_categories/{categoryId} {
-      allow read: if true;
-      allow write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Private user profile
@@ -81,6 +79,10 @@ service cloud.firestore {
     }
 
     match /giftCards/{giftCardId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /promotions/{promotionId} {
       allow read, write: if isAdmin();
     }
 

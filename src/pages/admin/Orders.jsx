@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
     Search,
     Eye,
+    Pencil,
     Download,
     Filter,
     Plus,
@@ -183,6 +184,109 @@ const getTodayDateValue = () => {
     return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
 };
 
+const PROMOTION_LINE_PREFIX = 'promo-gift-';
+
+const isPromotionLineItem = (item) => Boolean(item?.promotionMeta?.isPromotionGift);
+const getBaseOrderItems = (items = []) => items.filter((item) => !isPromotionLineItem(item));
+
+const isPromotionActiveNow = (promotion, now = new Date()) => {
+    if (!promotion?.isActive) return false;
+    const startsAt = typeof promotion?.startsAt?.toDate === 'function' ? promotion.startsAt.toDate() : promotion?.startsAt ? new Date(promotion.startsAt) : null;
+    const endsAt = typeof promotion?.endsAt?.toDate === 'function' ? promotion.endsAt.toDate() : promotion?.endsAt ? new Date(promotion.endsAt) : null;
+    if (startsAt && startsAt > now) return false;
+    if (endsAt && endsAt < now) return false;
+    return true;
+};
+
+const buildPromotionGiftItem = (promotion, giftProduct, quantity) => ({
+    id: `${PROMOTION_LINE_PREFIX}${promotion.id}-${giftProduct.id}`,
+    productId: giftProduct.id,
+    name: giftProduct.name || promotion.giftProductName || 'Бэлэг бүтээгдэхүүн',
+    image: promotion.giftProductImage || giftProduct.image || giftProduct.images?.[0] || '',
+    code: giftProduct.code || giftProduct.sku || '',
+    price: 0,
+    originalPrice: Number(giftProduct.price || giftProduct.salePrice) || 0,
+    quantity,
+    promotionMeta: {
+        isPromotionGift: true,
+        promotionId: promotion.id,
+        promotionTitle: promotion.title || 'Урамшуулал',
+        giftProductId: giftProduct.id,
+    },
+});
+
+const evaluatePromotionForOrder = (promotion, items, products, subtotal) => {
+    if (!promotion) return null;
+    const giftProduct = products.find((product) => product.id === promotion.giftProductId);
+    if (!giftProduct) return null;
+
+    if (promotion.type === 'buy_x_get_y') {
+        const triggerItem = items.find((item) => item.id === promotion.triggerProductId || item.productId === promotion.triggerProductId);
+        const triggerQty = Number(triggerItem?.quantity) || 0;
+        const minQuantity = Math.max(1, Number(promotion.minQuantity) || 1);
+        if (triggerQty < minQuantity) return null;
+
+        const multiplier = Math.floor(triggerQty / minQuantity);
+        const giftQuantity = multiplier * Math.max(1, Number(promotion.giftQuantity) || 1);
+        if (giftQuantity <= 0) return null;
+
+        return {
+            ...promotion,
+            description: `${promotion.triggerProductName || triggerItem?.name || 'Сонгосон бараа'} ${triggerQty}ш байгаа тул ${promotion.giftProductName || giftProduct.name} ${giftQuantity}ш үнэгүй өгнө`,
+            giftProduct,
+            giftQuantity,
+        };
+    }
+
+    const minOrderAmount = Number(promotion.minOrderAmount) || 0;
+    if (subtotal < minOrderAmount || minOrderAmount <= 0) return null;
+
+    return {
+        ...promotion,
+        description: `Сагсны дүн ₮${minOrderAmount.toLocaleString()}-с давсан тул ${promotion.giftProductName || giftProduct.name} ${Math.max(1, Number(promotion.giftQuantity) || 1)}ш үнэгүй өгнө`,
+        giftProduct,
+        giftQuantity: Math.max(1, Number(promotion.giftQuantity) || 1),
+    };
+};
+
+const getDefaultOrderForm = () => ({
+    customerName: '',
+    phoneNumber: '',
+    email: '',
+    orderDate: getTodayDateValue(),
+    address: {
+        zone: 'Улаанбаатар',
+        city: 'Улаанбаатар',
+        district: '',
+        khoroo: '',
+        fullAddress: '',
+        additionalInfo: '',
+    },
+    items: [],
+    status: 'pending',
+    deliveryType: 'delivery',
+    paymentMethod: 'bank_transfer',
+    deliveryFee: 10000,
+    discount: 0,
+    discountType: 'amount',
+    source: '',
+    selectedPromotionId: '',
+    appliedPromotion: null,
+});
+
+const getOrderDateInputValue = (createdAt) => {
+    if (!createdAt) return getTodayDateValue();
+
+    const date = typeof createdAt?.toDate === 'function'
+        ? createdAt.toDate()
+        : new Date(createdAt);
+
+    if (Number.isNaN(date.getTime())) return getTodayDateValue();
+
+    const timezoneOffsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
+};
+
 const renderHighlightedText = (value, query) => {
     const text = String(value ?? '');
     const normalizedQuery = String(query || '').trim();
@@ -203,6 +307,7 @@ const Orders = () => {
     const { user: currentUser, isAdmin } = useAuth();
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
+    const [promotions, setPromotions] = useState([]);
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -212,6 +317,7 @@ const Orders = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [editingOrderId, setEditingOrderId] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [isDailySummaryOpen, setIsDailySummaryOpen] = useState(false);
@@ -225,28 +331,7 @@ const Orders = () => {
     const [isDailyNewsEditing, setIsDailyNewsEditing] = useState(false);
 
     // New Order Form State with Structured Address
-    const [newOrder, setNewOrder] = useState({
-        customerName: '',
-        phoneNumber: '',
-        email: '',
-        orderDate: getTodayDateValue(),
-        address: {
-            zone: 'Улаанбаатар',
-            city: 'Улаанбаатар',
-            district: '',
-            khoroo: '',
-            fullAddress: '',
-            additionalInfo: '',
-        },
-        items: [],
-        status: 'pending',
-        deliveryType: 'delivery',
-        paymentMethod: 'bank_transfer',
-        deliveryFee: 10000,
-        discount: 0,
-        discountType: 'amount', // 'amount' or 'percent'
-        source: '',
-    });
+    const [newOrder, setNewOrder] = useState(getDefaultOrderForm);
 
     const SOURCE_OPTIONS = [
         { key: 'facebook', label: 'Facebook', icon: <Facebook size={14} /> },
@@ -299,11 +384,15 @@ const Orders = () => {
             setProducts(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
         });
 
+        const unsubPromotions = onSnapshot(collection(db, 'promotions'), (snapshot) => {
+            setPromotions(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
+        });
+
         const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
             setUsers(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
         });
 
-        return () => { unsubOrders(); unsubProducts(); unsubUsers(); };
+        return () => { unsubOrders(); unsubProducts(); unsubPromotions(); unsubUsers(); };
     }, []);
 
     useEffect(() => {
@@ -712,10 +801,128 @@ const Orders = () => {
         }
     };
 
+    const resetOrderForm = () => {
+        setNewOrder(getDefaultOrderForm());
+        setEditingOrderId(null);
+        setProductSearch('');
+        setIsProductListOpen(false);
+    };
+
+    const openCreateModal = () => {
+        resetOrderForm();
+        setIsAddModalOpen(true);
+    };
+
+    const openEditModal = (order) => {
+        setEditingOrderId(order.id);
+        setNewOrder({
+            customerName: order.customerName || '',
+            phoneNumber: order.phoneNumber || '',
+            email: order.email || '',
+            orderDate: getOrderDateInputValue(order.createdAt),
+            address: {
+                zone: order.address?.zone || 'Улаанбаатар',
+                city: order.address?.city || 'Улаанбаатар',
+                district: order.address?.district || '',
+                khoroo: order.address?.khoroo || '',
+                fullAddress: order.address?.fullAddress || '',
+                additionalInfo: order.address?.additionalInfo || '',
+            },
+            items: (order.items || []).map((item) => ({
+                id: item.id,
+                productId: item.productId || item.id,
+                name: item.name,
+                image: item.image || '',
+                code: item.code || '',
+                price: Number(item.price) || 0,
+                quantity: Number(item.quantity) || 1,
+                originalPrice: Number(item.originalPrice) || 0,
+                promotionMeta: item.promotionMeta || null,
+            })),
+            status: order.status || 'pending',
+            deliveryType: order.deliveryType || 'delivery',
+            paymentMethod: order.paymentMethod || 'bank_transfer',
+            deliveryFee: Number(order.deliveryFee) || 0,
+            discount: Number(order.discount) || 0,
+            discountType: order.discountType || 'amount',
+            source: order.source || '',
+            selectedPromotionId: order.appliedPromotion?.id || '',
+            appliedPromotion: order.appliedPromotion || null,
+        });
+        setProductSearch('');
+        setIsProductListOpen(false);
+        setIsAddModalOpen(true);
+    };
+
     const searchableProducts = useMemo(() => {
         if (!productSearch) return [];
         return products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()));
     }, [products, productSearch]);
+
+    const baseOrderItems = useMemo(() => getBaseOrderItems(newOrder.items), [newOrder.items]);
+    const baseOrderSubtotal = useMemo(() => calculateSubtotalAmount(baseOrderItems), [baseOrderItems]);
+
+    const availablePromotions = useMemo(() => {
+        const now = new Date();
+        return promotions
+            .filter((promotion) => isPromotionActiveNow(promotion, now))
+            .map((promotion) => evaluatePromotionForOrder(promotion, baseOrderItems, products, baseOrderSubtotal))
+            .filter(Boolean);
+    }, [promotions, baseOrderItems, products, baseOrderSubtotal]);
+
+    useEffect(() => {
+        setNewOrder((currentOrder) => {
+            const selectedPromotionId = currentOrder.selectedPromotionId || '';
+            const matchingPromotion = availablePromotions.find((promotion) => promotion.id === selectedPromotionId);
+            const cleanItems = getBaseOrderItems(currentOrder.items);
+            const currentGiftItem = currentOrder.items.find((item) => isPromotionLineItem(item));
+
+            if (!matchingPromotion) {
+                if (!selectedPromotionId && cleanItems.length === currentOrder.items.length) {
+                    return currentOrder;
+                }
+                return {
+                    ...currentOrder,
+                    items: cleanItems,
+                    selectedPromotionId: '',
+                    appliedPromotion: null,
+                };
+            }
+
+            const giftItem = buildPromotionGiftItem(
+                matchingPromotion,
+                matchingPromotion.giftProduct,
+                matchingPromotion.giftQuantity
+            );
+
+            const currentApplied = currentOrder.appliedPromotion;
+            const isSamePromotionApplied =
+                currentApplied?.id === matchingPromotion.id &&
+                currentGiftItem?.promotionMeta?.promotionId === matchingPromotion.id &&
+                Number(currentGiftItem?.quantity) === Number(giftItem.quantity) &&
+                currentOrder.items.length === cleanItems.length + 1;
+
+            if (isSamePromotionApplied) {
+                return currentOrder;
+            }
+
+            return {
+                ...currentOrder,
+                items: [...cleanItems, giftItem],
+                appliedPromotion: {
+                    id: matchingPromotion.id,
+                    title: matchingPromotion.title,
+                    type: matchingPromotion.type,
+                    giftProductId: matchingPromotion.giftProductId,
+                    giftProductName: matchingPromotion.giftProductName,
+                    giftQuantity: matchingPromotion.giftQuantity,
+                    triggerProductId: matchingPromotion.triggerProductId || '',
+                    minQuantity: Number(matchingPromotion.minQuantity) || 0,
+                    minOrderAmount: Number(matchingPromotion.minOrderAmount) || 0,
+                },
+            };
+        });
+    }, [availablePromotions]);
 
     const getItemImage = (item) => {
         if (item.image) return item.image;
@@ -736,6 +943,7 @@ const Orders = () => {
                 ...newOrder,
                 items: [...newOrder.items, {
                     id: prod.id,
+                    productId: prod.id,
                     name: prod.name,
                     image: prod.image || prod.images?.[0] || '',
                     code: prod.code || prod.sku || '',
@@ -962,28 +1170,38 @@ const Orders = () => {
 
     const handleSubmitOrder = async (e) => {
         e.preventDefault();
-        if (newOrder.items.length === 0) return alert("Бараа сонгоно уу.");
+        if (baseOrderItems.length === 0) return alert("Бараа сонгоно уу.");
         if (!newOrder.source) return alert("Захиалгын суваг сонгоно уу.");
         if (!newOrder.orderDate) return alert("Захиалгын огноо сонгоно уу.");
 
         try {
             const totalAmount = calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType);
             const createdAt = Timestamp.fromDate(new Date(`${newOrder.orderDate}T12:00:00`));
-            await addDoc(collection(db, 'orders'), {
+            const payload = {
                 ...newOrder,
                 totalAmount,
                 createdAt,
                 entryType: 'admin_manual',
-                createdBy: currentUser?.uid || 'admin'
-            });
+                updatedAt: serverTimestamp(),
+                updatedBy: currentUser?.uid || 'admin',
+            };
+
+            if (editingOrderId) {
+                await updateDoc(doc(db, 'orders', editingOrderId), payload);
+                if (selectedOrder?.id === editingOrderId) {
+                    setSelectedOrder({
+                        ...selectedOrder,
+                        ...payload,
+                    });
+                }
+            } else {
+                await addDoc(collection(db, 'orders'), {
+                    ...payload,
+                    createdBy: currentUser?.uid || 'admin'
+                });
+            }
             setIsAddModalOpen(false);
-            setNewOrder({
-                customerName: '', phoneNumber: '', email: '',
-                orderDate: getTodayDateValue(),
-                address: { zone: 'Улаанбаатар', city: 'Улаанбаатар', district: '', khoroo: '', fullAddress: '', additionalInfo: '' },
-                items: [], status: 'pending', deliveryType: 'delivery', paymentMethod: 'bank_transfer',
-                deliveryFee: 10000, discount: 0, discountType: 'amount', source: ''
-            });
+            resetOrderForm();
         } catch (error) {
             console.error("Submit order error:", error);
             alert("Алдаа гарлаа.");
@@ -1002,7 +1220,7 @@ const Orders = () => {
                         <Download size={18} />
                         <span>Өдрийн нэгтгэл</span>
                     </button>
-                    <button className="staff-btn-primary" onClick={() => setIsAddModalOpen(true)}><Plus size={18} />Захиалга шивэх</button>
+                    <button className="staff-btn-primary" onClick={openCreateModal}><Plus size={18} />Захиалга шивэх</button>
                 </div>
             </div>
 
@@ -1401,6 +1619,7 @@ const Orders = () => {
                                     <td><span className={`status-pill ${STATUS_CONFIG[order.status]?.class || ''}`}>{STATUS_CONFIG[order.status]?.label || order.status}</span></td>
                                     <td className="actions-cell">
                                         <button className="action-icon view" title="Харах" onClick={() => { setSelectedOrder(order); setIsDetailsOpen(true); }}><Eye size={18} /></button>
+                                        <button className="action-icon edit" title="Засах" onClick={() => openEditModal(order)}><Pencil size={18} /></button>
                                         {isAdmin && (
                                             <button className="action-icon delete" title="Устгах" onClick={() => handleDeleteOrder(order.id)} style={{ color: '#DC2626' }}><Trash2 size={18} /></button>
                                         )}
@@ -1413,11 +1632,14 @@ const Orders = () => {
 
             {/* Enhanced Add Order Modal */}
             {isAddModalOpen && (
-                <div className="staff-confirm-overlay" onClick={() => setIsAddModalOpen(false)}>
+                <div className="staff-confirm-overlay" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}>
                     <div className="staff-role-modal order-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <div><h3>Шинэ захиалга бүртгэх</h3><p>Хэрэглэгч болон барааны мэдээллийг нарийвчлан оруулна уу.</p></div>
-                            <button className="close-btn" onClick={() => setIsAddModalOpen(false)}><X size={20} /></button>
+                            <div>
+                                <h3>{editingOrderId ? 'Захиалга засах' : 'Шинэ захиалга бүртгэх'}</h3>
+                                <p>{editingOrderId ? 'Захиалгын мэдээлэл болон бүтээгдэхүүнийг шинэчилнэ үү.' : 'Хэрэглэгч болон барааны мэдээллийг нарийвчлан оруулна уу.'}</p>
+                            </div>
+                            <button className="close-btn" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}><X size={20} /></button>
                         </div>
 
                         <form onSubmit={handleSubmitOrder} style={{ maxHeight: '75vh', overflowY: 'auto', paddingRight: '10px' }}>
@@ -1589,17 +1811,95 @@ const Orders = () => {
                                                 <img src={getItemImage(item)} alt="" style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover' }} />
                                                 <div>
                                                     <strong>{item.name}</strong>
+                                                    {isPromotionLineItem(item) && (
+                                                        <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700 }}>
+                                                            {item.promotionMeta?.promotionTitle || 'Урамшуулал'} • Бэлэг
+                                                        </div>
+                                                    )}
                                                     <div style={{ fontSize: '0.85rem', color: '#666' }}>
                                                         {item.quantity} x ₮{item.price.toLocaleString()}
+                                                        {isPromotionLineItem(item) && item.originalPrice > 0 ? ` • Үндсэн үнэ ₮${item.originalPrice.toLocaleString()}` : ''}
                                                     </div>
                                                 </div>
                                             </div>
                                             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                                <input type="number" min="1" value={item.quantity} onChange={e => setNewOrder({ ...newOrder, items: newOrder.items.map(i => i.id === item.id ? { ...i, quantity: Number(e.target.value) } : i) })} style={{ width: 60, padding: '4px 8px' }} />
-                                                <button type="button" onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })} style={{ color: '#DC2626' }}><Trash2 size={16} /></button>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={item.quantity}
+                                                    disabled={isPromotionLineItem(item)}
+                                                    onChange={e => setNewOrder({ ...newOrder, items: newOrder.items.map(i => i.id === item.id ? { ...i, quantity: Number(e.target.value) } : i) })}
+                                                    style={{ width: 60, padding: '4px 8px' }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={isPromotionLineItem(item)}
+                                                    onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })}
+                                                    style={{ color: isPromotionLineItem(item) ? '#94a3b8' : '#DC2626' }}
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
                                             </div>
                                         </div>
                                     ))}
+                            </div>
+
+                            <div className="modal-section-title"><Sparkles size={18} style={{ marginRight: 8 }} /> Санал болгох урамшуулал</div>
+                            <div style={{ display: 'grid', gap: '12px' }}>
+                                {availablePromotions.length === 0 ? (
+                                    <div style={{ border: '1px dashed #d1d5db', borderRadius: '14px', padding: '14px 16px', color: '#64748b', background: '#f8fafc' }}>
+                                        Одоогийн сагсанд таарах идэвхтэй автомат урамшуулал алга байна.
+                                    </div>
+                                ) : (
+                                    availablePromotions.map((promotion) => {
+                                        const isSelected = newOrder.selectedPromotionId === promotion.id;
+                                        return (
+                                            <button
+                                                key={promotion.id}
+                                                type="button"
+                                                onClick={() => setNewOrder({
+                                                    ...newOrder,
+                                                    selectedPromotionId: isSelected ? '' : promotion.id,
+                                                    appliedPromotion: isSelected ? null : newOrder.appliedPromotion,
+                                                })}
+                                                style={{
+                                                    textAlign: 'left',
+                                                    borderRadius: '16px',
+                                                    padding: '16px',
+                                                    border: `1px solid ${isSelected ? '#111827' : '#e5e7eb'}`,
+                                                    background: isSelected ? '#111827' : '#ffffff',
+                                                    color: isSelected ? '#ffffff' : '#111827',
+                                                    cursor: 'pointer',
+                                                }}
+                                            >
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+                                                    <div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                                            <strong>{promotion.title}</strong>
+                                                            <span style={{
+                                                                fontSize: '0.72rem',
+                                                                fontWeight: 700,
+                                                                padding: '3px 8px',
+                                                                borderRadius: '999px',
+                                                                background: isSelected ? 'rgba(255,255,255,0.16)' : '#ecfccb',
+                                                                color: isSelected ? '#fff' : '#3f6212',
+                                                            }}>
+                                                                {isSelected ? 'Идэвхтэй' : 'Санал болгож байна'}
+                                                            </span>
+                                                        </div>
+                                                        <div style={{ fontSize: '0.9rem', opacity: 0.88 }}>{promotion.description}</div>
+                                                    </div>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
+                                                        {promotion.giftProductName || promotion.giftProduct?.name} x{promotion.giftQuantity}
+                                                    </div>
+                                                </div>
+                                                <div style={{ marginTop: '10px', fontSize: '0.82rem', opacity: 0.8 }}>
+                                                    {isSelected ? 'Дахин дарвал урамшууллыг ашиглахгүй.' : 'Дарвал энэ урамшуулал захиалгад идэвхжинэ.'}
+                                                </div>
+                                            </button>
+                                        );
+                                    })
+                                )}
                             </div>
 
                             <div className="pricing-summary-grid">
@@ -1659,6 +1959,12 @@ const Orders = () => {
                                         <span>Хүргэлт:</span>
                                         <strong>+ ₮{newOrder.deliveryFee.toLocaleString()}</strong>
                                     </div>
+                                    {newOrder.appliedPromotion && (
+                                        <div className="summary-line" style={{ color: '#15803d' }}>
+                                            <span>Идэвхтэй урамшуулал:</span>
+                                            <strong>{newOrder.appliedPromotion.title}</strong>
+                                        </div>
+                                    )}
                                     {newOrder.discount > 0 && (
                                         <div className="summary-line discount">
                                             <span>Хөнгөлөлт {newOrder.discountType === 'percent' ? `(${newOrder.discount}%)` : ''}:</span>
@@ -1673,8 +1979,8 @@ const Orders = () => {
                             </div>
 
                             <div className="modal-actions">
-                                <button type="button" className="btn-cancel" onClick={() => setIsAddModalOpen(false)}>Болих</button>
-                                <button type="submit" className="btn-save">Захиалга бүртгэх</button>
+                                <button type="button" className="btn-cancel" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}>Болих</button>
+                                <button type="submit" className="btn-save">{editingOrderId ? 'Өөрчлөлт хадгалах' : 'Захиалга бүртгэх'}</button>
                             </div>
                         </form>
                     </div>
@@ -1906,6 +2212,12 @@ const Orders = () => {
                                             <div className="info-display-item" style={{ justifyContent: 'space-between', color: '#DC2626' }}>
                                                 <span>Хөнгөлөлт {selectedOrder.discountType === 'percent' ? `(${selectedOrder.discount}%)` : ''}</span>
                                                 <span>- ₮{getDiscountAmount(selectedOrder.items || [], selectedOrder.discount, selectedOrder.discountType).toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                        {selectedOrder.appliedPromotion?.title && (
+                                            <div className="info-display-item" style={{ justifyContent: 'space-between', color: '#15803D' }}>
+                                                <span>Идэвхтэй урамшуулал</span>
+                                                <span>{selectedOrder.appliedPromotion.title}</span>
                                             </div>
                                         )}
                                         <div className="pricing-line-item final" style={{ paddingBottom: 0 }}>

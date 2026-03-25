@@ -17,6 +17,7 @@ import Products from './pages/admin/Products';
 import Orders from './pages/admin/Orders';
 import Users from './pages/admin/Users';
 import Promotions from './pages/admin/Promotions';
+import SocialBusinessSuite from './pages/admin/SocialBusinessSuite';
 import AdminLogin from './pages/admin/AdminLogin';
 import StaffRoles from './pages/admin/StaffRoles';
 import Profile from './pages/Profile';
@@ -167,6 +168,11 @@ function App() {
                 <Route path="promotions" element={
                     <RequireAdmin requiredPermission={PERMISSIONS.VIEW_MARKETING}>
                         <Promotions />
+                    </RequireAdmin>
+                } />
+                <Route path="social-business-suite" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_MARKETING}>
+                        <SocialBusinessSuite />
                     </RequireAdmin>
                 } />
                 <Route path="staff-roles" element={
