@@ -8,6 +8,29 @@ import { MessageCircle, Minus, Send, Image as ImageIcon, Settings2, LoaderCircle
 
 const TEAM_CHAT_NICKNAME_KEY = 'sweet_secret_team_chat_nickname';
 
+const formatMessageTime = (createdAt) => {
+    try {
+        if (!createdAt) return '';
+        const date =
+            typeof createdAt?.toDate === 'function'
+                ? createdAt.toDate()
+                : new Date(createdAt);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleTimeString('mn-MN', {
+            hour: '2-digit',
+            minute: '2-digit',
+        });
+    } catch {
+        return '';
+    }
+};
+
+const getAvatarFallback = (name = '') => {
+    const trimmed = String(name || '').trim();
+    if (!trimmed) return '?';
+    return trimmed.charAt(0).toUpperCase();
+};
+
 const TeamChat = () => {
     const { user, userProfile } = useAuth();
     const [messages, setMessages] = useState([]);
@@ -215,19 +238,22 @@ const TeamChat = () => {
                         ) : (
                             messages.map((msg) => {
                                 const isMe = msg.userId === user?.uid;
+                                const messageTime = formatMessageTime(msg.createdAt);
+                                const displayName = isMe ? 'Та' : (msg.userName || 'Ажилтан');
                                 return (
                                     <div key={msg.id} className={`team-chat-msg ${isMe ? 'msg-me' : 'msg-other'}`}>
-                                        {!isMe && (
-                                            <div className="msg-avatar" title={msg.userName}>
-                                                {msg.userPhoto ? (
-                                                    <img src={msg.userPhoto} alt={msg.userName} />
-                                                ) : (
-                                                    <div className="msg-avatar-fallback">{msg.userName?.charAt(0)?.toUpperCase()}</div>
-                                                )}
-                                            </div>
-                                        )}
+                                        <div className="msg-avatar" title={displayName}>
+                                            {msg.userPhoto ? (
+                                                <img src={msg.userPhoto} alt={displayName} />
+                                            ) : (
+                                                <div className="msg-avatar-fallback">{getAvatarFallback(displayName)}</div>
+                                            )}
+                                        </div>
                                         <div className="msg-content-wrapper">
-                                            {!isMe && <span className="msg-name">{msg.userName}</span>}
+                                            <div className={`msg-meta ${isMe ? 'msg-meta-me' : ''}`}>
+                                                <span className="msg-name">{displayName}</span>
+                                                {messageTime ? <span className="msg-time">{messageTime}</span> : null}
+                                            </div>
                                             <div className={`msg-bubble ${msg.imageUrl ? 'msg-bubble-image' : ''}`}>
                                                 {msg.imageUrl ? (
                                                     <a href={msg.imageUrl} target="_blank" rel="noreferrer">
@@ -401,12 +427,12 @@ const TeamChat = () => {
                 }
                 .team-chat-body {
                     flex: 1;
-                    padding: 16px;
+                    padding: 16px 14px;
                     overflow-y: auto;
                     display: flex;
                     flex-direction: column;
-                    gap: 16px;
-                    background: #fff;
+                    gap: 12px;
+                    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
                 }
                 .team-chat-empty {
                     text-align: center;
@@ -417,20 +443,22 @@ const TeamChat = () => {
                 }
                 .team-chat-msg {
                     display: flex;
-                    gap: 10px;
-                    align-items: flex-end;
+                    gap: 8px;
+                    align-items: flex-start;
                 }
                 .team-chat-msg.msg-me {
                     justify-content: flex-end;
+                    flex-direction: row-reverse;
                 }
                 .msg-avatar {
-                    width: 32px;
-                    height: 32px;
+                    width: 30px;
+                    height: 30px;
                     flex-shrink: 0;
                     border-radius: 50%;
                     overflow: hidden;
-                    background: #E2E8F0;
-                    border: 1px solid #f1f5f9;
+                    background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 100%);
+                    border: 1px solid rgba(226, 232, 240, 0.95);
+                    box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05);
                 }
                 .msg-avatar img {
                     width: 100%;
@@ -443,30 +471,44 @@ const TeamChat = () => {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    font-weight: bold;
-                    color: #64748B;
-                    font-size: 0.85rem;
+                    font-weight: 700;
+                    color: #31508f;
+                    font-size: 0.78rem;
                 }
                 .msg-content-wrapper {
-                    max-width: 75%;
+                    max-width: min(78%, 230px);
                     display: flex;
                     flex-direction: column;
+                    gap: 4px;
                 }
                 .msg-me .msg-content-wrapper {
                     align-items: flex-end;
                 }
+                .msg-meta {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 0 4px;
+                }
+                .msg-meta-me {
+                    justify-content: flex-end;
+                }
                 .msg-name {
-                    font-size: 0.75rem;
+                    font-size: 0.72rem;
+                    color: #64748B;
+                    font-weight: 700;
+                }
+                .msg-time {
+                    font-size: 0.68rem;
                     color: #94A3B8;
-                    margin-bottom: 4px;
-                    padding-left: 4px;
                 }
                 .msg-bubble {
-                    padding: 10px 14px;
+                    padding: 10px 12px;
                     border-radius: 18px;
-                    font-size: 0.95rem;
-                    line-height: 1.4;
+                    font-size: 0.92rem;
+                    line-height: 1.45;
                     word-break: break-word;
+                    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06);
                 }
                 .msg-bubble-image {
                     padding: 0;
@@ -482,14 +524,15 @@ const TeamChat = () => {
                     border: 1px solid #E2E8F0;
                 }
                 .msg-other .msg-bubble {
-                    background: #F1F5F9;
+                    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
                     color: #1E293B;
-                    border-bottom-left-radius: 4px;
+                    border: 1px solid rgba(226, 232, 240, 0.95);
+                    border-top-left-radius: 8px;
                 }
                 .msg-me .msg-bubble {
-                    background: #0A7CFF;
+                    background: linear-gradient(135deg, #0A7CFF 0%, #2563eb 100%);
                     color: white;
-                    border-bottom-right-radius: 4px;
+                    border-top-right-radius: 8px;
                 }
                 .team-chat-typing-indicator {
                     display: flex;
