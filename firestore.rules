@@ -46,6 +46,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /catalog_categories/{categoryId} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+
     // Private user profile
     match /users/{userId} {
       allow read: if isOwner(userId) || isAdmin() || canReadOwnInvitation();

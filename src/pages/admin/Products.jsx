@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Plus,
     Search,
     Eye,
+    EyeOff,
     Edit2,
     Trash2,
     Filter,
@@ -17,6 +18,20 @@ import {
     Boxes,
     CircleDollarSign,
     AlertTriangle,
+    Bold,
+    Italic,
+    Underline,
+    List,
+    ListOrdered,
+    Quote,
+    Link2,
+    Heading2,
+    AlignLeft,
+    AlignCenter,
+    AlignRight,
+    Image as ImageIcon,
+    Undo2,
+    Redo2,
 } from 'lucide-react';
 import {
     addDoc,
@@ -40,6 +55,8 @@ const initialFormState = {
     brand: '',
     category: [],
     webCategories: [],
+    primaryCategoryIds: [],
+    subCategoryIds: [],
     price: '',
     salePrice: '',
     stock: '',
@@ -51,28 +68,45 @@ const initialFormState = {
 };
 
 const PRODUCT_IMPORT_STORAGE_KEY = 'products-import-meta';
-const CATEGORY_GROUPS = [
+const CATEGORY_COLLECTION = 'catalog_categories';
+const BRAND_OPTIONS = ['wettrust', 'svakom', 'smilemakers', 'hanamisui', 'intimate earth', 'intime organique', 'medicube'];
+const DEFAULT_CATEGORY_BLUEPRINT = [
     {
+        name: 'Онцлох',
         tone: 'blue',
-        items: ['Skincare', 'Serums', 'Masks', 'Toners', 'Makeup'],
+        items: ['VALENTINE SALE', 'МАРТ 8', 'Багц'],
     },
     {
+        name: 'Эмзэг хэсгийн арчилгаа',
         tone: 'green',
-        items: ['Cleanser', 'Cream', 'Essence', 'Sun care', 'Body care'],
+        items: [
+            'Эмзэг хэсгийн цайруулах бүтээгдэхүүн',
+            'Эмзэг хэсгийн цэвэрлэх бүтээгдэхүүн',
+            'Үтрээний серум',
+            'Пробиотиктой саван',
+            'Саван',
+            'Сарын тэмдэг',
+        ],
     },
-];
-const WEB_CATEGORY_GROUPS = [
     {
-        tone: 'blue',
-        items: ['VALENTINE SALE', 'МАРТ 8', 'Багц', 'Эмзэг хэсгийн цайруулах бүтээгдэхүүн', 'Эмзэг хэсгийн цэвэрлэх бүтээгдэхүүн'],
-    },
-    {
+        name: 'Цэвэрлэгээ',
         tone: 'green',
-        items: ['Цайруулах серум', 'Цайруулах тос', 'Гелэн саван', 'Хөөсөн саван', 'Хатуу саван', 'Тоёёхон (+18)', 'Тоёёхонууд'],
+        items: ['Гелэн саван', 'Хөөсөн саван', 'Хатуу саван'],
     },
     {
+        name: 'Цайруулах арчилгаа',
         tone: 'blue',
-        items: ['Үтрээний серум', 'Пробиотиктой саван', 'Саван', 'Чийгшүүлэгч', 'Чапгалах бүтээгдэхүүн', 'Нүүрний гоо сайхан', 'Бусад', 'Сарын тэмдэг', 'Бие арчилгаа', 'Ном'],
+        items: ['Цайруулах серум', 'Цайруулах тос', 'Чапгалах бүтээгдэхүүн'],
+    },
+    {
+        name: 'Насанд хүрэгчдийн цэс',
+        tone: 'blue',
+        items: ['Тоёёхон (+18)', 'Тоёёхонууд'],
+    },
+    {
+        name: 'Бусад',
+        tone: 'green',
+        items: ['Чийгшүүлэгч', 'Нүүрний гоо сайхан', 'Бусад', 'Бие арчилгаа', 'Ном'],
     },
 ];
 
@@ -150,6 +184,98 @@ const toStringList = (value) => {
 };
 
 const toDisplayList = (value) => toStringList(value).join(', ');
+const formatNumberInput = (value) => {
+    const digits = String(value || '').replace(/[^\d]/g, '');
+    if (!digits) return '';
+    return Number(digits).toLocaleString('en-US');
+};
+
+const slugifyName = (value) =>
+    String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\w\u0400-\u04FF-]+/g, '')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+
+const buildFallbackCategoryDocs = () => {
+    const docs = [];
+
+    DEFAULT_CATEGORY_BLUEPRINT.forEach((group, groupIndex) => {
+        const primaryId = `default-primary-${slugifyName(group.name) || groupIndex}`;
+        docs.push({
+            id: primaryId,
+            name: group.name,
+            type: 'primary',
+            parentId: '',
+            tone: group.tone,
+            active: true,
+            order: groupIndex,
+        });
+
+        group.items.forEach((item, itemIndex) => {
+            docs.push({
+                id: `default-sub-${slugifyName(group.name)}-${slugifyName(item) || itemIndex}`,
+                name: item,
+                type: 'sub',
+                parentId: primaryId,
+                tone: group.tone,
+                active: true,
+                order: itemIndex,
+            });
+        });
+    });
+
+    return docs;
+};
+
+const FALLBACK_CATEGORY_DOCS = buildFallbackCategoryDocs();
+
+const sortCategoryDocs = (rows) =>
+    [...rows].sort((a, b) => {
+        if ((a.order ?? 0) !== (b.order ?? 0)) return (a.order ?? 0) - (b.order ?? 0);
+        return String(a.name || '').localeCompare(String(b.name || ''), 'mn');
+    });
+
+const FlatCategorySelectionList = ({
+    primaryItems,
+    subItemsByParent,
+    selectedPrimaryIds,
+    selectedSubIds,
+    onTogglePrimary,
+    onToggleSub,
+}) => (
+    <div className="web-category-list category-flat-list">
+        {primaryItems.flatMap((primary) => {
+            const primaryChecked = selectedPrimaryIds.includes(primary.id);
+            const primaryRow = (
+                <label className="web-category-row category-flat-row" key={primary.id}>
+                    <div className="web-category-row-left">
+                        <span className="web-category-marker blue"></span>
+                        <span className={`web-category-chip ${primaryChecked ? 'selected' : ''}`}>{primary.name}</span>
+                    </div>
+                    <input type="checkbox" checked={primaryChecked} onChange={() => onTogglePrimary(primary.id)} />
+                </label>
+            );
+
+            const subRows = (subItemsByParent.get(primary.id) || []).map((item) => {
+                const checked = selectedSubIds.includes(item.id);
+                return (
+                    <label className="web-category-row category-flat-row category-flat-row-sub" key={item.id}>
+                        <div className="web-category-row-left">
+                            <span className="web-category-marker green"></span>
+                            <span className={`web-category-chip ${checked ? 'selected' : ''}`}>{item.name}</span>
+                        </div>
+                        <input type="checkbox" checked={checked} onChange={() => onToggleSub(item.id)} />
+                    </label>
+                );
+            });
+
+            return [primaryRow, ...subRows];
+        })}
+    </div>
+);
 
 const mapImportedProducts = (rows) => {
     if (!rows.length) return [];
@@ -202,7 +328,19 @@ const Products = () => {
     const [viewingProduct, setViewingProduct] = useState(null);
     const [selectedImageFile, setSelectedImageFile] = useState(null);
     const [previewImageUrl, setPreviewImageUrl] = useState('');
+    const descriptionTextareaRef = useRef(null);
     const [activeTab, setActiveTab] = useState('info');
+    const [categoryDocs, setCategoryDocs] = useState([]);
+    const [categoryLoading, setCategoryLoading] = useState(true);
+    const [categoryDialog, setCategoryDialog] = useState({
+        open: false,
+        mode: 'create-primary',
+        itemId: '',
+        parentId: '',
+        name: '',
+        active: true,
+    });
+    const [managerBusy, setManagerBusy] = useState(false);
     const [importMeta, setImportMeta] = useState(() => {
         try {
             if (typeof window === 'undefined') return null;
@@ -224,6 +362,47 @@ const Products = () => {
 
     useEffect(() => {
         const unsubscribe = onSnapshot(
+            collection(db, CATEGORY_COLLECTION),
+            (snapshot) => {
+                const rows = sortCategoryDocs(
+                    snapshot.docs.map((categoryDoc) => {
+                        const data = categoryDoc.data();
+                        return {
+                            id: categoryDoc.id,
+                            name: data.name || '',
+                            type: data.type || 'sub',
+                            parentId: data.parentId || '',
+                            tone: data.tone || 'blue',
+                            active: data.active !== false,
+                            order: Number(data.order || 0),
+                        };
+                    })
+                );
+                setCategoryDocs(rows);
+                setCategoryLoading(false);
+            },
+            (error) => {
+                console.error('Category snapshot error:', error);
+                setCategoryLoading(false);
+                setFeedback((prev) =>
+                    prev.type === 'error'
+                        ? prev
+                        : {
+                              type: 'error',
+                              message:
+                                  error.code === 'permission-denied'
+                                      ? 'Ангиллын мэдээлэл унших эрх хүрэлцэхгүй байна.'
+                                      : 'Ангиллын мэдээлэл татахад алдаа гарлаа.',
+                          }
+                );
+            }
+        );
+
+        return unsubscribe;
+    }, []);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(
             collection(db, 'products'),
             (snapshot) => {
                 const rows = snapshot.docs
@@ -237,6 +416,8 @@ const Products = () => {
                             brand: data.brand || '',
                             category: toStringList(data.category),
                             webCategories: toStringList(data.webCategories),
+                            primaryCategoryIds: toStringList(data.primaryCategoryIds),
+                            subCategoryIds: toStringList(data.subCategoryIds),
                             price: Number(data.price || 0),
                             salePrice: Number(data.salePrice || 0),
                             stock: Number(data.stock || 0),
@@ -270,6 +451,60 @@ const Products = () => {
         return unsubscribe;
     }, []);
 
+    const availableCategoryDocs = categoryDocs.length ? categoryDocs : FALLBACK_CATEGORY_DOCS;
+
+    const primaryCategories = useMemo(
+        () => sortCategoryDocs(availableCategoryDocs.filter((item) => item.type === 'primary')),
+        [availableCategoryDocs]
+    );
+
+    const subCategories = useMemo(
+        () => sortCategoryDocs(availableCategoryDocs.filter((item) => item.type === 'sub')),
+        [availableCategoryDocs]
+    );
+
+    const categoryMap = useMemo(
+        () => new Map(availableCategoryDocs.map((item) => [item.id, item])),
+        [availableCategoryDocs]
+    );
+
+    const subCategoriesByParent = useMemo(() => {
+        const grouped = new Map();
+        subCategories.forEach((item) => {
+            const list = grouped.get(item.parentId) || [];
+            list.push(item);
+            grouped.set(item.parentId, list);
+        });
+        return grouped;
+    }, [subCategories]);
+
+    const resolveNamesFromIds = (ids, fallbackNames = []) => {
+        const resolved = ids.map((id) => categoryMap.get(id)?.name).filter(Boolean);
+        return resolved.length ? resolved : toStringList(fallbackNames);
+    };
+
+    const resolveIdsFromNames = (names, type) => {
+        const normalizedNames = toStringList(names).map((item) => normalizeValue(item));
+        return availableCategoryDocs
+            .filter((item) => item.type === type && normalizedNames.includes(normalizeValue(item.name)))
+            .map((item) => item.id);
+    };
+
+    const getProductPrimaryNames = (product) => resolveNamesFromIds(product.primaryCategoryIds || [], product.category);
+    const getProductSubNames = (product) => resolveNamesFromIds(product.subCategoryIds || [], product.webCategories);
+
+    const categoryManagerRows = useMemo(
+        () =>
+            primaryCategories.flatMap((primary) => [
+                primary,
+                ...(subCategoriesByParent.get(primary.id) || []).map((item) => ({
+                    ...item,
+                    primaryName: primary.name,
+                })),
+            ]),
+        [primaryCategories, subCategoriesByParent]
+    );
+
     const analytics = useMemo(() => {
         const totalProducts = products.length;
         const totalUnits = products.reduce((sum, item) => sum + item.stock, 0);
@@ -285,13 +520,13 @@ const Products = () => {
         if (!keyword) return products;
 
         return products.filter((product) =>
-            [product.name, product.sku, toDisplayList(product.category), product.status].some((value) =>
+            [product.name, product.sku, toDisplayList(getProductPrimaryNames(product)), toDisplayList(getProductSubNames(product)), product.status].some((value) =>
                 String(value || '')
                     .toLowerCase()
                     .includes(keyword)
             )
         );
-    }, [products, searchTerm]);
+    }, [products, searchTerm, categoryMap]);
 
     const persistImportMeta = (meta) => {
         setImportMeta(meta);
@@ -306,17 +541,28 @@ const Products = () => {
         resetMessages();
 
         if (product) {
+            const primaryCategoryIds =
+                toStringList(product.primaryCategoryIds).length
+                    ? toStringList(product.primaryCategoryIds)
+                    : resolveIdsFromNames(product.category, 'primary');
+            const subCategoryIds =
+                toStringList(product.subCategoryIds).length
+                    ? toStringList(product.subCategoryIds)
+                    : resolveIdsFromNames(product.webCategories, 'sub');
+
             setNewProduct({
                 id: product.id,
                 name: product.name,
                 sku: product.sku || '',
                 vatCode: product.vatCode || '',
                 brand: product.brand || '',
-                category: toStringList(product.category),
-                webCategories: toStringList(product.webCategories),
-                price: String(product.price),
-                salePrice: product.salePrice ? String(product.salePrice) : '',
-                stock: String(product.stock),
+                category: resolveNamesFromIds(primaryCategoryIds, product.category),
+                webCategories: resolveNamesFromIds(subCategoryIds, product.webCategories),
+                primaryCategoryIds,
+                subCategoryIds,
+                price: formatNumberInput(product.price),
+                salePrice: product.salePrice ? formatNumberInput(product.salePrice) : '',
+                stock: formatNumberInput(product.stock),
                 status: product.status,
                 youtubeUrl: product.youtubeUrl || '',
                 shortDescription: product.shortDescription || '',
@@ -341,6 +587,14 @@ const Products = () => {
         setPreviewImageUrl('');
         setIsSaving(false);
         setActiveTab('info');
+        setCategoryDialog({
+            open: false,
+            mode: 'create-primary',
+            itemId: '',
+            parentId: '',
+            name: '',
+            active: true,
+        });
     };
 
     const handleOpenViewModal = (product) => {
@@ -353,8 +607,99 @@ const Products = () => {
 
     const handleInputChange = (event) => {
         const { name, value } = event.target;
+        if (['price', 'salePrice', 'stock'].includes(name)) {
+            setNewProduct((prev) => ({ ...prev, [name]: formatNumberInput(value) }));
+            return;
+        }
         setNewProduct((prev) => ({ ...prev, [name]: value }));
     };
+
+    const updateDescriptionValue = (nextValue, selectionStart, selectionEnd = selectionStart) => {
+        setNewProduct((prev) => ({ ...prev, description: nextValue }));
+
+        requestAnimationFrame(() => {
+            const textarea = descriptionTextareaRef.current;
+            if (!textarea) return;
+            textarea.focus();
+            textarea.setSelectionRange(selectionStart, selectionEnd);
+        });
+    };
+
+    const wrapDescriptionSelection = (prefix, suffix = prefix, placeholder = 'text') => {
+        const textarea = descriptionTextareaRef.current;
+        if (!textarea) return;
+
+        const start = textarea.selectionStart || 0;
+        const end = textarea.selectionEnd || 0;
+        const value = newProduct.description || '';
+        const selected = value.slice(start, end) || placeholder;
+        const nextValue = `${value.slice(0, start)}${prefix}${selected}${suffix}${value.slice(end)}`;
+        const nextSelectionStart = start + prefix.length;
+        const nextSelectionEnd = start + prefix.length + selected.length;
+
+        updateDescriptionValue(nextValue, nextSelectionStart, nextSelectionEnd);
+    };
+
+    const prefixDescriptionLines = (prefix, placeholder = 'text') => {
+        const textarea = descriptionTextareaRef.current;
+        if (!textarea) return;
+
+        const start = textarea.selectionStart || 0;
+        const end = textarea.selectionEnd || 0;
+        const value = newProduct.description || '';
+        const selected = value.slice(start, end) || placeholder;
+        const transformed = selected
+            .split('\n')
+            .map((line) => `${prefix}${line}`.trimEnd())
+            .join('\n');
+        const nextValue = `${value.slice(0, start)}${transformed}${value.slice(end)}`;
+        updateDescriptionValue(nextValue, start, start + transformed.length);
+    };
+
+    const insertDescriptionBlock = (block, cursorOffset = block.length) => {
+        const textarea = descriptionTextareaRef.current;
+        if (!textarea) return;
+
+        const start = textarea.selectionStart || 0;
+        const end = textarea.selectionEnd || 0;
+        const value = newProduct.description || '';
+        const nextValue = `${value.slice(0, start)}${block}${value.slice(end)}`;
+        updateDescriptionValue(nextValue, start + cursorOffset);
+    };
+
+    const descriptionToolbarRows = [
+        [
+            { type: 'select', label: 'Medium', options: ['Small', 'Medium', 'Large'], onChange: (value) => insertDescriptionBlock(`\n[Size: ${value}]\n`) },
+            { type: 'select', label: 'Normal', options: ['Normal', 'Heading', 'Title'], onChange: (value) => value === 'Normal' ? insertDescriptionBlock('\n') : prefixDescriptionLines(value === 'Title' ? '# ' : '## ', value) },
+            { type: 'button', label: 'Bold', content: <Bold size={16} />, onClick: () => wrapDescriptionSelection('**', '**', 'bold') },
+            { type: 'button', label: 'Italic', content: <Italic size={16} />, onClick: () => wrapDescriptionSelection('*', '*', 'italic') },
+            { type: 'button', label: 'Underline', content: <Underline size={16} />, onClick: () => wrapDescriptionSelection('__', '__', 'underline') },
+            { type: 'button', label: 'Strike', content: <span className="rich-text-symbol">S</span>, onClick: () => wrapDescriptionSelection('~~', '~~', 'strike') },
+            { type: 'button', label: 'Numbered List', content: <ListOrdered size={16} />, onClick: () => prefixDescriptionLines('1. ', 'item') },
+            { type: 'button', label: 'Bullet List', content: <List size={16} />, onClick: () => prefixDescriptionLines('- ', 'item') },
+            { type: 'button', label: 'Indent Left', content: <span className="rich-text-symbol">⇤</span>, onClick: () => prefixDescriptionLines('< ', 'text') },
+            { type: 'button', label: 'Indent Right', content: <span className="rich-text-symbol">⇥</span>, onClick: () => prefixDescriptionLines('> ', 'text') },
+            { type: 'button', label: 'Superscript', content: <span className="rich-text-symbol">x²</span>, onClick: () => wrapDescriptionSelection('^(', ')', '2') },
+            { type: 'button', label: 'Subscript', content: <span className="rich-text-symbol">x₂</span>, onClick: () => wrapDescriptionSelection('~(', ')', '2') },
+            { type: 'button', label: 'Quote', content: <Quote size={16} />, onClick: () => prefixDescriptionLines('> ', 'quote') },
+            { type: 'button', label: 'Paragraph', content: <span className="rich-text-symbol">¶</span>, onClick: () => insertDescriptionBlock('\n\n') },
+            { type: 'button', label: 'Align Left', content: <AlignLeft size={16} />, onClick: () => insertDescriptionBlock('\n[Align: left]\n') },
+            { type: 'button', label: 'Text Color', content: <span className="rich-text-symbol">A</span>, onClick: () => insertDescriptionBlock('[color=#000000]text[/color]', 16) },
+            { type: 'button', label: 'Highlight', content: <span className="rich-text-symbol rich-text-highlight-symbol">A</span>, onClick: () => insertDescriptionBlock('[bg=#FFF3A3]text[/bg]', 14) },
+            { type: 'button', label: 'Link', content: <Link2 size={16} />, onClick: () => insertDescriptionBlock('[text](https://)', 1) },
+            { type: 'button', label: 'Image', content: <ImageIcon size={16} />, onClick: () => insertDescriptionBlock('![alt](https://image-url)', 2) },
+        ],
+        [
+            { type: 'button', label: 'Formula', content: <span className="rich-text-symbol">ƒx</span>, onClick: () => insertDescriptionBlock('{{ formula }}', 3) },
+            { type: 'button', label: 'Code', content: <span className="rich-text-symbol">&lt;/&gt;</span>, onClick: () => wrapDescriptionSelection('`', '`', 'code') },
+            { type: 'button', label: 'Clear Format', content: <span className="rich-text-symbol">T×</span>, onClick: () => wrapDescriptionSelection('', '', 'text') },
+            { type: 'button', label: 'Undo', content: <Undo2 size={16} />, onClick: () => {} },
+            { type: 'button', label: 'Redo', content: <Redo2 size={16} />, onClick: () => {} },
+            { type: 'button', label: 'Align Center', content: <AlignCenter size={16} />, onClick: () => insertDescriptionBlock('\n[Align: center]\n') },
+            { type: 'button', label: 'Align Right', content: <AlignRight size={16} />, onClick: () => insertDescriptionBlock('\n[Align: right]\n') },
+            { type: 'button', label: 'Heading', content: <Heading2 size={16} />, onClick: () => prefixDescriptionLines('## ', 'Heading') },
+        ],
+    ];
 
     const handleImageChange = (event) => {
         const file = event.target.files?.[0];
@@ -376,31 +721,60 @@ const Products = () => {
     };
 
     const handleToggleWebCategory = (category) => {
+        const subCategory = categoryMap.get(category);
         setNewProduct((prev) => {
-            const selected = new Set(prev.webCategories || []);
-            if (selected.has(category)) selected.delete(category);
-            else selected.add(category);
+            const selectedSubIds = new Set(prev.subCategoryIds || []);
+            const selectedPrimaryIds = new Set(prev.primaryCategoryIds || []);
 
-            return { ...prev, webCategories: Array.from(selected) };
+            if (selectedSubIds.has(category)) {
+                selectedSubIds.delete(category);
+            } else {
+                selectedSubIds.add(category);
+                if (subCategory?.parentId) {
+                    selectedPrimaryIds.add(subCategory.parentId);
+                }
+            }
+
+            return {
+                ...prev,
+                primaryCategoryIds: Array.from(selectedPrimaryIds),
+                subCategoryIds: Array.from(selectedSubIds),
+                category: resolveNamesFromIds(Array.from(selectedPrimaryIds)),
+                webCategories: resolveNamesFromIds(Array.from(selectedSubIds)),
+            };
         });
     };
 
     const handleClearWebCategories = () => {
-        setNewProduct((prev) => ({ ...prev, webCategories: [] }));
+        setNewProduct((prev) => ({ ...prev, webCategories: [], subCategoryIds: [] }));
     };
 
     const handleToggleCategory = (category) => {
         setNewProduct((prev) => {
-            const selected = new Set(prev.category || []);
-            if (selected.has(category)) selected.delete(category);
-            else selected.add(category);
+            const selectedPrimaryIds = new Set(prev.primaryCategoryIds || []);
+            const selectedSubIds = new Set(prev.subCategoryIds || []);
 
-            return { ...prev, category: Array.from(selected) };
+            if (selectedPrimaryIds.has(category)) {
+                selectedPrimaryIds.delete(category);
+                subCategories
+                    .filter((item) => item.parentId === category)
+                    .forEach((item) => selectedSubIds.delete(item.id));
+            } else {
+                selectedPrimaryIds.add(category);
+            }
+
+            return {
+                ...prev,
+                primaryCategoryIds: Array.from(selectedPrimaryIds),
+                subCategoryIds: Array.from(selectedSubIds),
+                category: resolveNamesFromIds(Array.from(selectedPrimaryIds)),
+                webCategories: resolveNamesFromIds(Array.from(selectedSubIds)),
+            };
         });
     };
 
     const handleClearCategories = () => {
-        setNewProduct((prev) => ({ ...prev, category: [] }));
+        setNewProduct((prev) => ({ ...prev, category: [], webCategories: [], primaryCategoryIds: [], subCategoryIds: [] }));
     };
 
     const validateForm = () => {
@@ -409,8 +783,8 @@ const Products = () => {
             return false;
         }
 
-        const price = Number(newProduct.price);
-        const stock = Number(newProduct.stock);
+        const price = toNumber(newProduct.price);
+        const stock = toNumber(newProduct.stock);
 
         if (!Number.isFinite(price) || price < 0) {
             setFeedback({ type: 'error', message: 'Үнэ зөв тоо байх ёстой.' });
@@ -443,16 +817,20 @@ const Products = () => {
                 imageUrl = await getDownloadURL(imageRef);
             }
 
+            const primaryNames = resolveNamesFromIds(newProduct.primaryCategoryIds || [], newProduct.category);
+            const subNames = resolveNamesFromIds(newProduct.subCategoryIds || [], newProduct.webCategories);
             const payload = {
                 name: newProduct.name.trim(),
                 sku: newProduct.sku.trim(),
                 vatCode: newProduct.vatCode.trim(),
                 brand: newProduct.brand.trim(),
-                category: newProduct.category || [],
-                webCategories: newProduct.webCategories || [],
-                price: Number(newProduct.price),
-                salePrice: Number(newProduct.salePrice || 0),
-                stock: Number(newProduct.stock),
+                category: primaryNames,
+                webCategories: subNames,
+                primaryCategoryIds: newProduct.primaryCategoryIds || [],
+                subCategoryIds: newProduct.subCategoryIds || [],
+                price: toNumber(newProduct.price),
+                salePrice: toNumber(newProduct.salePrice || 0),
+                stock: toNumber(newProduct.stock),
                 status: newProduct.status,
                 youtubeUrl: newProduct.youtubeUrl.trim(),
                 shortDescription: newProduct.shortDescription.trim(),
@@ -508,6 +886,232 @@ const Products = () => {
         }
     };
 
+    const handleSeedDefaultCategories = async () => {
+        if (categoryDocs.length) return true;
+
+        setManagerBusy(true);
+        resetMessages();
+
+        try {
+            const batch = writeBatch(db);
+            FALLBACK_CATEGORY_DOCS.forEach((item) => {
+                batch.set(doc(db, CATEGORY_COLLECTION, item.id), {
+                    name: item.name,
+                    type: item.type,
+                    parentId: item.parentId || '',
+                    tone: item.tone || 'blue',
+                    active: item.active !== false,
+                    order: item.order || 0,
+                    updatedAt: serverTimestamp(),
+                    createdAt: serverTimestamp(),
+                });
+            });
+            await batch.commit();
+            setFeedback({ type: 'success', message: 'Суурь ангиллууд үүслээ.' });
+            return true;
+        } catch (error) {
+            console.error('Seed categories error:', error);
+            setFeedback({
+                type: 'error',
+                message:
+                    error.code === 'permission-denied'
+                        ? 'Суурь ангилал үүсгэх эрх хүрэлцэхгүй байна. Firestore rules-ээ deploy хийсэн эсэхээ шалгана уу.'
+                        : error.message || 'Суурь ангилал үүсгэх үед алдаа гарлаа.',
+            });
+            return false;
+        } finally {
+            setManagerBusy(false);
+        }
+    };
+
+    const ensureCategoriesInitialized = async () => {
+        if (categoryDocs.length) return true;
+        return handleSeedDefaultCategories();
+    };
+
+    const closeCategoryDialog = () => {
+        setCategoryDialog({
+            open: false,
+            mode: 'create-primary',
+            itemId: '',
+            parentId: '',
+            name: '',
+            active: true,
+        });
+    };
+
+    const openPrimaryCategoryEditor = async () => {
+        const ready = await ensureCategoriesInitialized();
+        if (!ready) return;
+        setCategoryDialog({
+            open: true,
+            mode: 'create-primary',
+            itemId: '',
+            parentId: '',
+            name: '',
+            active: true,
+        });
+    };
+
+    const openSubCategoryEditor = async (parentId) => {
+        const ready = await ensureCategoriesInitialized();
+        if (!ready) return;
+        setCategoryDialog({
+            open: true,
+            mode: 'create-sub',
+            itemId: '',
+            parentId,
+            name: '',
+            active: true,
+        });
+    };
+
+    const openEditCategoryEditor = async (item) => {
+        if (!item?.id) return;
+        const ready = await ensureCategoriesInitialized();
+        if (!ready) return;
+        setCategoryDialog({
+            open: true,
+            mode: 'edit',
+            itemId: item.id,
+            parentId: item.parentId || '',
+            name: item.name || '',
+            active: item.active !== false,
+        });
+    };
+
+    const handleSubmitCategoryDialog = async () => {
+        const name = categoryDialog.name.trim();
+        if (!name) {
+            setFeedback({ type: 'error', message: 'Ангиллын нэр оруулна уу.' });
+            return;
+        }
+
+        setManagerBusy(true);
+        resetMessages();
+
+        try {
+            if (!categoryDocs.length && categoryDialog.mode !== 'edit') {
+                const ready = await handleSeedDefaultCategories();
+                if (!ready) return;
+            }
+
+            if (categoryDialog.mode === 'create-primary') {
+                await addDoc(collection(db, CATEGORY_COLLECTION), {
+                    name,
+                    type: 'primary',
+                    parentId: '',
+                    tone: 'blue',
+                    active: categoryDialog.active,
+                    order: primaryCategories.length,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                });
+                setFeedback({ type: 'success', message: 'Үндсэн ангилал нэмэгдлээ.' });
+            } else if (categoryDialog.mode === 'create-sub') {
+                const siblings = subCategoriesByParent.get(categoryDialog.parentId) || [];
+                await addDoc(collection(db, CATEGORY_COLLECTION), {
+                    name,
+                    type: 'sub',
+                    parentId: categoryDialog.parentId,
+                    tone: 'green',
+                    active: categoryDialog.active,
+                    order: siblings.length,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                });
+                setFeedback({ type: 'success', message: 'Дэд ангилал нэмэгдлээ.' });
+            } else {
+                await updateDoc(doc(db, CATEGORY_COLLECTION, categoryDialog.itemId), {
+                    name,
+                    active: categoryDialog.active,
+                    updatedAt: serverTimestamp(),
+                });
+                setFeedback({ type: 'success', message: 'Ангиллын нэр шинэчлэгдлээ.' });
+            }
+
+            closeCategoryDialog();
+        } catch (error) {
+            console.error('Submit category dialog error:', error);
+            setFeedback({
+                type: 'error',
+                message:
+                    error.code === 'permission-denied'
+                        ? 'Ангилал хадгалах эрх хүрэлцэхгүй байна. Firestore rules-ээ deploy хийсэн эсэхээ шалгана уу.'
+                        : error.message || 'Ангилал хадгалах үед алдаа гарлаа.',
+            });
+        } finally {
+            setManagerBusy(false);
+        }
+    };
+
+    const handleDeleteCategory = async (item) => {
+        if (!item?.id) return;
+        if (!categoryDocs.length) {
+            setFeedback({ type: 'error', message: 'Эхлээд суурь ангиллаа Firestore-д үүсгэнэ үү.' });
+            return;
+        }
+        const confirmMessage =
+            item.type === 'primary'
+                ? 'Энэ үндсэн ангилал болон бүх дэд ангиллыг устгах уу?'
+                : 'Энэ дэд ангиллыг устгах уу?';
+
+        if (!window.confirm(confirmMessage)) return;
+
+        setManagerBusy(true);
+        resetMessages();
+
+        try {
+            if (item.type === 'primary') {
+                const batch = writeBatch(db);
+                batch.delete(doc(db, CATEGORY_COLLECTION, item.id));
+                (subCategoriesByParent.get(item.id) || []).forEach((subItem) => {
+                    batch.delete(doc(db, CATEGORY_COLLECTION, subItem.id));
+                });
+                await batch.commit();
+            } else {
+                await deleteDoc(doc(db, CATEGORY_COLLECTION, item.id));
+            }
+
+            setFeedback({
+                type: 'success',
+                message: item.type === 'primary' ? 'Үндсэн ангилал устгагдлаа.' : 'Дэд ангилал устгагдлаа.',
+            });
+        } catch (error) {
+            console.error('Delete category error:', error);
+            setFeedback({ type: 'error', message: 'Ангилал устгах үед алдаа гарлаа.' });
+        } finally {
+            setManagerBusy(false);
+        }
+    };
+
+    const handleToggleCategoryStatus = async (item) => {
+        if (!item?.id) return;
+        if (!categoryDocs.length) {
+            setFeedback({ type: 'error', message: 'Эхлээд суурь ангиллаа Firestore-д үүсгэнэ үү.' });
+            return;
+        }
+
+        setManagerBusy(true);
+        resetMessages();
+
+        try {
+            await updateDoc(doc(db, CATEGORY_COLLECTION, item.id), {
+                active: item.active === false,
+                updatedAt: serverTimestamp(),
+            });
+            setFeedback({
+                type: 'success',
+                message: item.active === false ? 'Ангилал идэвхтэй боллоо.' : 'Ангилал идэвхгүй боллоо.',
+            });
+        } catch (error) {
+            console.error('Toggle category status error:', error);
+            setFeedback({ type: 'error', message: 'Ангиллын төлөв шинэчлэхэд алдаа гарлаа.' });
+        } finally {
+            setManagerBusy(false);
+        }
+    };
+
     const handleTemplateDownload = () => {
         const templateRows = [
             {
@@ -515,7 +1119,7 @@ const Products = () => {
                 sku: 'INC-10',
                 vatCode: 'VAT-001',
                 brand: 'Lets',
-                category: 'Skincare',
+                category: 'Эмзэг хэсгийн арчилгаа',
                 webCategories: 'Цайруулах серум, Бие арчилгаа',
                 price: 450000,
                 salePrice: 399000,
@@ -540,8 +1144,8 @@ const Products = () => {
             sku: product.sku,
             vatCode: product.vatCode || '',
             brand: product.brand || '',
-            category: toDisplayList(product.category),
-            webCategories: toDisplayList(product.webCategories),
+            category: toDisplayList(getProductPrimaryNames(product)),
+            webCategories: toDisplayList(getProductSubNames(product)),
             price: product.price,
             salePrice: product.salePrice || 0,
             stock: product.stock,
@@ -598,6 +1202,8 @@ const Products = () => {
                     brand: item.brand,
                     category: item.category,
                     webCategories: item.webCategories,
+                    primaryCategoryIds: resolveIdsFromNames(item.category, 'primary'),
+                    subCategoryIds: resolveIdsFromNames(item.webCategories, 'sub'),
                     price: item.price,
                     salePrice: item.salePrice,
                     stock: item.stock,
@@ -720,168 +1326,9 @@ const Products = () => {
                 ) : null}
             </div>
 
-            <div className="stats-grid">
-                <div className="stat-card">
-                    <div className="stat-icon">
-                        <Package2 size={22} color="#7c3aed" />
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-title">Нийт бүтээгдэхүүн</span>
-                        <h3 className="stat-value">{analytics.totalProducts.toLocaleString()}</h3>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon">
-                        <Boxes size={22} color="#0f766e" />
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-title">Нийт үлдэгдэл</span>
-                        <h3 className="stat-value">{analytics.totalUnits.toLocaleString()} ш</h3>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon">
-                        <CircleDollarSign size={22} color="#2563eb" />
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-title">Нийт үнийн дүн</span>
-                        <h3 className="stat-value">{formatMoney(analytics.totalValue)}</h3>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon">
-                        <Boxes size={22} color="#ea580c" />
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-title">Active SKU</span>
-                        <h3 className="stat-value">{analytics.activeProducts.toLocaleString()}</h3>
-                    </div>
-                </div>
-                <div className="stat-card">
-                    <div className="stat-icon">
-                        <AlertTriangle size={22} color="#dc2626" />
-                    </div>
-                    <div className="stat-info">
-                        <span className="stat-title">Low stock</span>
-                        <h3 className="stat-value">{analytics.lowStock.toLocaleString()}</h3>
-                    </div>
-                </div>
-            </div>
-
-            <div className="table-filters">
-                <div className="search-box">
-                    <Search size={18} />
-                    <input
-                        type="text"
-                        placeholder="Нэр, SKU, ангиллаар хайх..."
-                        value={searchTerm}
-                        onChange={(event) => setSearchTerm(event.target.value)}
-                    />
-                </div>
-                <button className="filter-btn" type="button">
-                    <Filter size={18} />
-                    <span>Шүүлтүүр</span>
-                </button>
-            </div>
-
-            <div className="table-container">
-                {loading ? (
-                    <div style={{ padding: '24px', display: 'flex', gap: '10px', alignItems: 'center' }}>
-                        <LoaderCircle size={18} className="spin" />
-                        <span>Барааны мэдээлэл уншиж байна...</span>
-                    </div>
-                ) : (
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>#</th>
-                                <th>Бүтээгдэхүүн</th>
-                                <th>SKU</th>
-                                <th>Ангилал</th>
-                                <th>Үнэ</th>
-                                <th>Үлдэгдэл</th>
-                                <th>Төлөв</th>
-                                <th>Үйлдэл</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredProducts.length ? (
-                                filteredProducts.map((product, index) => (
-                                    <tr key={product.id}>
-                                        <td>#{index + 1}</td>
-                                        <td>
-                                            <div className="product-table-item">
-                                                {product.image ? (
-                                                    <img src={product.image} alt={product.name} className="product-table-thumb" />
-                                                ) : (
-                                                    <div className="product-table-thumb product-table-thumb-fallback">
-                                                        {product.name.slice(0, 1).toUpperCase()}
-                                                    </div>
-                                                )}
-                                                <div className="product-table-copy">
-                                                    <strong>{product.name}</strong>
-                                                    <small>{product.image ? 'Зурагтай' : 'Зураггүй'}</small>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>{product.sku || '-'}</td>
-                                        <td>{toDisplayList(product.category) || '-'}</td>
-                                        <td>{formatMoney(product.price)}</td>
-                                        <td>{product.stock.toLocaleString()} ш</td>
-                                        <td>
-                                            <span className={`status-pill ${product.status === 'Active' ? 'active' : 'inactive'}`}>
-                                                {product.status}
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div className="actions-cell">
-                                                <button
-                                                    title="Дэлгэрэнгүй харах"
-                                                    className="action-icon view"
-                                                    type="button"
-                                                    onClick={() => handleOpenViewModal(product)}
-                                                >
-                                                    <Eye size={16} />
-                                                </button>
-                                                <button
-                                                    title="Засах"
-                                                    className="action-icon edit"
-                                                    type="button"
-                                                    onClick={() => handleOpenModal(product)}
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                                <button
-                                                    title="Устгах"
-                                                    className="action-icon delete"
-                                                    type="button"
-                                                    onClick={() => handleDeleteProduct(product.id)}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
-                                <tr>
-                                    <td colSpan={8} style={{ textAlign: 'center', padding: '24px' }}>
-                                        Илэрц олдсонгүй
-                                    </td>
-                                </tr>
-                            )}
-                        </tbody>
-                    </table>
-                )}
-            </div>
-
             {isModalOpen ? (
-                <div className="modal-overlay" style={{ alignItems: 'flex-start', overflowY: 'auto', paddingTop: '2rem' }}>
-                    <form
-                        className="add-product-container animate-fade-in"
-                        style={{ width: '95%', maxWidth: '980px', background: 'transparent' }}
-                        onSubmit={handleSaveProduct}
-                    >
+                <section className="product-editor-page animate-fade-in">
+                    <form className="add-product-container product-editor-container" onSubmit={handleSaveProduct}>
                         <div className="add-product-header">
                             <div className="header-left">
                                 <button className="back-btn" onClick={handleCloseModal} type="button">
@@ -896,7 +1343,7 @@ const Products = () => {
                             </button>
                         </div>
 
-                        <div className="product-form-grid">
+                        <div className={`product-form-grid ${activeTab === 'categories' ? 'manager-mode' : ''}`}>
                             <div className="form-main-card">
                                 <div className="form-tabs">
                                     <button
@@ -913,6 +1360,11 @@ const Products = () => {
                                     >
                                         Веб ангилал
                                     </button>
+                                    {activeTab === 'categories' ? (
+                                        <button className="tab active" type="button" onClick={() => setActiveTab('categories')}>
+                                            Ангилал удирдах
+                                        </button>
+                                    ) : null}
                                 </div>
 
                                 {activeTab === 'info' ? (
@@ -934,10 +1386,10 @@ const Products = () => {
                                         <div className="form-group">
                                             <label className="form-label">Үнэ</label>
                                             <input
-                                                type="number"
+                                                type="text"
+                                                inputMode="numeric"
                                                 className="form-input"
                                                 name="price"
-                                                min="0"
                                                 placeholder="Бүтээгдэхүүний үнэ"
                                                 value={newProduct.price}
                                                 onChange={handleInputChange}
@@ -947,10 +1399,10 @@ const Products = () => {
                                         <div className="form-group">
                                             <label className="form-label">Хямдарсан үнэ</label>
                                             <input
-                                                type="number"
+                                                type="text"
+                                                inputMode="numeric"
                                                 className="form-input"
                                                 name="salePrice"
-                                                min="0"
                                                 placeholder="Хямдарсан үнэ"
                                                 value={newProduct.salePrice}
                                                 onChange={handleInputChange}
@@ -962,10 +1414,10 @@ const Products = () => {
                                         <div className="form-group">
                                             <label className="form-label">Тоо ширхэг</label>
                                             <input
-                                                type="number"
+                                                type="text"
+                                                inputMode="numeric"
                                                 className="form-input"
                                                 name="stock"
-                                                min="0"
                                                 placeholder="Тоо ширхэг"
                                                 value={newProduct.stock}
                                                 onChange={handleInputChange}
@@ -985,34 +1437,6 @@ const Products = () => {
                                                 />
                                                 <Video size={18} className="input-icon" />
                                             </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="web-category-panel" style={{ marginBottom: '1rem' }}>
-                                        <div className="web-category-panel-copy">
-                                            <p>Үндсэн ангиллыг энд сонгоно. Нэг бүтээгдэхүүнд хэд хэдэн үндсэн ангилал өгч болно.</p>
-                                            <button className="web-category-clear-btn" type="button" onClick={handleClearCategories}>
-                                                Үндсэн ангилал цэвэрлэх
-                                            </button>
-                                        </div>
-
-                                        <div className="category-chip-list">
-                                            {CATEGORY_GROUPS.flatMap((group) =>
-                                                group.items.map((item) => {
-                                                    const checked = (newProduct.category || []).includes(item);
-                                                    return (
-                                                        <label className={`category-chip-option ${checked ? 'selected' : ''}`} key={item}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={checked}
-                                                                onChange={() => handleToggleCategory(item)}
-                                                            />
-                                                            <span className={`category-chip-marker ${group.tone}`}></span>
-                                                            <span className="category-chip-label">{item}</span>
-                                                        </label>
-                                                    );
-                                                })
-                                            )}
                                         </div>
                                     </div>
 
@@ -1057,14 +1481,19 @@ const Products = () => {
 
                                     <div className="form-group">
                                         <label className="form-label">Бренд</label>
-                                        <input
-                                            type="text"
-                                            className="form-input"
+                                        <select
+                                            className="form-select"
                                             name="brand"
-                                            placeholder="Брендийн нэр"
                                             value={newProduct.brand}
                                             onChange={handleInputChange}
-                                        />
+                                        >
+                                            <option value="">Брендийн нэр сонгоно уу</option>
+                                            {BRAND_OPTIONS.map((brand) => (
+                                                <option key={brand} value={brand}>
+                                                    {brand}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
                                     <div className="form-group">
@@ -1081,93 +1510,195 @@ const Products = () => {
 
                                     <div className="form-group">
                                         <label className="form-label">Тайлбар</label>
-                                        <textarea
-                                            className="form-textarea"
-                                            rows="5"
-                                            name="description"
-                                            placeholder="Дэлгэрэнгүй тайлбар оруулна уу"
-                                            value={newProduct.description}
-                                            onChange={handleInputChange}
-                                        ></textarea>
+                                        <div className="rich-text-shell">
+                                            <div className="rich-text-toolbar">
+                                                {descriptionToolbarRows.map((row, rowIndex) => (
+                                                    <div key={rowIndex} className="rich-text-toolbar-row">
+                                                        {row.map((action) =>
+                                                            action.type === 'select' ? (
+                                                                <select
+                                                                    key={action.label}
+                                                                    className="rich-text-select"
+                                                                    defaultValue={action.label}
+                                                                    onChange={(event) => {
+                                                                        action.onChange(event.target.value);
+                                                                        event.target.value = action.label;
+                                                                    }}
+                                                                >
+                                                                    <option value={action.label}>{action.label}</option>
+                                                                    {action.options.map((option) => (
+                                                                        <option key={option} value={option}>
+                                                                            {option}
+                                                                        </option>
+                                                                    ))}
+                                                                </select>
+                                                            ) : (
+                                                                <button
+                                                                    key={action.label}
+                                                                    type="button"
+                                                                    className="rich-text-tool"
+                                                                    onClick={action.onClick}
+                                                                    title={action.label}
+                                                                >
+                                                                    {action.content}
+                                                                </button>
+                                                            )
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <textarea
+                                                ref={descriptionTextareaRef}
+                                                className="form-textarea rich-text-area"
+                                                rows="8"
+                                                name="description"
+                                                placeholder="Дэлгэрэнгүй тайлбар оруулна уу"
+                                                value={newProduct.description}
+                                                onChange={handleInputChange}
+                                            ></textarea>
+                                        </div>
                                     </div>
                                 </div>
+                                ) : activeTab === 'web' ? (
+                                    <>
+                                        <div className="web-category-panel">
+                                            <div className="web-category-panel-copy">
+                                                <p>
+                                                    Веб ангиллыг үндсэн ангилал, дэд ангилал гэж хоёр түвшнээр сонгоно.
+                                                    Дэд ангилал сонгоход харгалзах үндсэн ангилал автоматаар сонгогдоно.
+                                                </p>
+                                                <div className="category-panel-actions">
+                                                    <button className="web-category-clear-btn" type="button" onClick={handleClearCategories}>
+                                                        Бүх ангилал цэвэрлэх
+                                                    </button>
+                                                    <button
+                                                        className="category-admin-add-btn"
+                                                        type="button"
+                                                        onClick={() => setActiveTab('categories')}
+                                                    >
+                                                        <Plus size={16} />
+                                                        <span>Ангилал удирдах</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <FlatCategorySelectionList
+                                                primaryItems={primaryCategories}
+                                                subItemsByParent={subCategoriesByParent}
+                                                selectedPrimaryIds={newProduct.primaryCategoryIds || []}
+                                                selectedSubIds={newProduct.subCategoryIds || []}
+                                                onTogglePrimary={handleToggleCategory}
+                                                onToggleSub={handleToggleWebCategory}
+                                            />
+                                        </div>
+
+                                    </>
                                 ) : (
-                                    <div className="web-category-panel">
-                                        <div className="web-category-panel-copy">
-                                            <p>
-                                                Хэрэв уг бүтээгдэхүүний ангилал ойлгомжгүй эсвэл олон ангилалд багтаж байвал
-                                                доорх жагсаалтаас веб ангиллуудыг сонгоно уу.
-                                            </p>
-                                            <button className="web-category-clear-btn" type="button" onClick={handleClearWebCategories}>
-                                                Веб ангилал цэвэрлэх
+                                    <div className="category-admin-window category-admin-window-page">
+                                        <div className="category-admin-header">
+                                            <div>
+                                                <h2>Ангилал</h2>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                className="category-admin-add-btn"
+                                                onClick={openPrimaryCategoryEditor}
+                                                disabled={managerBusy}
+                                            >
+                                                <Plus size={16} />
+                                                <span>Ангилал нэмэх</span>
                                             </button>
                                         </div>
 
-                                        <div className="web-category-list">
-                                            {WEB_CATEGORY_GROUPS.flatMap((group) =>
-                                                group.items.map((item) => {
-                                                    const checked = (newProduct.webCategories || []).includes(item);
-                                                    return (
-                                                        <label className="web-category-row" key={item}>
-                                                            <div className="web-category-row-left">
-                                                                <span className={`web-category-marker ${group.tone}`}></span>
-                                                                <span className={`web-category-chip ${checked ? 'selected' : ''}`}>{item}</span>
-                                                            </div>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={checked}
-                                                                onChange={() => handleToggleWebCategory(item)}
-                                                            />
-                                                        </label>
-                                                    );
-                                                })
-                                            )}
+                                        {categoryLoading ? <div className="empty-state-text">Ангилал уншиж байна...</div> : null}
+                                        <div className="category-admin-list">
+                                                {categoryManagerRows.map((item) => (
+                                                    <div
+                                                        key={item.id}
+                                                        className={`category-admin-row ${item.type === 'sub' ? 'sub' : 'primary'} ${item.active === false ? 'inactive' : ''}`}
+                                                    >
+                                                        <div className="category-admin-row-main">
+                                                            <span className="category-admin-grip">⋮⋮</span>
+                                                            <span className={`web-category-marker ${item.type === 'primary' ? 'blue' : 'green'}`}></span>
+                                                            <span className="category-admin-name">{item.name}</span>
+                                                        </div>
+                                                        <div className="category-admin-actions">
+                                                            <button
+                                                                type="button"
+                                                                className="category-admin-icon plus"
+                                                                onClick={() => openSubCategoryEditor(item.type === 'primary' ? item.id : item.parentId)}
+                                                                data-tooltip="Дэд ангилал нэмэх"
+                                                            >
+                                                                <Plus size={16} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="category-admin-icon edit"
+                                                                onClick={() => openEditCategoryEditor(item)}
+                                                                data-tooltip="Ангилал нэр шинэчлэх"
+                                                            >
+                                                                <Edit2 size={16} />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="category-admin-icon status"
+                                                                onClick={() => handleToggleCategoryStatus(item)}
+                                                                data-tooltip="Ангиллын төлөв өөрчлөх"
+                                                            >
+                                                                {item.active === false ? <Eye size={16} /> : <EyeOff size={16} />}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className="category-admin-icon delete"
+                                                                onClick={() => handleDeleteCategory(item)}
+                                                                data-tooltip="Ангилал устгах"
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
                             </div>
 
+                            {activeTab !== 'categories' ? (
                             <div className="form-sidebar-container">
                                 <div className="form-sidebar-card">
                                     <div className="sidebar-section-title">
-                                        <span>Үндсэн ангилал</span>
+                                        <span>Сонгосон ангилал</span>
                                     </div>
-                                    {(newProduct.category || []).length ? (
-                                        <div className="web-category-summary">
-                                            {(newProduct.category || []).slice(0, 6).map((item) => (
-                                                <span key={item} className="web-category-summary-chip">
-                                                    {item}
-                                                </span>
-                                            ))}
-                                            {(newProduct.category || []).length > 6 ? (
-                                                <div className="empty-state-text">+{newProduct.category.length - 6} нэмэлт ангилал</div>
-                                            ) : null}
-                                        </div>
+                                    {(newProduct.primaryCategoryIds || []).length ? (
+                                        <>
+                                            <div className="category-summary-label">Үндсэн ангилал</div>
+                                            <div className="web-category-summary">
+                                                {resolveNamesFromIds(newProduct.primaryCategoryIds || []).slice(0, 6).map((item) => (
+                                                    <span key={item} className="web-category-summary-chip">
+                                                        {item}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </>
                                     ) : (
                                         <div className="empty-state-text">Үндсэн ангилал сонгоогүй байна</div>
                                     )}
-                                </div>
 
-                                <div className="form-sidebar-card">
-                                    <div className="sidebar-section-title">
-                                        <span>Веб ангилал</span>
-                                        <button className="add-section-btn" type="button">
-                                            <Plus size={16} />
-                                        </button>
-                                    </div>
-                                    {(newProduct.webCategories || []).length ? (
+                                    <div className="category-summary-divider"></div>
+
+                                    {(newProduct.subCategoryIds || []).length ? (
                                         <div className="web-category-summary">
-                                            {(newProduct.webCategories || []).slice(0, 6).map((item) => (
+                                            {resolveNamesFromIds(newProduct.subCategoryIds || []).slice(0, 6).map((item) => (
                                                 <span key={item} className="web-category-summary-chip">
                                                     {item}
                                                 </span>
                                             ))}
-                                            {(newProduct.webCategories || []).length > 6 ? (
-                                                <div className="empty-state-text">+{newProduct.webCategories.length - 6} нэмэлт ангилал</div>
+                                            {(newProduct.subCategoryIds || []).length > 6 ? (
+                                                <div className="empty-state-text">+{newProduct.subCategoryIds.length - 6} нэмэлт ангилал</div>
                                             ) : null}
                                         </div>
                                     ) : (
-                                        <div className="empty-state-text">Веб ангилалгүй байна</div>
+                                        <div className="empty-state-text">Дэд ангилал сонгоогүй байна</div>
                                     )}
                                 </div>
 
@@ -1240,10 +1771,168 @@ const Products = () => {
                                     </label>
                                 </div>
                             </div>
+                            ) : null}
                         </div>
                     </form>
-                </div>
-            ) : null}
+                </section>
+            ) : (
+                <>
+                    <div className="stats-grid">
+                        <div className="stat-card">
+                            <div className="stat-icon">
+                                <Package2 size={22} color="#7c3aed" />
+                            </div>
+                            <div className="stat-info">
+                                <span className="stat-title">Нийт бүтээгдэхүүн</span>
+                                <h3 className="stat-value">{analytics.totalProducts.toLocaleString()}</h3>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-icon">
+                                <Boxes size={22} color="#0f766e" />
+                            </div>
+                            <div className="stat-info">
+                                <span className="stat-title">Нийт үлдэгдэл</span>
+                                <h3 className="stat-value">{analytics.totalUnits.toLocaleString()} ш</h3>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-icon">
+                                <CircleDollarSign size={22} color="#2563eb" />
+                            </div>
+                            <div className="stat-info">
+                                <span className="stat-title">Нийт үнийн дүн</span>
+                                <h3 className="stat-value">{formatMoney(analytics.totalValue)}</h3>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-icon">
+                                <Boxes size={22} color="#ea580c" />
+                            </div>
+                            <div className="stat-info">
+                                <span className="stat-title">Active SKU</span>
+                                <h3 className="stat-value">{analytics.activeProducts.toLocaleString()}</h3>
+                            </div>
+                        </div>
+                        <div className="stat-card">
+                            <div className="stat-icon">
+                                <AlertTriangle size={22} color="#dc2626" />
+                            </div>
+                            <div className="stat-info">
+                                <span className="stat-title">Low stock</span>
+                                <h3 className="stat-value">{analytics.lowStock.toLocaleString()}</h3>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="table-filters">
+                        <div className="search-box">
+                            <Search size={18} />
+                            <input
+                                type="text"
+                                placeholder="Нэр, SKU, ангиллаар хайх..."
+                                value={searchTerm}
+                                onChange={(event) => setSearchTerm(event.target.value)}
+                            />
+                        </div>
+                        <button className="filter-btn" type="button">
+                            <Filter size={18} />
+                            <span>Шүүлтүүр</span>
+                        </button>
+                    </div>
+
+                    <div className="table-container">
+                        {loading ? (
+                            <div style={{ padding: '24px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                <LoaderCircle size={18} className="spin" />
+                                <span>Барааны мэдээлэл уншиж байна...</span>
+                            </div>
+                        ) : (
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Бүтээгдэхүүн</th>
+                                        <th>SKU</th>
+                                        <th>Ангилал</th>
+                                        <th>Үнэ</th>
+                                        <th>Үлдэгдэл</th>
+                                        <th>Төлөв</th>
+                                        <th>Үйлдэл</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredProducts.length ? (
+                                        filteredProducts.map((product, index) => (
+                                            <tr key={product.id}>
+                                                <td>#{index + 1}</td>
+                                                <td>
+                                                    <div className="product-table-item">
+                                                        {product.image ? (
+                                                            <img src={product.image} alt={product.name} className="product-table-thumb" />
+                                                        ) : (
+                                                            <div className="product-table-thumb product-table-thumb-fallback">
+                                                                {product.name.slice(0, 1).toUpperCase()}
+                                                            </div>
+                                                        )}
+                                                        <div className="product-table-copy">
+                                                            <strong>{product.name}</strong>
+                                                            <small>{product.image ? 'Зурагтай' : 'Зураггүй'}</small>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td>{product.sku || '-'}</td>
+                                                <td>{toDisplayList(getProductPrimaryNames(product)) || '-'}</td>
+                                                <td>{formatMoney(product.price)}</td>
+                                                <td>{product.stock.toLocaleString()} ш</td>
+                                                <td>
+                                                    <span className={`status-pill ${product.status === 'Active' ? 'active' : 'inactive'}`}>
+                                                        {product.status}
+                                                    </span>
+                                                </td>
+                                                <td>
+                                                    <div className="actions-cell">
+                                                        <button
+                                                            title="Дэлгэрэнгүй харах"
+                                                            className="action-icon view"
+                                                            type="button"
+                                                            onClick={() => handleOpenViewModal(product)}
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        <button
+                                                            title="Засах"
+                                                            className="action-icon edit"
+                                                            type="button"
+                                                            onClick={() => handleOpenModal(product)}
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                        <button
+                                                            title="Устгах"
+                                                            className="action-icon delete"
+                                                            type="button"
+                                                            onClick={() => handleDeleteProduct(product.id)}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr>
+                                            <td colSpan={8} style={{ textAlign: 'center', padding: '24px' }}>
+                                                Илэрц олдсонгүй
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </>
+            )}
 
             {viewingProduct ? (
                 <div className="modal-overlay" onClick={handleCloseViewModal}>
@@ -1286,7 +1975,7 @@ const Products = () => {
                                         </div>
                                         <div className="product-view-meta-item">
                                             <span>Үндсэн ангилал</span>
-                                            <strong>{toDisplayList(viewingProduct.category) || '-'}</strong>
+                                            <strong>{toDisplayList(getProductPrimaryNames(viewingProduct)) || '-'}</strong>
                                         </div>
                                         <div className="product-view-meta-item">
                                             <span>Үнэ</span>
@@ -1313,9 +2002,9 @@ const Products = () => {
                                             <strong>{valueOrDash(viewingProduct.youtubeUrl)}</strong>
                                         </div>
                                         <div className="product-view-meta-item">
-                                            <span>Веб ангилал</span>
+                                            <span>Дэд ангилал</span>
                                             <strong>
-                                            {toDisplayList(viewingProduct.webCategories) || '-'}
+                                            {toDisplayList(getProductSubNames(viewingProduct)) || '-'}
                                         </strong>
                                         </div>
                                         <div className="product-view-meta-item product-view-meta-item-wide">
@@ -1328,6 +2017,72 @@ const Products = () => {
                                         </div>
                                     </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            {categoryDialog.open ? (
+                <div className="modal-overlay" onClick={closeCategoryDialog}>
+                    <div
+                        className="category-dialog"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="category-dialog-header">
+                            <h3>
+                                {categoryDialog.mode === 'create-primary'
+                                    ? 'Үндсэн ангилал нэмэх'
+                                    : categoryDialog.mode === 'create-sub'
+                                      ? 'Дэд ангилал нэмэх'
+                                      : 'Ангилал нэр шинэчлэх'}
+                            </h3>
+                            <button type="button" className="category-dialog-close" onClick={closeCategoryDialog}>
+                                ×
+                            </button>
+                        </div>
+
+                        <div className="category-dialog-body">
+                            <div className="form-group">
+                                <label className="form-label">Ангиллын нэр</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    placeholder="Ангилал нэр..."
+                                    value={categoryDialog.name}
+                                    onChange={(event) =>
+                                        setCategoryDialog((prev) => ({ ...prev, name: event.target.value }))
+                                    }
+                                />
+                            </div>
+
+                            {categoryDialog.mode === 'create-sub' && categoryDialog.parentId ? (
+                                <div className="empty-state-text">
+                                    Үндсэн ангилал: {categoryMap.get(categoryDialog.parentId)?.name || '-'}
+                                </div>
+                            ) : null}
+
+                            <div className="category-dialog-toggle">
+                                <span>Ангиллын төлөв</span>
+                                <label className="switch">
+                                    <input
+                                        type="checkbox"
+                                        checked={categoryDialog.active}
+                                        onChange={(event) =>
+                                            setCategoryDialog((prev) => ({ ...prev, active: event.target.checked }))
+                                        }
+                                    />
+                                    <span className="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div className="category-dialog-footer">
+                            <button type="button" className="filter-btn" onClick={closeCategoryDialog}>
+                                Буцах
+                            </button>
+                            <button type="button" className="save-btn" onClick={handleSubmitCategoryDialog} disabled={managerBusy}>
+                                {managerBusy ? 'Хадгалж байна...' : 'Хадгалах'}
+                            </button>
                         </div>
                     </div>
                 </div>
