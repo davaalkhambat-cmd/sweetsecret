@@ -947,7 +947,7 @@ const Orders = () => {
                     name: prod.name,
                     image: prod.image || prod.images?.[0] || '',
                     code: prod.code || prod.sku || '',
-                    price: prod.price || prod.salePrice,
+                    price: prod.salePrice || prod.price,
                     quantity: 1
                 }]
             });
@@ -1795,7 +1795,7 @@ const Orders = () => {
                                                             <div className="p-stock">Үлдэгдэл: {p.stock || 0} ш</div>
                                                         </div>
                                                     </div>
-                                                    <div className="p-price">₮{(p.price || p.salePrice).toLocaleString()}</div>
+                                                    <div className="p-price">₮{(p.salePrice || p.price).toLocaleString()}</div>
                                                 </div>
                                             )) : <div className="search-result-item" style={{ justifyContent: 'center', color: '#999' }}>Ийм бүтээгдэхүүн олдсонгүй</div>}
                                         </div>

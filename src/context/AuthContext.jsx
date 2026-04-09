@@ -67,19 +67,23 @@ export const AuthProvider = ({ children }) => {
         const userSnap = await getDoc(userRef);
         const existingUIDData = userSnap.exists() ? userSnap.data() : null;
 
-        // Try to find if there's an invitation doc for this email (status: 'invited')
+        // Try to find if there's an invitation doc for this email (status may be 'invited' or 'active')
         let invitationData = null;
         if (firebaseUser.email) {
             const normalizedEmail = firebaseUser.email.toLowerCase();
-            const q = query(collection(db, 'users'), where('email', '==', normalizedEmail), where('status', '==', 'invited'));
+            const q = query(collection(db, 'users'), where('email', '==', normalizedEmail));
             const invitationSnap = await getDocs(q);
             if (!invitationSnap.empty) {
-                // Find primary invitation (favoring doc with ID starting with 'invited_')
-                const bestDoc = invitationSnap.docs.find(d => d.id.startsWith('invited_')) || invitationSnap.docs[0];
-                invitationData = {
-                    ...bestDoc.data(),
-                    docId: bestDoc.id
-                };
+                // Invitation docs have IDs different from the user's real UID (e.g. 'invited_xxx')
+                const inviteDocs = invitationSnap.docs.filter(d => d.id !== firebaseUser.uid);
+                if (inviteDocs.length > 0) {
+                    // Prefer docs with 'invited_' prefix
+                    const bestDoc = inviteDocs.find(d => d.id.startsWith('invited_')) || inviteDocs[0];
+                    invitationData = {
+                        ...bestDoc.data(),
+                        docId: bestDoc.id
+                    };
+                }
             }
         }
 
