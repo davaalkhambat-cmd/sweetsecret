@@ -11897,12 +11897,37 @@ tbody tr:last-child td {
 }
 
 .payment-method-badge {
-  padding: 4px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
   border-radius: 99px;
-  background: #1e293b;
-  color: white;
+  background: var(--badge-bg, #1e293b);
+  color: var(--badge-color, white);
+  border: 1px solid var(--badge-border, transparent);
   font-size: 0.75rem;
   font-weight: 700;
+  line-height: 1;
+}
+
+.orders-meta-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--badge-bg, #f8fafc);
+  color: var(--badge-color, #475569);
+  border: 1px solid var(--badge-border, #cbd5e1);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.orders-meta-badge svg {
+  flex-shrink: 0;
 }
 
 .payment-intelligence-header {

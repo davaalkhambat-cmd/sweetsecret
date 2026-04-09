@@ -393,24 +393,30 @@ const Orders = () => {
     const [newOrder, setNewOrder] = useState(getDefaultOrderForm);
 
     const SOURCE_OPTIONS = [
-        { key: 'facebook', label: 'Facebook', icon: <Facebook size={14} /> },
-        { key: 'instagram', label: 'Instagram', icon: <Instagram size={14} /> },
-        { key: 'website', label: 'Веб сайт', icon: <Globe size={14} /> },
-        { key: 'phone', label: 'Утас', icon: <Phone size={14} /> },
-        { key: 'banana', label: 'Banana Mall', icon: <ShoppingBag size={14} /> },
-        { key: 'shoppy', label: 'Shoppy', icon: <ShoppingBag size={14} /> },
-        { key: 'contracted', label: 'Гэрээт', icon: <ShieldCheck size={14} /> },
-        { key: 'other', label: 'Бусад', icon: <MessageCircle size={14} /> },
+        { key: 'facebook', label: 'Facebook', icon: <Facebook size={14} />, tone: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' } },
+        { key: 'instagram', label: 'Instagram', icon: <Instagram size={14} />, tone: { bg: '#fff1f2', color: '#db2777', border: '#fbcfe8' } },
+        { key: 'website', label: 'Веб сайт', icon: <Globe size={14} />, tone: { bg: '#f8fafc', color: '#475569', border: '#cbd5e1' } },
+        { key: 'phone', label: 'Утас', icon: <Phone size={14} />, tone: { bg: '#fff7ed', color: '#c2410c', border: '#fdba74' } },
+        { key: 'banana', label: 'Banana Mall', icon: <ShoppingBag size={14} />, tone: { bg: '#fefce8', color: '#a16207', border: '#fde68a' } },
+        { key: 'shoppy', label: 'Shoppy', icon: <ShoppingBag size={14} />, tone: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' } },
+        { key: 'contracted', label: 'Гэрээт', icon: <ShieldCheck size={14} />, tone: { bg: '#eef2ff', color: '#4f46e5', border: '#c7d2fe' } },
+        { key: 'other', label: 'Бусад', icon: <MessageCircle size={14} />, tone: { bg: '#faf5ff', color: '#9333ea', border: '#e9d5ff' } },
     ];
 
     const PAYMENT_METHODS = [
-        { key: 'bank_transfer', label: 'Данс' },
-        { key: 'qpay', label: 'QPay' },
-        { key: 'storepay', label: 'Storepay' },
-        { key: 'pocket', label: 'Pocket' },
-        { key: 'sono', label: 'Sono' },
-        { key: 'monpay', label: 'Monpay' },
+        { key: 'bank_transfer', label: 'Данс', tone: { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' } },
+        { key: 'qpay', label: 'QPay', tone: { bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0' } },
+        { key: 'storepay', label: 'Storepay', tone: { bg: '#eef2ff', color: '#4338ca', border: '#c7d2fe' } },
+        { key: 'pocket', label: 'Pocket', tone: { bg: '#fff1f2', color: '#e11d48', border: '#fecdd3' } },
+        { key: 'sono', label: 'Sono', tone: { bg: '#ecfeff', color: '#0f766e', border: '#a5f3fc' } },
+        { key: 'monpay', label: 'Monpay', tone: { bg: '#fff7ed', color: '#c2410c', border: '#fdba74' } },
     ];
+
+    const getToneStyle = (tone) => ({
+        '--badge-bg': tone?.bg || '#f8fafc',
+        '--badge-color': tone?.color || '#475569',
+        '--badge-border': tone?.border || '#cbd5e1',
+    });
 
     const UB_LOCATIONS = {
         'Баянгол': Array.from({ length: 25 }, (_, i) => `${i + 1}-р хороо`),
@@ -2306,7 +2312,11 @@ const Orders = () => {
                     </thead>
                     <tbody>
                         {loading ? <tr><td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>Уншиж байна...</td></tr> :
-                            paginatedOrders.map(order => (
+                            paginatedOrders.map(order => {
+                                const sourceOption = SOURCE_OPTIONS.find((source) => source.key === order.source);
+                                const paymentMethod = PAYMENT_METHODS.find((method) => method.key === order.paymentMethod);
+
+                                return (
                                 <tr key={order.id}>
                                     <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>
                                         {renderHighlightedText(`#${order.id.slice(-6).toUpperCase()}`, searchTerm)}
@@ -2347,14 +2357,20 @@ const Orders = () => {
                                     <td><strong>₮{(Number(order.totalAmount) || 0).toLocaleString()}</strong></td>
                                     <td><div className="date-cell"><Calendar size={14} style={{ marginRight: '5px', opacity: 0.6 }} />{order.createdAt ? new Date(order.createdAt.toMillis()).toLocaleDateString() : '-'}</div></td>
                                     <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#666' }}>
-                                            {SOURCE_OPTIONS.find(s => s.key === order.source)?.icon}
-                                            <span>{SOURCE_OPTIONS.find(s => s.key === order.source)?.label || 'Veb sait'}</span>
-                                        </div>
+                                        <span
+                                            className="orders-meta-badge"
+                                            style={getToneStyle(sourceOption?.tone)}
+                                        >
+                                            {sourceOption?.icon || <Globe size={14} />}
+                                            <span>{sourceOption?.label || 'Веб сайт'}</span>
+                                        </span>
                                     </td>
                                     <td>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#444' }}>
-                                            {PAYMENT_METHODS.find(m => m.key === order.paymentMethod)?.label || 'Данс'}
+                                        <span
+                                            className="orders-meta-badge"
+                                            style={getToneStyle(paymentMethod?.tone)}
+                                        >
+                                            <span>{paymentMethod?.label || 'Данс'}</span>
                                         </span>
                                     </td>
                                     <td><span className={`status-pill ${STATUS_CONFIG[order.status]?.class || ''}`}>{STATUS_CONFIG[order.status]?.label || order.status}</span></td>
@@ -2366,7 +2382,7 @@ const Orders = () => {
                                         )}
                                     </td>
                                 </tr>
-                            ))}
+                            )})}
                     </tbody>
                 </table>
                     </div>
@@ -2628,10 +2644,18 @@ const Orders = () => {
                                     <div className="sidebar-section-title"><Wallet size={16} /> Борлуулалтын суваг</div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span style={{ color: '#64748b', fontSize: '0.9rem' }}>Суваг</span>
-                                        <span style={{ color: '#6366f1', fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1' }}></div>
-                                            {SOURCE_OPTIONS.find(s => s.key === selectedOrder.source)?.label || selectedOrder.source || 'Website'}
-                                        </span>
+                                        {(() => {
+                                            const selectedSourceOption = SOURCE_OPTIONS.find((source) => source.key === selectedOrder.source);
+                                            return (
+                                                <span
+                                                    className="orders-meta-badge"
+                                                    style={getToneStyle(selectedSourceOption?.tone)}
+                                                >
+                                                    {selectedSourceOption?.icon || <Globe size={14} />}
+                                                    <span>{selectedSourceOption?.label || selectedOrder.source || 'Website'}</span>
+                                                </span>
+                                            );
+                                        })()}
                                     </div>
                                 </div>
 
@@ -2640,7 +2664,17 @@ const Orders = () => {
                                     <div className="info-display-list">
                                         <div className="info-display-item" style={{ justifyContent: 'space-between' }}>
                                             <span>Төлбөрийн хэрэгсэл</span>
-                                            <span className="payment-method-badge">{PAYMENT_METHODS.find(m => m.key === selectedOrder.paymentMethod)?.label || selectedOrder.paymentMethod || 'Данс'}</span>
+                                            {(() => {
+                                                const selectedPaymentMethod = PAYMENT_METHODS.find((method) => method.key === selectedOrder.paymentMethod);
+                                                return (
+                                                    <span
+                                                        className="payment-method-badge"
+                                                        style={getToneStyle(selectedPaymentMethod?.tone)}
+                                                    >
+                                                        {selectedPaymentMethod?.label || selectedOrder.paymentMethod || 'Данс'}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                         <div className="info-display-item" style={{ justifyContent: 'space-between' }}>
                                             <span>Захиалгын үнийн дүн</span>
