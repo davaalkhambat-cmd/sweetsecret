@@ -73,13 +73,66 @@ const DAILY_REPORT_DELIVERY_FEE = 10000;
 const calculateSubtotalAmount = (items = []) =>
     items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0);
 
-const getDiscountAmountValue = (items = [], discount, discountType) => {
-    const subtotal = calculateSubtotalAmount(items);
-    if (discountType === 'percent') {
-        return (subtotal * (Number(discount) || 0)) / 100;
-    }
-    return Number(discount) || 0;
+const getProductPricing = (product) => {
+    const basePrice = Number(product?.price) || 0;
+    const salePrice = Number(product?.salePrice) || 0;
+    const hasDiscount = salePrice > 0 && basePrice > salePrice;
+
+    return {
+        basePrice,
+        salePrice,
+        hasDiscount,
+        effectivePrice: hasDiscount ? salePrice : (basePrice || salePrice),
+    };
 };
+
+const getDiscountItemKey = (item) => item?.productId || item?.id || item?.code || item?.name || '';
+
+const getDiscountEligibleItems = (items = [], discountScope = 'all', discountedItemIds = []) => {
+    const baseItems = getBaseOrderItems(items);
+    if (discountScope !== 'selected') return baseItems;
+    const selectedIds = new Set((discountedItemIds || []).filter(Boolean));
+    const matchedItems = baseItems.filter((item) => selectedIds.has(getDiscountItemKey(item)));
+    if (matchedItems.length > 0) return matchedItems;
+    return baseItems.length > 0 ? [baseItems[0]] : [];
+};
+
+const getDiscountBaseAmount = (items = [], discountScope = 'all', discountedItemIds = []) =>
+    calculateSubtotalAmount(getDiscountEligibleItems(items, discountScope, discountedItemIds));
+
+const getDiscountAllocations = (
+    items = [],
+    discount = 0,
+    discountType = 'amount',
+    discountScope = 'all',
+    discountedItemIds = []
+) => {
+    const eligibleItems = getDiscountEligibleItems(items, discountScope, discountedItemIds);
+    const eligibleKeys = new Set(eligibleItems.map((item) => getDiscountItemKey(item)));
+    const discountValue = Number(discount) || 0;
+
+    return items.map((item) => {
+        if (!eligibleKeys.has(getDiscountItemKey(item))) return 0;
+
+        const lineSubtotal = (Number(item.quantity) || 0) * (Number(item.price) || 0);
+        if (lineSubtotal <= 0) return 0;
+
+        if (discountType === 'percent') {
+            return Math.min(lineSubtotal, Math.round((lineSubtotal * discountValue) / 100));
+        }
+
+        return Math.min(lineSubtotal, discountValue);
+    });
+};
+
+const getScopedDiscountAmount = (
+    items = [],
+    discount = 0,
+    discountType = 'amount',
+    discountScope = 'all',
+    discountedItemIds = []
+) => getDiscountAllocations(items, discount, discountType, discountScope, discountedItemIds)
+    .reduce((sum, value) => sum + value, 0);
 
 const itemCountLabel = (count) => `${count} захиалга`;
 const SELLER_AVATARS = ['👩🏻', '👩🏽', '👩🏾', '👩🏼', '👩🏿', '👩'];
@@ -269,6 +322,9 @@ const getDefaultOrderForm = () => ({
     deliveryFee: 10000,
     discount: 0,
     discountType: 'amount',
+    discountScope: 'all',
+    discountedItemIds: [],
+    promotionOptOut: false,
     source: '',
     selectedPromotionId: '',
     appliedPromotion: null,
@@ -355,10 +411,10 @@ const Orders = () => {
 
     const UB_LOCATIONS = {
         'Баянгол': Array.from({ length: 25 }, (_, i) => `${i + 1}-р хороо`),
-        'Баянзүрх': Array.from({ length: 30 }, (_, i) => `${i + 1}-р хороо`),
+        'Баянзүрх': Array.from({ length: 43 }, (_, i) => `${i + 1}-р хороо`),
         'Сонгинохайрхан': Array.from({ length: 43 }, (_, i) => `${i + 1}-р хороо`),
         'Сүхбаатар': Array.from({ length: 20 }, (_, i) => `${i + 1}-р хороо`),
-        'Хан-Уул': Array.from({ length: 21 }, (_, i) => `${i + 1}-р хороо`),
+        'Хан-Уул': Array.from({ length: 25 }, (_, i) => `${i + 1}-р хороо`),
         'Чингэлтэй': Array.from({ length: 19 }, (_, i) => `${i + 1}-р хороо`),
         'Багануур': Array.from({ length: 5 }, (_, i) => `${i + 1}-р хороо`),
         'Багахангай': Array.from({ length: 2 }, (_, i) => `${i + 1}-р хороо`),
@@ -527,7 +583,13 @@ const Orders = () => {
             0
         );
         const totalDiscount = todaysOrders.reduce(
-            (sum, order) => sum + getDiscountAmountValue(order.items || [], order.discount, order.discountType),
+            (sum, order) => sum + getScopedDiscountAmount(
+                order.items || [],
+                order.discount,
+                order.discountType,
+                order.discountScope || 'all',
+                order.discountedItemIds || []
+            ),
             0
         );
         const totalDelivery = todaysOrders.reduce((sum, order) => {
@@ -589,14 +651,19 @@ const Orders = () => {
         todaysOrders.forEach((order) => {
             const orderItems = order.items || [];
             const orderSubtotal = calculateSubtotalAmount(orderItems);
-            const orderDiscount = getDiscountAmountValue(orderItems, order.discount, order.discountType);
             const orderDelivery = getSavedDeliveryFee(order);
             const itemSubtotals = orderItems.map((item) => (Number(item.quantity) || 0) * (Number(item.price) || 0));
             const itemWeights = orderSubtotal > 0
                 ? itemSubtotals
                 : orderItems.map(() => 1);
             const allocatedDeliveries = allocateAmountByWeight(itemWeights, orderDelivery);
-            const allocatedDiscounts = allocateAmountByWeight(itemWeights, orderDiscount);
+            const allocatedDiscounts = getDiscountAllocations(
+                orderItems,
+                order.discount,
+                order.discountType,
+                order.discountScope || 'all',
+                order.discountedItemIds || []
+            );
 
             orderItems.forEach((item, index) => {
                 const key = item.id || item.code || item.name;
@@ -845,6 +912,9 @@ const Orders = () => {
             deliveryFee: Number(order.deliveryFee) || 0,
             discount: Number(order.discount) || 0,
             discountType: order.discountType || 'amount',
+            discountScope: order.discountScope || 'all',
+            discountedItemIds: Array.isArray(order.discountedItemIds) ? order.discountedItemIds.filter(Boolean) : [],
+            promotionOptOut: Boolean(order.promotionOptOut),
             source: order.source || '',
             selectedPromotionId: order.appliedPromotion?.id || '',
             appliedPromotion: order.appliedPromotion || null,
@@ -861,6 +931,56 @@ const Orders = () => {
 
     const baseOrderItems = useMemo(() => getBaseOrderItems(newOrder.items), [newOrder.items]);
     const baseOrderSubtotal = useMemo(() => calculateSubtotalAmount(baseOrderItems), [baseOrderItems]);
+    const baseOrderOriginalSubtotal = useMemo(
+        () => baseOrderItems.reduce(
+            (sum, item) => sum + ((Number(item.originalPrice) > Number(item.price) ? Number(item.originalPrice) : Number(item.price) || 0) * (Number(item.quantity) || 0)),
+            0
+        ),
+        [baseOrderItems]
+    );
+    const bundledSaleSavings = useMemo(
+        () => Math.max(0, baseOrderOriginalSubtotal - baseOrderSubtotal),
+        [baseOrderOriginalSubtotal, baseOrderSubtotal]
+    );
+    const promotionGiftSavings = useMemo(
+        () => newOrder.items.reduce(
+            (sum, item) => sum + (isPromotionLineItem(item) ? (Number(item.originalPrice) || 0) * (Number(item.quantity) || 0) : 0),
+            0
+        ),
+        [newOrder.items]
+    );
+    const grossOrderValue = useMemo(
+        () => baseOrderOriginalSubtotal + promotionGiftSavings,
+        [baseOrderOriginalSubtotal, promotionGiftSavings]
+    );
+    const discountEligibleSubtotal = useMemo(
+        () => getDiscountBaseAmount(newOrder.items, newOrder.discountScope, newOrder.discountedItemIds),
+        [newOrder.items, newOrder.discountScope, newOrder.discountedItemIds]
+    );
+    const scopedDiscountAmount = useMemo(
+        () => getScopedDiscountAmount(
+            newOrder.items,
+            newOrder.discount,
+            newOrder.discountType,
+            newOrder.discountScope,
+            newOrder.discountedItemIds
+        ),
+        [newOrder.items, newOrder.discount, newOrder.discountType, newOrder.discountScope, newOrder.discountedItemIds]
+    );
+    const currentDiscountAllocations = useMemo(
+        () => getDiscountAllocations(
+            newOrder.items,
+            newOrder.discount,
+            newOrder.discountType,
+            newOrder.discountScope,
+            newOrder.discountedItemIds
+        ),
+        [newOrder.items, newOrder.discount, newOrder.discountType, newOrder.discountScope, newOrder.discountedItemIds]
+    );
+    const totalSavings = useMemo(
+        () => bundledSaleSavings + promotionGiftSavings + scopedDiscountAmount,
+        [bundledSaleSavings, promotionGiftSavings, scopedDiscountAmount]
+    );
 
     const availablePromotions = useMemo(() => {
         const now = new Date();
@@ -872,12 +992,12 @@ const Orders = () => {
 
     useEffect(() => {
         setNewOrder((currentOrder) => {
+            const cleanItems = getBaseOrderItems(currentOrder.items);
             const selectedPromotionId = currentOrder.selectedPromotionId || '';
             const matchingPromotion = availablePromotions.find((promotion) => promotion.id === selectedPromotionId);
-            const cleanItems = getBaseOrderItems(currentOrder.items);
             const currentGiftItem = currentOrder.items.find((item) => isPromotionLineItem(item));
 
-            if (!matchingPromotion) {
+            if (!matchingPromotion || currentOrder.promotionOptOut) {
                 if (!selectedPromotionId && cleanItems.length === currentOrder.items.length) {
                     return currentOrder;
                 }
@@ -900,7 +1020,8 @@ const Orders = () => {
                 currentApplied?.id === matchingPromotion.id &&
                 currentGiftItem?.promotionMeta?.promotionId === matchingPromotion.id &&
                 Number(currentGiftItem?.quantity) === Number(giftItem.quantity) &&
-                currentOrder.items.length === cleanItems.length + 1;
+                currentOrder.items.length === cleanItems.length + 1 &&
+                currentOrder.selectedPromotionId === matchingPromotion.id;
 
             if (isSamePromotionApplied) {
                 return currentOrder;
@@ -909,6 +1030,7 @@ const Orders = () => {
             return {
                 ...currentOrder,
                 items: [...cleanItems, giftItem],
+                promotionOptOut: false,
                 appliedPromotion: {
                     id: matchingPromotion.id,
                     title: matchingPromotion.title,
@@ -922,7 +1044,35 @@ const Orders = () => {
                 },
             };
         });
-    }, [availablePromotions]);
+    }, [availablePromotions, newOrder.selectedPromotionId, newOrder.promotionOptOut, newOrder.items]);
+
+    useEffect(() => {
+        setNewOrder((currentOrder) => {
+            if (currentOrder.discountScope !== 'selected') {
+                if ((currentOrder.discountedItemIds || []).length === 0) return currentOrder;
+                return {
+                    ...currentOrder,
+                    discountedItemIds: [],
+                };
+            }
+
+            const validIds = new Set(getBaseOrderItems(currentOrder.items).map((item) => getDiscountItemKey(item)).filter(Boolean));
+            const sanitizedIds = (currentOrder.discountedItemIds || []).filter((id) => validIds.has(id));
+            const fallbackIds = sanitizedIds.length > 0 ? sanitizedIds : (validIds.size > 0 ? [Array.from(validIds)[0]] : []);
+
+            if (
+                sanitizedIds.length === (currentOrder.discountedItemIds || []).length &&
+                fallbackIds.length === sanitizedIds.length
+            ) {
+                return currentOrder;
+            }
+
+            return {
+                ...currentOrder,
+                discountedItemIds: fallbackIds,
+            };
+        });
+    }, [newOrder.items, newOrder.discountScope]);
 
     const getItemImage = (item) => {
         if (item.image) return item.image;
@@ -932,6 +1082,7 @@ const Orders = () => {
     };
 
     const addProductToOrder = (prod) => {
+        const pricing = getProductPricing(prod);
         const existing = newOrder.items.find(i => i.id === prod.id);
         if (existing) {
             setNewOrder({
@@ -947,8 +1098,9 @@ const Orders = () => {
                     name: prod.name,
                     image: prod.image || prod.images?.[0] || '',
                     code: prod.code || prod.sku || '',
-                    price: prod.price || prod.salePrice,
-                    quantity: 1
+                    price: pricing.effectivePrice,
+                    quantity: 1,
+                    originalPrice: pricing.hasDiscount ? pricing.basePrice : 0,
                 }]
             });
         }
@@ -957,17 +1109,21 @@ const Orders = () => {
     };
 
     const calculateSubtotal = (items) => calculateSubtotalAmount(items);
-    const calculateTotal = (items, fee, discount, discountType = 'amount') => {
+    const calculateTotal = (
+        items,
+        fee,
+        discount,
+        discountType = 'amount',
+        discountScope = 'all',
+        discountedItemIds = []
+    ) => {
         const subtotal = calculateSubtotal(items);
-        let discountValue = Number(discount) || 0;
-        if (discountType === 'percent') {
-            discountValue = (subtotal * (Number(discount) || 0)) / 100;
-        }
+        const discountValue = getScopedDiscountAmount(items, discount, discountType, discountScope, discountedItemIds);
         return subtotal + (Number(fee) || 0) - discountValue;
     };
 
-    const getDiscountAmount = (items, discount, discountType) => {
-        return getDiscountAmountValue(items, discount, discountType);
+    const getDiscountAmount = (items, discount, discountType, discountScope = 'all', discountedItemIds = []) => {
+        return getScopedDiscountAmount(items, discount, discountType, discountScope, discountedItemIds);
     };
 
     // Number Formatting Helpers
@@ -1175,7 +1331,14 @@ const Orders = () => {
         if (!newOrder.orderDate) return alert("Захиалгын огноо сонгоно уу.");
 
         try {
-            const totalAmount = calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType);
+            const totalAmount = calculateTotal(
+                newOrder.items,
+                newOrder.deliveryFee,
+                newOrder.discount,
+                newOrder.discountType,
+                newOrder.discountScope,
+                newOrder.discountedItemIds
+            );
             const createdAt = Timestamp.fromDate(new Date(`${newOrder.orderDate}T12:00:00`));
             const payload = {
                 ...newOrder,
@@ -1220,7 +1383,20 @@ const Orders = () => {
                         <Download size={18} />
                         <span>Өдрийн нэгтгэл</span>
                     </button>
-                    <button className="staff-btn-primary" onClick={openCreateModal}><Plus size={18} />Захиалга шивэх</button>
+                    <button
+                        className="staff-btn-primary"
+                        onClick={() => {
+                            if (isAddModalOpen) {
+                                setIsAddModalOpen(false);
+                                resetOrderForm();
+                                return;
+                            }
+                            openCreateModal();
+                        }}
+                    >
+                        <Plus size={18} />
+                        {isAddModalOpen ? 'Шивэлт хаах' : 'Захиалга шивэх'}
+                    </button>
                 </div>
             </div>
 
@@ -1231,13 +1407,502 @@ const Orders = () => {
                 </div>
             </section>
 
-            {/* Floating Information Sticky Note */}
-            <StickyNote />
+            {isAddModalOpen && (
+                <section className="order-entry-shell">
+                    <div className="order-entry-panel">
+                        <div className="modal-header order-entry-header">
+                            <div>
+                                <h3>{editingOrderId ? 'Захиалга засах' : 'Шинэ захиалга бүртгэх'}</h3>
+                                <p>{editingOrderId ? 'Захиалгын мэдээлэл болон бүтээгдэхүүнийг шинэчилнэ үү.' : 'Хэрэглэгч болон барааны мэдээллийг нарийвчлан оруулна уу.'}</p>
+                            </div>
+                            <button className="close-btn" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}><X size={20} /></button>
+                        </div>
 
-            {/* Team Chat Messenger Widget */}
-            <TeamChat />
+                        <form onSubmit={handleSubmitOrder} className="order-entry-form">
+                            <div className="order-entry-meta">
+                                <span className="order-entry-pill">{editingOrderId ? 'Захиалга засвар' : 'Шинэ шивэлт'}</span>
+                                <label className="order-entry-date-pill">
+                                    <input
+                                        type="date"
+                                        value={newOrder.orderDate}
+                                        max={getTodayDateValue()}
+                                        onChange={e => setNewOrder({ ...newOrder, orderDate: e.target.value })}
+                                        required
+                                    />
+                                </label>
+                                {newOrder.source && (
+                                    <span className="order-entry-pill muted">
+                                        {SOURCE_OPTIONS.find((opt) => opt.key === newOrder.source)?.label || newOrder.source}
+                                    </span>
+                                )}
+                            </div>
 
-            <section className="store-performance-panel">
+                            <div className="order-entry-layout">
+                                <div className="order-entry-main">
+                                    <section className="order-entry-card">
+                                        <div className="modal-section-title"><User size={16} style={{ marginRight: 8 }} /> Үйлчлүүлэгч ба суваг</div>
+                                        <div className="address-grid compact">
+                                            <div className="form-group">
+                                                <label>Үйлчлүүлэгчийн нэр *</label>
+                                                <input className="form-input" type="text" value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })} required />
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Утасны дугаар *</label>
+                                                <input className="form-input" type="tel" value={newOrder.phoneNumber} onChange={e => setNewOrder({ ...newOrder, phoneNumber: e.target.value })} required />
+                                            </div>
+                                            <div className="form-group-full">
+                                                <label>Захиалгын суваг</label>
+                                                <div className="source-selector-grid compact">
+                                                    {SOURCE_OPTIONS.map(opt => (
+                                                        <button
+                                                            key={opt.key}
+                                                            type="button"
+                                                            className={`source-chip ${newOrder.source === opt.key ? 'active' : ''}`}
+                                                            style={!newOrder.source ? { borderColor: '#ffa39e' } : {}}
+                                                            onClick={() => setNewOrder({ ...newOrder, source: opt.key })}
+                                                        >
+                                                            <span className="source-chip-icon">{opt.icon}</span>
+                                                            <span className="source-chip-label">{opt.label}</span>
+                                                            {newOrder.source === opt.key && <span className="source-chip-indicator" />}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                {!newOrder.source && <p className="order-entry-inline-error">Захиалгын суваг сонгоно уу</p>}
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="order-entry-card">
+                                        <div className="modal-section-title"><MapPinned size={16} style={{ marginRight: 8 }} /> Хүргэлтийн мэдээлэл</div>
+                                        <div className="address-grid compact">
+                                            <div className="form-group">
+                                                <label>Хүргэлтийн бүс</label>
+                                                <select
+                                                    className="form-select"
+                                                    value={newOrder.address.zone}
+                                                    onChange={e => {
+                                                        const newZone = e.target.value;
+                                                        setNewOrder({
+                                                            ...newOrder,
+                                                            address: {
+                                                                ...newOrder.address,
+                                                                zone: newZone,
+                                                                city: newZone === 'Улаанбаатар' ? 'Улаанбаатар' : '',
+                                                                district: '',
+                                                                khoroo: ''
+                                                            }
+                                                        });
+                                                    }}
+                                                >
+                                                    <option value="Улаанбаатар">Улаанбаатар</option>
+                                                    <option value="Орон нутаг">Орон нутаг</option>
+                                                </select>
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Хот / Аймаг *</label>
+                                                {newOrder.address.zone === 'Улаанбаатар' ? (
+                                                    <select className="form-select" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })}>
+                                                        <option value="Улаанбаатар">Улаанбаатар</option>
+                                                    </select>
+                                                ) : (
+                                                    <select className="form-select" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })}>
+                                                        <option value="">Аймаг сонгох</option>
+                                                        {AIMAGS.map(a => <option key={a} value={a}>{a}</option>)}
+                                                    </select>
+                                                )}
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Сум / Дүүрэг *</label>
+                                                {newOrder.address.city === 'Улаанбаатар' ? (
+                                                    <select
+                                                        className="form-select"
+                                                        value={newOrder.address.district}
+                                                        onChange={e => setNewOrder({
+                                                            ...newOrder,
+                                                            address: {
+                                                                ...newOrder.address,
+                                                                district: e.target.value,
+                                                                khoroo: ''
+                                                            }
+                                                        })}
+                                                        required
+                                                    >
+                                                        <option value="">Дүүрэг сонгох</option>
+                                                        {Object.keys(UB_LOCATIONS).map(d => <option key={d} value={d}>{d}</option>)}
+                                                    </select>
+                                                ) : (
+                                                    <input className="form-input" type="text" value={newOrder.address.district} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, district: e.target.value } })} placeholder="Сум/Дүүрэг" required />
+                                                )}
+                                            </div>
+                                            <div className="form-group">
+                                                <label>Баг / Хороо *</label>
+                                                {newOrder.address.city === 'Улаанбаатар' && newOrder.address.district ? (
+                                                    <select
+                                                        className="form-select"
+                                                        value={newOrder.address.khoroo}
+                                                        onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })}
+                                                        required
+                                                    >
+                                                        <option value="">Хороо сонгох</option>
+                                                        {UB_LOCATIONS[newOrder.address.district].map(k => <option key={k} value={k}>{k}</option>)}
+                                                    </select>
+                                                ) : (
+                                                    <input className="form-input" type="text" value={newOrder.address.khoroo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })} placeholder="Баг/Хороо" required />
+                                                )}
+                                            </div>
+                                            <div className="form-group-full">
+                                                <label>Хүргэлтийн хаяг *</label>
+                                                <input className="form-input" type="text" value={newOrder.address.fullAddress} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, fullAddress: e.target.value } })} placeholder="Дэлгэрэнгүй хаяг" required />
+                                            </div>
+                                            <div className="form-group-full">
+                                                <label>Нэмэлт мэдээлэл</label>
+                                                <textarea className="form-textarea compact" rows="2" value={newOrder.address.additionalInfo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, additionalInfo: e.target.value } })} placeholder="Нэмэлт тайлбар" />
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="order-entry-card">
+                                        <div className="modal-section-title"><ShoppingCart size={16} style={{ marginRight: 8 }} /> Бараа бүтээгдэхүүн</div>
+                                        <div className="product-search-container">
+                                            <label>Бараа хайх</label>
+                                            <div className="input-with-icon">
+                                                <SearchIcon size={16} className="field-icon" />
+                                                <input
+                                                    className="form-input"
+                                                    type="text"
+                                                    placeholder="Бүтээгдэхүүний нэрээр хайх..."
+                                                    value={productSearch}
+                                                    onFocus={() => setIsProductListOpen(true)}
+                                                    onChange={e => setProductSearch(e.target.value)}
+                                                />
+                                                {isProductListOpen && productSearch && (
+                                                    <div className="search-results-dropdown">
+                                                        {searchableProducts.length > 0 ? searchableProducts.map(p => (
+                                                            <div key={p.id} className="search-result-item" onClick={() => addProductToOrder(p)}>
+                                                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                                                    <img src={getItemImage(p)} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover' }} />
+                                                                    <div>
+                                                                        <div><strong>{p.name}</strong></div>
+                                                                        <div className="p-stock">Үлдэгдэл: {p.stock || 0} ш</div>
+                                                                    </div>
+                                                                </div>
+                                                                {(() => {
+                                                                    const pricing = getProductPricing(p);
+                                                                    return (
+                                                                        <div className="p-price">
+                                                                            {pricing.hasDiscount ? (
+                                                                                <>
+                                                                                    <span className="p-price-old">₮{pricing.basePrice.toLocaleString()}</span>
+                                                                                    <span className="p-price-sale">₮{pricing.salePrice.toLocaleString()}</span>
+                                                                                </>
+                                                                            ) : (
+                                                                                <span className="p-price-sale">₮{pricing.effectivePrice.toLocaleString()}</span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                        )) : <div className="search-result-item" style={{ justifyContent: 'center', color: '#999' }}>Ийм бүтээгдэхүүн олдсонгүй</div>}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="order-items-editor compact">
+                                            {newOrder.items.length === 0 ? <p className="order-entry-empty">Захиалгад бараа нэмээгүй байна</p> :
+                                                newOrder.items.map((item, index) => {
+                                                    const lineSubtotal = (Number(item.price) || 0) * (Number(item.quantity) || 0);
+                                                    const lineDiscount = currentDiscountAllocations[index] || 0;
+                                                    const isDiscountedLine = lineDiscount > 0;
+                                                    const discountedLineTotal = Math.max(0, lineSubtotal - lineDiscount);
+                                                    return (
+                                                        <div key={item.id} className={`added-item-row ${isDiscountedLine ? 'discounted' : ''}`}>
+                                                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                                                                <img src={getItemImage(item)} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover' }} />
+                                                                <div>
+                                                                    <div className="added-item-title-row">
+                                                                        <strong>{item.name}</strong>
+                                                                        {isDiscountedLine && !isPromotionLineItem(item) && (
+                                                                            <span className="discount-applied-badge">
+                                                                                {newOrder.discountType === 'percent'
+                                                                                    ? `${newOrder.discount}% хямдарсан`
+                                                                                    : `₮${(Number(newOrder.discount) || 0).toLocaleString()} хямдарсан`}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    {isPromotionLineItem(item) && (
+                                                                        <div style={{ fontSize: '0.72rem', color: '#16a34a', fontWeight: 700 }}>
+                                                                            {item.promotionMeta?.promotionTitle || 'Урамшуулал'} • Бэлэг
+                                                                        </div>
+                                                                    )}
+                                                                    <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                                                                        {item.quantity} x ₮{item.price.toLocaleString()}
+                                                                        {item.originalPrice > 0 && item.originalPrice > item.price ? ` • Үндсэн үнэ ₮${item.originalPrice.toLocaleString()}` : ''}
+                                                                    </div>
+                                                                    {isDiscountedLine && !isPromotionLineItem(item) && (
+                                                                        <div className="added-item-discount-meta">
+                                                                            <span>Хөнгөлөлт: -₮{lineDiscount.toLocaleString()}</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                            <div className="order-item-actions">
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    value={item.quantity}
+                                                                    disabled={isPromotionLineItem(item)}
+                                                                    onChange={e => setNewOrder({ ...newOrder, items: newOrder.items.map(i => i.id === item.id ? { ...i, quantity: Number(e.target.value) } : i) })}
+                                                                    className="order-item-qty"
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={isPromotionLineItem(item)}
+                                                                    onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })}
+                                                                    style={{ color: isPromotionLineItem(item) ? '#94a3b8' : '#DC2626' }}
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                        </div>
+                                    </section>
+                                </div>
+
+                                <aside className="order-entry-sidebar">
+                                    <section className="order-entry-card compact-side">
+                                        <div className="modal-section-title"><CircleDollarSign size={16} style={{ marginRight: 8 }} /> Тооцоо</div>
+                                        <div className="pricing-summary-grid compact">
+                                            <div className="pricing-field">
+                                                <label>Нийт үнийн дүн</label>
+                                                <input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly />
+                                            </div>
+                                            <div className="pricing-field">
+                                                <label><Truck size={14} /> Хүргэлтийн төлбөр</label>
+                                                <input
+                                                    className="form-input"
+                                                    type="text"
+                                                    value={formatNumberInput(newOrder.deliveryFee)}
+                                                    onChange={e => setNewOrder({ ...newOrder, deliveryFee: parseNumberInput(e.target.value) })}
+                                                />
+                                            </div>
+                                            <div className="pricing-field pricing-field-full">
+                                                <label><Tags size={14} /> Хөнгөлөлт</label>
+                                                <div className="discount-editor compact">
+                                                    <div className="discount-editor-topline">
+                                                        <div className="discount-scope-switch">
+                                                            <button
+                                                                type="button"
+                                                                className={`discount-scope-chip ${newOrder.discountScope === 'all' ? 'active' : ''}`}
+                                                                onClick={() => setNewOrder({ ...newOrder, discountScope: 'all', discountedItemIds: [] })}
+                                                            >
+                                                                Бүх бараа
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                className={`discount-scope-chip ${newOrder.discountScope === 'selected' ? 'active' : ''}`}
+                                                                onClick={() => setNewOrder((currentOrder) => ({
+                                                                    ...currentOrder,
+                                                                    discountScope: 'selected',
+                                                                    discountedItemIds: currentOrder.discountedItemIds?.length
+                                                                        ? currentOrder.discountedItemIds
+                                                                        : (getBaseOrderItems(currentOrder.items)[0] ? [getDiscountItemKey(getBaseOrderItems(currentOrder.items)[0])] : []),
+                                                                }))}
+                                                                disabled={baseOrderItems.length === 0}
+                                                            >
+                                                                Сонгосон
+                                                            </button>
+                                                        </div>
+                                                        <select
+                                                            value={newOrder.discountType}
+                                                            onChange={e => setNewOrder({ ...newOrder, discountType: e.target.value })}
+                                                            className="discount-type-mini-select"
+                                                        >
+                                                            <option value="amount">Дүнгээр</option>
+                                                            <option value="percent">Хувиар</option>
+                                                        </select>
+                                                    </div>
+                                                    <input
+                                                        className="form-input"
+                                                        type="text"
+                                                        placeholder={newOrder.discountType === 'amount' ? '10000' : '10'}
+                                                        value={newOrder.discountType === 'amount' ? formatNumberInput(newOrder.discount) : newOrder.discount}
+                                                        onChange={e => {
+                                                            const val = newOrder.discountType === 'amount' ? parseNumberInput(e.target.value) : e.target.value;
+                                                            setNewOrder({ ...newOrder, discount: val });
+                                                        }}
+                                                    />
+                                                    <div className="discount-editor-caption">
+                                                        {newOrder.discountScope === 'selected'
+                                                            ? `Сонгосон ${newOrder.discountedItemIds?.length || 0} бараанд`
+                                                            : 'Бүх бараанд'}
+                                                        {discountEligibleSubtotal > 0 ? ` • ${formatCurrency(discountEligibleSubtotal)}` : ''}
+                                                    </div>
+                                                    {newOrder.discountScope === 'selected' && (
+                                                        <div className="discount-item-picker">
+                                                            {baseOrderItems.map((item) => {
+                                                                const itemKey = getDiscountItemKey(item);
+                                                                const isSelected = (newOrder.discountedItemIds || []).includes(itemKey);
+                                                                return (
+                                                                    <button
+                                                                        key={item.id}
+                                                                        type="button"
+                                                                        className={`discount-item-card ${isSelected ? 'active' : ''}`}
+                                                                        onClick={() => setNewOrder((currentOrder) => {
+                                                                            const currentIds = new Set(currentOrder.discountedItemIds || []);
+                                                                            if (currentIds.has(itemKey)) {
+                                                                                if (currentIds.size === 1) {
+                                                                                    return currentOrder;
+                                                                                }
+                                                                                currentIds.delete(itemKey);
+                                                                            } else {
+                                                                                currentIds.add(itemKey);
+                                                                            }
+                                                                            return {
+                                                                                ...currentOrder,
+                                                                                discountedItemIds: Array.from(currentIds),
+                                                                            };
+                                                                        })}
+                                                                    >
+                                                                        <span className="discount-item-card-name">{item.name}</span>
+                                                                        <span className="discount-item-card-meta">
+                                                                            {item.quantity}ш • {formatCurrency((Number(item.price) || 0) * (Number(item.quantity) || 0))}
+                                                                        </span>
+                                                                        {isSelected && (
+                                                                            <span className="discount-item-card-flag">Хөнгөлөгдөнө</span>
+                                                                        )}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="pricing-field pricing-field-full">
+                                                <label><CreditCard size={14} /> Төлбөрийн нөхцөл</label>
+                                                <select
+                                                    className="form-select"
+                                                    value={newOrder.paymentMethod}
+                                                    onChange={e => setNewOrder({ ...newOrder, paymentMethod: e.target.value })}
+                                                >
+                                                    {PAYMENT_METHODS.map(m => (
+                                                        <option key={m.key} value={m.key}>{m.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="order-summary-consolidated compact">
+                                            <div className="summary-line">
+                                                <span>Нийт үнийн дүн</span>
+                                                <strong>₮{grossOrderValue.toLocaleString()}</strong>
+                                            </div>
+                                            {bundledSaleSavings > 0 && (
+                                                <div className="summary-line discount bundle-discount">
+                                                    <span>Багцын хямдрал</span>
+                                                    <strong>- ₮{bundledSaleSavings.toLocaleString()}</strong>
+                                                </div>
+                                            )}
+                                            {promotionGiftSavings > 0 && (
+                                                <div className="summary-line discount gift-discount">
+                                                    <span>Бэлэг бүтээгдэхүүн</span>
+                                                    <strong>- ₮{promotionGiftSavings.toLocaleString()}</strong>
+                                                </div>
+                                            )}
+                                            <div className="summary-line">
+                                                <span>Хүргэлт</span>
+                                                <strong>+ ₮{newOrder.deliveryFee.toLocaleString()}</strong>
+                                            </div>
+                                            {newOrder.appliedPromotion && (
+                                                <div className="summary-line" style={{ color: '#15803d' }}>
+                                                    <span>Идэвхтэй урамшуулал</span>
+                                                    <strong>{newOrder.appliedPromotion.title}</strong>
+                                                </div>
+                                            )}
+                                            {newOrder.discount > 0 && (
+                                                <div className="summary-line discount">
+                                                    <span>
+                                                        Хөнгөлөлт
+                                                        {newOrder.discountType === 'percent' ? ` (${newOrder.discount}%)` : ''}
+                                                        {newOrder.discountScope === 'selected' ? ' • Сонгосон бараа' : ''}
+                                                    </span>
+                                                    <strong>- ₮{scopedDiscountAmount.toLocaleString()}</strong>
+                                                </div>
+                                            )}
+                                            {totalSavings > 0 && (
+                                                <div className="summary-line savings-highlight">
+                                                    <span>Нийт хэмнэлт</span>
+                                                    <strong>₮{totalSavings.toLocaleString()}</strong>
+                                                </div>
+                                            )}
+                                            <div className="final-total-box compact">
+                                                <span className="total-label">Төлөх дүн</span>
+                                                <span className="total-value">₮{calculateTotal(
+                                                    newOrder.items,
+                                                    newOrder.deliveryFee,
+                                                    newOrder.discount,
+                                                    newOrder.discountType,
+                                                    newOrder.discountScope,
+                                                    newOrder.discountedItemIds
+                                                ).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="order-entry-card compact-side">
+                                        <div className="modal-section-title"><Sparkles size={16} style={{ marginRight: 8 }} /> Санал болгох урамшуулал</div>
+                                        <div className="promotion-stack">
+                                            {availablePromotions.length === 0 ? (
+                                                <div className="promotion-empty">Одоогийн сагсанд таарах идэвхтэй автомат урамшуулал алга байна.</div>
+                                            ) : (
+                                                availablePromotions.map((promotion) => {
+                                                    const isSelected = newOrder.selectedPromotionId === promotion.id;
+                                                    return (
+                                                        <button
+                                                            key={promotion.id}
+                                                            type="button"
+                                                            onClick={() => setNewOrder({
+                                                                ...newOrder,
+                                                                promotionOptOut: isSelected ? true : false,
+                                                                selectedPromotionId: isSelected ? '' : promotion.id,
+                                                                appliedPromotion: isSelected ? null : newOrder.appliedPromotion,
+                                                            })}
+                                                            className={`promotion-card ${isSelected ? 'active' : ''}`}
+                                                        >
+                                                            <div className="promotion-card-top">
+                                                                <strong>{promotion.title}</strong>
+                                                                <span>{promotion.giftProductName || promotion.giftProduct?.name} x{promotion.giftQuantity}</span>
+                                                            </div>
+                                                            <div className="promotion-card-copy">{promotion.description}</div>
+                                                        </button>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+                                    </section>
+                                </aside>
+                            </div>
+
+                            <div className="modal-actions order-entry-actions">
+                                <button type="button" className="btn-cancel" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}>Болих</button>
+                                <button type="submit" className="btn-save">{editingOrderId ? 'Өөрчлөлт хадгалах' : 'Захиалга бүртгэх'}</button>
+                            </div>
+                        </form>
+                    </div>
+                </section>
+            )}
+
+            {!isAddModalOpen && (
+                <>
+                    {/* Floating Information Sticky Note */}
+                    <StickyNote />
+
+                    {/* Team Chat Messenger Widget */}
+                    <TeamChat />
+
+                    <section className="store-performance-panel">
                 <div className="store-performance-header">
                     <div>
                         <span className="store-performance-kicker">Өнөөдрийн дэлгүүрийн гүйцэтгэл</span>
@@ -1478,9 +2143,9 @@ const Orders = () => {
                         ))}
                     </div>
                 </div>
-            </section>
+                    </section>
 
-            <div className="orders-filter-toolbar">
+                    <div className="orders-filter-toolbar">
                 <div className="search-box orders-filter-search">
                     <Search size={18} />
                     <input type="text" placeholder="ID, Нэр, Утас..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -1547,9 +2212,9 @@ const Orders = () => {
                         </button>
                     )}
                 </div>
-            </div>
+                    </div>
 
-            <div className="table-container">
+                    <div className="table-container">
                 <table>
                     <thead>
                         <tr>
@@ -1628,363 +2293,8 @@ const Orders = () => {
                             ))}
                     </tbody>
                 </table>
-            </div>
-
-            {/* Enhanced Add Order Modal */}
-            {isAddModalOpen && (
-                <div className="staff-confirm-overlay" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}>
-                    <div className="staff-role-modal order-modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <div>
-                                <h3>{editingOrderId ? 'Захиалга засах' : 'Шинэ захиалга бүртгэх'}</h3>
-                                <p>{editingOrderId ? 'Захиалгын мэдээлэл болон бүтээгдэхүүнийг шинэчилнэ үү.' : 'Хэрэглэгч болон барааны мэдээллийг нарийвчлан оруулна уу.'}</p>
-                            </div>
-                            <button className="close-btn" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}><X size={20} /></button>
-                        </div>
-
-                        <form onSubmit={handleSubmitOrder} style={{ maxHeight: '75vh', overflowY: 'auto', paddingRight: '10px' }}>
-                            <div className="modal-section-title"><User size={18} style={{ marginRight: 8 }} /> Үйлчлүүлэгч ба суваг</div>
-                            <div className="address-grid">
-                                <div className="form-group">
-                                    <label>Үйлчлүүлэгчийн нэр *</label>
-                                    <input className="form-input" type="text" value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })} required />
-                                </div>
-                                <div className="form-group">
-                                    <label>Утасны дугаар *</label>
-                                    <input className="form-input" type="tel" value={newOrder.phoneNumber} onChange={e => setNewOrder({ ...newOrder, phoneNumber: e.target.value })} required />
-                                </div>
-                                <div className="form-group">
-                                    <label>Захиалгын огноо *</label>
-                                    <input
-                                        className="form-input"
-                                        type="date"
-                                        value={newOrder.orderDate}
-                                        max={getTodayDateValue()}
-                                        onChange={e => setNewOrder({ ...newOrder, orderDate: e.target.value })}
-                                        required
-                                    />
-                                </div>
-                                <div className="form-group-full">
-                                    <label>Захиалгын суваг сонгох *</label>
-                                    <div className="source-selector-grid">
-                                        {SOURCE_OPTIONS.map(opt => (
-                                            <button
-                                                key={opt.key}
-                                                type="button"
-                                                className={`source-chip ${newOrder.source === opt.key ? 'active' : ''}`}
-                                                style={!newOrder.source ? { borderColor: '#ffa39e' } : {}}
-                                                onClick={() => setNewOrder({ ...newOrder, source: opt.key })}
-                                            >
-                                                {opt.icon}
-                                                <span>{opt.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {!newOrder.source && <p style={{ fontSize: '0.75rem', color: '#ff4d4f', marginTop: '4px' }}>Захиалгын суваг сонгоно уу</p>}
-                                </div>
-                            </div>
-
-                            <div className="modal-section-title"><MapPinned size={18} style={{ marginRight: 8 }} /> Хүргэлтийн мэдээлэл</div>
-                            <div className="address-grid">
-                                <div className="form-group-full">
-                                    <label>Хүргэлтийн бүс</label>
-                                    <select
-                                        className="form-select"
-                                        value={newOrder.address.zone}
-                                        onChange={e => {
-                                            const newZone = e.target.value;
-                                            setNewOrder({
-                                                ...newOrder,
-                                                address: {
-                                                    ...newOrder.address,
-                                                    zone: newZone,
-                                                    city: newZone === 'Улаанбаатар' ? 'Улаанбаатар' : '',
-                                                    district: '',
-                                                    khoroo: ''
-                                                }
-                                            });
-                                        }}
-                                    >
-                                        <option value="Улаанбаатар">Улаанбаатар</option>
-                                        <option value="Орон нутаг">Орон нутаг</option>
-                                    </select>
-                                </div>
-                                <div className="form-group">
-                                    <label>Хот / Аймаг *</label>
-                                    {newOrder.address.zone === 'Улаанбаатар' ? (
-                                        <select className="form-select" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })}>
-                                            <option value="Улаанбаатар">Улаанбаатар</option>
-                                        </select>
-                                    ) : (
-                                        <select className="form-select" value={newOrder.address.city} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, city: e.target.value } })}>
-                                            <option value="">Аймаг сонгох</option>
-                                            {AIMAGS.map(a => <option key={a} value={a}>{a}</option>)}
-                                        </select>
-                                    )}
-                                </div>
-                                <div className="form-group">
-                                    <label>Сум / Дүүрэг *</label>
-                                    {newOrder.address.city === 'Улаанбаатар' ? (
-                                        <select
-                                            className="form-select"
-                                            value={newOrder.address.district}
-                                            onChange={e => setNewOrder({
-                                                ...newOrder,
-                                                address: {
-                                                    ...newOrder.address,
-                                                    district: e.target.value,
-                                                    khoroo: '' // Reset khoroo when district changes
-                                                }
-                                            })}
-                                            required
-                                        >
-                                            <option value="">Дүүрэг сонгох</option>
-                                            {Object.keys(UB_LOCATIONS).map(d => <option key={d} value={d}>{d}</option>)}
-                                        </select>
-                                    ) : (
-                                        <input className="form-input" type="text" value={newOrder.address.district} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, district: e.target.value } })} placeholder="Сум/Дүүрэг оруулах" required />
-                                    )}
-                                </div>
-                                <div className="form-group">
-                                    <label>Баг / Хороо *</label>
-                                    {newOrder.address.city === 'Улаанбаатар' && newOrder.address.district ? (
-                                        <select
-                                            className="form-select"
-                                            value={newOrder.address.khoroo}
-                                            onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })}
-                                            required
-                                        >
-                                            <option value="">Хороо сонгох</option>
-                                            {UB_LOCATIONS[newOrder.address.district].map(k => <option key={k} value={k}>{k}</option>)}
-                                        </select>
-                                    ) : (
-                                        <input className="form-input" type="text" value={newOrder.address.khoroo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, khoroo: e.target.value } })} placeholder="Баг/Хороо оруулах" required />
-                                    )}
-                                </div>
-                                <div className="form-group-full">
-                                    <label>Хүргэлтийн хаяг *</label>
-                                    <input className="form-input" type="text" value={newOrder.address.fullAddress} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, fullAddress: e.target.value } })} placeholder="Дэлгэрэнгүй хаяг оруулах" required />
-                                </div>
-                                <div className="form-group-full">
-                                    <label>Нэмэлт мэдээлэл</label>
-                                    <textarea className="form-textarea" rows="2" value={newOrder.address.additionalInfo} onChange={e => setNewOrder({ ...newOrder, address: { ...newOrder.address, additionalInfo: e.target.value } })} placeholder="Хүргэлтийн үед анхаарах зүйлс..." />
-                                </div>
-                            </div>
-
-                            <div className="modal-section-title"><ShoppingCart size={18} style={{ marginRight: 8 }} /> Бараа бүтээгдэхүүн</div>
-                            <div className="product-search-container">
-                                <label>Бараа хайх</label>
-                                <div className="input-with-icon">
-                                    <SearchIcon size={16} className="field-icon" />
-                                    <input
-                                        className="form-input"
-                                        type="text"
-                                        placeholder="Бүтээгдэхүүний нэрээр хайх..."
-                                        value={productSearch}
-                                        onFocus={() => setIsProductListOpen(true)}
-                                        onChange={e => setProductSearch(e.target.value)}
-                                    />
-                                    {isProductListOpen && productSearch && (
-                                        <div className="search-results-dropdown">
-                                            {searchableProducts.length > 0 ? searchableProducts.map(p => (
-                                                <div key={p.id} className="search-result-item" onClick={() => addProductToOrder(p)}>
-                                                    <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                                        <img src={getItemImage(p)} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover' }} />
-                                                        <div>
-                                                            <div><strong>{p.name}</strong></div>
-                                                            <div className="p-stock">Үлдэгдэл: {p.stock || 0} ш</div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="p-price">₮{(p.price || p.salePrice).toLocaleString()}</div>
-                                                </div>
-                                            )) : <div className="search-result-item" style={{ justifyContent: 'center', color: '#999' }}>Ийм бүтээгдэхүүн олдсонгүй</div>}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="order-items-editor" style={{ marginTop: '15px' }}>
-                                {newOrder.items.length === 0 ? <p style={{ textAlign: 'center', color: '#999', padding: '20px' }}>Захиалгад бараа нэмээгүй байна</p> :
-                                    newOrder.items.map(item => (
-                                        <div key={item.id} className="added-item-row">
-                                            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                                                <img src={getItemImage(item)} alt="" style={{ width: 50, height: 50, borderRadius: 8, objectFit: 'cover' }} />
-                                                <div>
-                                                    <strong>{item.name}</strong>
-                                                    {isPromotionLineItem(item) && (
-                                                        <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700 }}>
-                                                            {item.promotionMeta?.promotionTitle || 'Урамшуулал'} • Бэлэг
-                                                        </div>
-                                                    )}
-                                                    <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                                                        {item.quantity} x ₮{item.price.toLocaleString()}
-                                                        {isPromotionLineItem(item) && item.originalPrice > 0 ? ` • Үндсэн үнэ ₮${item.originalPrice.toLocaleString()}` : ''}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                                                <input
-                                                    type="number"
-                                                    min="1"
-                                                    value={item.quantity}
-                                                    disabled={isPromotionLineItem(item)}
-                                                    onChange={e => setNewOrder({ ...newOrder, items: newOrder.items.map(i => i.id === item.id ? { ...i, quantity: Number(e.target.value) } : i) })}
-                                                    style={{ width: 60, padding: '4px 8px' }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    disabled={isPromotionLineItem(item)}
-                                                    onClick={() => setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.id !== item.id) })}
-                                                    style={{ color: isPromotionLineItem(item) ? '#94a3b8' : '#DC2626' }}
-                                                >
-                                                    <Trash2 size={16} />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                            </div>
-
-                            <div className="modal-section-title"><Sparkles size={18} style={{ marginRight: 8 }} /> Санал болгох урамшуулал</div>
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                                {availablePromotions.length === 0 ? (
-                                    <div style={{ border: '1px dashed #d1d5db', borderRadius: '14px', padding: '14px 16px', color: '#64748b', background: '#f8fafc' }}>
-                                        Одоогийн сагсанд таарах идэвхтэй автомат урамшуулал алга байна.
-                                    </div>
-                                ) : (
-                                    availablePromotions.map((promotion) => {
-                                        const isSelected = newOrder.selectedPromotionId === promotion.id;
-                                        return (
-                                            <button
-                                                key={promotion.id}
-                                                type="button"
-                                                onClick={() => setNewOrder({
-                                                    ...newOrder,
-                                                    selectedPromotionId: isSelected ? '' : promotion.id,
-                                                    appliedPromotion: isSelected ? null : newOrder.appliedPromotion,
-                                                })}
-                                                style={{
-                                                    textAlign: 'left',
-                                                    borderRadius: '16px',
-                                                    padding: '16px',
-                                                    border: `1px solid ${isSelected ? '#111827' : '#e5e7eb'}`,
-                                                    background: isSelected ? '#111827' : '#ffffff',
-                                                    color: isSelected ? '#ffffff' : '#111827',
-                                                    cursor: 'pointer',
-                                                }}
-                                            >
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
-                                                    <div>
-                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                                            <strong>{promotion.title}</strong>
-                                                            <span style={{
-                                                                fontSize: '0.72rem',
-                                                                fontWeight: 700,
-                                                                padding: '3px 8px',
-                                                                borderRadius: '999px',
-                                                                background: isSelected ? 'rgba(255,255,255,0.16)' : '#ecfccb',
-                                                                color: isSelected ? '#fff' : '#3f6212',
-                                                            }}>
-                                                                {isSelected ? 'Идэвхтэй' : 'Санал болгож байна'}
-                                                            </span>
-                                                        </div>
-                                                        <div style={{ fontSize: '0.9rem', opacity: 0.88 }}>{promotion.description}</div>
-                                                    </div>
-                                                    <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>
-                                                        {promotion.giftProductName || promotion.giftProduct?.name} x{promotion.giftQuantity}
-                                                    </div>
-                                                </div>
-                                                <div style={{ marginTop: '10px', fontSize: '0.82rem', opacity: 0.8 }}>
-                                                    {isSelected ? 'Дахин дарвал урамшууллыг ашиглахгүй.' : 'Дарвал энэ урамшуулал захиалгад идэвхжинэ.'}
-                                                </div>
-                                            </button>
-                                        );
-                                    })
-                                )}
-                            </div>
-
-                            <div className="pricing-summary-grid">
-                                <div className="pricing-field">
-                                    <label>Нийт үнийн дүн</label>
-                                    <input className="form-input" type="text" value={`₮${calculateSubtotal(newOrder.items).toLocaleString()}`} readOnly />
-                                </div>
-                                <div className="pricing-field">
-                                    <label><Truck size={14} /> Хүргэлтийн төлбөр</label>
-                                    <input
-                                        className="form-input"
-                                        type="text"
-                                        value={formatNumberInput(newOrder.deliveryFee)}
-                                        onChange={e => setNewOrder({ ...newOrder, deliveryFee: parseNumberInput(e.target.value) })}
-                                    />
-                                </div>
-                                <div className="pricing-field">
-                                    <label>
-                                        <Tags size={14} /> Хөнгөлөлт
-                                        <select
-                                            value={newOrder.discountType}
-                                            onChange={e => setNewOrder({ ...newOrder, discountType: e.target.value })}
-                                            className="discount-type-mini-select"
-                                        >
-                                            <option value="amount">₮</option>
-                                            <option value="percent">%</option>
-                                        </select>
-                                    </label>
-                                    <input
-                                        className="form-input"
-                                        type="text"
-                                        value={newOrder.discountType === 'amount' ? formatNumberInput(newOrder.discount) : newOrder.discount}
-                                        onChange={e => {
-                                            const val = newOrder.discountType === 'amount' ? parseNumberInput(e.target.value) : e.target.value;
-                                            setNewOrder({ ...newOrder, discount: val });
-                                        }}
-                                    />
-                                </div>
-                                <div className="pricing-field" style={{ gridColumn: 'span 2' }}>
-                                    <label><CreditCard size={14} /> Төлбөрийн нөхцөл</label>
-                                    <select
-                                        className="form-select"
-                                        value={newOrder.paymentMethod}
-                                        onChange={e => setNewOrder({ ...newOrder, paymentMethod: e.target.value })}
-                                    >
-                                        {PAYMENT_METHODS.map(m => (
-                                            <option key={m.key} value={m.key}>{m.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="order-summary-consolidated">
-                                    <div className="summary-line">
-                                        <span>Нийт үнийн дүн:</span>
-                                        <strong>₮{calculateSubtotal(newOrder.items).toLocaleString()}</strong>
-                                    </div>
-                                    <div className="summary-line">
-                                        <span>Хүргэлт:</span>
-                                        <strong>+ ₮{newOrder.deliveryFee.toLocaleString()}</strong>
-                                    </div>
-                                    {newOrder.appliedPromotion && (
-                                        <div className="summary-line" style={{ color: '#15803d' }}>
-                                            <span>Идэвхтэй урамшуулал:</span>
-                                            <strong>{newOrder.appliedPromotion.title}</strong>
-                                        </div>
-                                    )}
-                                    {newOrder.discount > 0 && (
-                                        <div className="summary-line discount">
-                                            <span>Хөнгөлөлт {newOrder.discountType === 'percent' ? `(${newOrder.discount}%)` : ''}:</span>
-                                            <strong>- ₮{getDiscountAmount(newOrder.items, newOrder.discount, newOrder.discountType).toLocaleString()}</strong>
-                                        </div>
-                                    )}
-                                    <div className="final-total-box">
-                                        <span className="total-label">Төлөх дүн:</span>
-                                        <span className="total-value">₮{calculateTotal(newOrder.items, newOrder.deliveryFee, newOrder.discount, newOrder.discountType).toLocaleString()}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="modal-actions">
-                                <button type="button" className="btn-cancel" onClick={() => { setIsAddModalOpen(false); resetOrderForm(); }}>Болих</button>
-                                <button type="submit" className="btn-save">{editingOrderId ? 'Өөрчлөлт хадгалах' : 'Захиалга бүртгэх'}</button>
-                            </div>
-                        </form>
                     </div>
-                </div>
+                </>
             )}
 
             {isDailySummaryOpen && (
@@ -2210,8 +2520,17 @@ const Orders = () => {
                                         </div>
                                         {selectedOrder.discount > 0 && (
                                             <div className="info-display-item" style={{ justifyContent: 'space-between', color: '#DC2626' }}>
-                                                <span>Хөнгөлөлт {selectedOrder.discountType === 'percent' ? `(${selectedOrder.discount}%)` : ''}</span>
-                                                <span>- ₮{getDiscountAmount(selectedOrder.items || [], selectedOrder.discount, selectedOrder.discountType).toLocaleString()}</span>
+                                                <span>
+                                                    Хөнгөлөлт {selectedOrder.discountType === 'percent' ? `(${selectedOrder.discount}%)` : ''}
+                                                    {selectedOrder.discountScope === 'selected' ? ' • Сонгосон бараа' : ''}
+                                                </span>
+                                                <span>- ₮{getDiscountAmount(
+                                                    selectedOrder.items || [],
+                                                    selectedOrder.discount,
+                                                    selectedOrder.discountType,
+                                                    selectedOrder.discountScope || 'all',
+                                                    selectedOrder.discountedItemIds || []
+                                                ).toLocaleString()}</span>
                                             </div>
                                         )}
                                         {selectedOrder.appliedPromotion?.title && (
