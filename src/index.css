@@ -10012,6 +10012,100 @@ tbody tr:last-child td {
   white-space: nowrap;
 }
 
+.orders-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding: 0 2px;
+}
+
+.orders-pagination-nav {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+}
+
+.orders-pagination-btn,
+.orders-page-number {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.orders-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 0 26px;
+  font-size: 0.98rem;
+}
+
+.orders-pagination-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.orders-pagination-btn:not(:disabled):hover,
+.orders-page-number:hover {
+  background: rgba(59, 130, 246, 0.06);
+  color: #2563eb;
+}
+
+.orders-pagination-pages {
+  display: flex;
+  align-items: stretch;
+  border-left: 1px solid rgba(226, 232, 240, 0.9);
+  border-right: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.orders-page-number,
+.orders-page-ellipsis {
+  min-width: 52px;
+  min-height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.98rem;
+}
+
+.orders-page-number.active {
+  color: #2563eb;
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.92) 0%, rgba(219, 234, 254, 0.86) 100%);
+  box-shadow: inset 0 -2px 0 #3b82f6;
+}
+
+.orders-page-ellipsis {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.orders-pagination-size {
+  margin-left: auto;
+}
+
+.orders-pagination-select {
+  min-width: 124px;
+  height: 54px;
+  padding: 0 18px;
+  border-radius: 16px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+}
+
 .daily-report-table {
   border: 1px solid #e2e8f0;
   border-radius: 16px;
@@ -10462,6 +10556,7 @@ tbody tr:last-child td {
   z-index: 2;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(10px);
+  padding: 12px 16px;
 }
 
 .order-entry-header h3 {
@@ -10552,6 +10647,8 @@ tbody tr:last-child td {
 .order-entry-sidebar {
   position: sticky;
   top: 70px;
+  max-height: none;
+  overflow: visible;
 }
 
 .order-items-editor {
@@ -10588,6 +10685,7 @@ tbody tr:last-child td {
   align-items: center;
   padding: 8px;
   border-bottom: 1px solid #f5f5f5;
+  gap: 8px;
 }
 
 .added-item-row.discounted {
@@ -10725,6 +10823,10 @@ tbody tr:last-child td {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.search-result-item strong {
+  font-size: 0.82rem;
 }
 
 .search-result-item:hover {
@@ -10988,6 +11090,12 @@ tbody tr:last-child td {
   border-radius: 12px;
 }
 
+.discount-editor.compact .discount-item-picker {
+  max-height: 160px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
 .discount-editor-topline {
   display: flex;
   justify-content: space-between;
@@ -11208,6 +11316,9 @@ tbody tr:last-child td {
 .promotion-stack {
   display: grid;
   gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .promotion-empty {
@@ -11264,6 +11375,10 @@ tbody tr:last-child td {
   margin-top: 10px;
   padding-top: 10px;
   border-top: 1px solid #e2e8f0;
+  position: sticky;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
 }
 
 @media (max-width: 1180px) {
@@ -11273,6 +11388,8 @@ tbody tr:last-child td {
 
   .order-entry-sidebar {
     position: static;
+    max-height: none;
+    overflow: visible;
   }
 }
 
@@ -11712,6 +11829,10 @@ tbody tr:last-child td {
   gap: 15px;
 }
 
+.order-entry-status-group {
+  gap: 10px;
+}
+
 .modern-select-box {
   display: flex;
   gap: 10px;
@@ -11960,6 +12081,38 @@ tbody tr:last-child td {
   .orders-filter-controls {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .orders-pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .orders-pagination-nav {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .orders-pagination-btn {
+    justify-content: center;
+    flex: 1 1 160px;
+  }
+
+  .orders-pagination-pages {
+    width: 100%;
+    justify-content: center;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+  }
+
+  .orders-pagination-size {
+    margin-left: 0;
+  }
+
+  .orders-pagination-select {
+    width: 100%;
   }
 
   .orders-filter-search,

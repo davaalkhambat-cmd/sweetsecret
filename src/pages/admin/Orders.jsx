@@ -317,6 +317,7 @@ const getDefaultOrderForm = () => ({
     },
     items: [],
     status: 'pending',
+    deliveryStatus: 'pending',
     deliveryType: 'delivery',
     paymentMethod: 'bank_transfer',
     deliveryFee: 10000,
@@ -372,6 +373,8 @@ const Orders = () => {
     const [paymentFilter, setPaymentFilter] = useState('all');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [ordersPerPage, setOrdersPerPage] = useState(10);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [editingOrderId, setEditingOrderId] = useState(null);
     const [selectedOrder, setSelectedOrder] = useState(null);
@@ -557,6 +560,37 @@ const Orders = () => {
 
         return matchesSearch && matchesStatus && matchesSource && matchesPayment && matchesDate;
     }), [orders, searchTerm, statusFilter, sourceFilter, paymentFilter, startDate, endDate]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, statusFilter, sourceFilter, paymentFilter, startDate, endDate]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredOrders.length / ordersPerPage));
+
+    useEffect(() => {
+        setCurrentPage((prevPage) => Math.min(prevPage, totalPages));
+    }, [totalPages]);
+
+    const paginatedOrders = useMemo(() => {
+        const startIndex = (currentPage - 1) * ordersPerPage;
+        return filteredOrders.slice(startIndex, startIndex + ordersPerPage);
+    }, [filteredOrders, currentPage, ordersPerPage]);
+
+    const visiblePageNumbers = useMemo(() => {
+        if (totalPages <= 7) {
+            return Array.from({ length: totalPages }, (_, index) => index + 1);
+        }
+
+        if (currentPage <= 3) {
+            return [1, 2, 3, 'ellipsis-right', totalPages];
+        }
+
+        if (currentPage >= totalPages - 2) {
+            return [1, 'ellipsis-left', totalPages - 2, totalPages - 1, totalPages];
+        }
+
+        return [1, 'ellipsis-left', currentPage, 'ellipsis-right', totalPages];
+    }, [currentPage, totalPages]);
 
     const stats = useMemo(() => ({
         totalCount: orders.length,
@@ -907,6 +941,7 @@ const Orders = () => {
                 promotionMeta: item.promotionMeta || null,
             })),
             status: order.status || 'pending',
+            deliveryStatus: order.deliveryStatus || 'pending',
             deliveryType: order.deliveryType || 'delivery',
             paymentMethod: order.paymentMethod || 'bank_transfer',
             deliveryFee: Number(order.deliveryFee) || 0,
@@ -1882,6 +1917,47 @@ const Orders = () => {
                                             )}
                                         </div>
                                     </section>
+
+                                    <section className="order-entry-card compact-side">
+                                        <div className="status-dropdown-group order-entry-status-group">
+                                            <div className="sidebar-section-title" style={{ marginBottom: '8px' }}>
+                                                <CreditCard size={16} /> Төлбөрийн төлөв
+                                            </div>
+                                            <div className="modern-select-box">
+                                                <select
+                                                    className="modern-select"
+                                                    value={newOrder.status}
+                                                    onChange={(e) => setNewOrder({ ...newOrder, status: e.target.value })}
+                                                >
+                                                    {Object.entries(STATUS_CONFIG).map(([key, cfg]) => (
+                                                        <option key={key} value={key}>{cfg.label}</option>
+                                                    ))}
+                                                </select>
+                                                <div className="status-icon-badge" style={{ background: '#10b981' }}>
+                                                    <CheckCircle2 size={20} />
+                                                </div>
+                                            </div>
+
+                                            <div className="sidebar-section-title" style={{ marginTop: '10px', marginBottom: '8px' }}>
+                                                <Truck size={16} /> Хүргэлтийн төлөв
+                                            </div>
+                                            <div className="modern-select-box">
+                                                <select
+                                                    className="modern-select"
+                                                    value={newOrder.deliveryStatus}
+                                                    onChange={(e) => setNewOrder({ ...newOrder, deliveryStatus: e.target.value })}
+                                                >
+                                                    <option value="pending">Хүлээгдэж буй</option>
+                                                    <option value="processing">Бэлтгэгдэж буй</option>
+                                                    <option value="shipped">Хүргэлтэнд</option>
+                                                    <option value="delivered">Хүргэгдсэн</option>
+                                                </select>
+                                                <div className="status-icon-badge" style={{ background: '#3b82f6' }}>
+                                                    <Truck size={20} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
                                 </aside>
                             </div>
 
@@ -2230,7 +2306,7 @@ const Orders = () => {
                     </thead>
                     <tbody>
                         {loading ? <tr><td colSpan="9" style={{ textAlign: 'center', padding: '40px' }}>Уншиж байна...</td></tr> :
-                            filteredOrders.map(order => (
+                            paginatedOrders.map(order => (
                                 <tr key={order.id}>
                                     <td style={{ fontSize: '0.85rem', fontWeight: 600 }}>
                                         {renderHighlightedText(`#${order.id.slice(-6).toUpperCase()}`, searchTerm)}
@@ -2293,6 +2369,62 @@ const Orders = () => {
                             ))}
                     </tbody>
                 </table>
+                    </div>
+
+                    <div className="orders-pagination">
+                        <div className="orders-pagination-nav">
+                            <button
+                                type="button"
+                                className="orders-pagination-btn"
+                                onClick={() => setCurrentPage((prevPage) => Math.max(1, prevPage - 1))}
+                                disabled={currentPage === 1}
+                            >
+                                <ArrowLeft size={16} />
+                                <span>Өмнөх</span>
+                            </button>
+
+                            <div className="orders-pagination-pages">
+                                {visiblePageNumbers.map((pageNumber) => (
+                                    typeof pageNumber === 'number' ? (
+                                        <button
+                                            key={pageNumber}
+                                            type="button"
+                                            className={`orders-page-number ${currentPage === pageNumber ? 'active' : ''}`}
+                                            onClick={() => setCurrentPage(pageNumber)}
+                                        >
+                                            {pageNumber}
+                                        </button>
+                                    ) : (
+                                        <span key={pageNumber} className="orders-page-ellipsis">...</span>
+                                    )
+                                ))}
+                            </div>
+
+                            <button
+                                type="button"
+                                className="orders-pagination-btn"
+                                onClick={() => setCurrentPage((prevPage) => Math.min(totalPages, prevPage + 1))}
+                                disabled={currentPage === totalPages}
+                            >
+                                <span>Дараах</span>
+                                <ArrowRight size={16} />
+                            </button>
+                        </div>
+
+                        <div className="orders-pagination-size">
+                            <select
+                                className="orders-pagination-select"
+                                value={ordersPerPage}
+                                onChange={(e) => {
+                                    setOrdersPerPage(Number(e.target.value));
+                                    setCurrentPage(1);
+                                }}
+                            >
+                                {[10, 20, 30, 40].map((size) => (
+                                    <option key={size} value={size}>{size} харах</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </>
             )}
@@ -2600,6 +2732,9 @@ const Orders = () => {
                             <div className="order-sidebar-content">
                                 <div className="sidebar-card">
                                     <div className="status-dropdown-group">
+                                        <div className="sidebar-section-title" style={{ marginBottom: '8px' }}>
+                                            <CreditCard size={16} /> Төлбөрийн төлөв
+                                        </div>
                                         <div className="modern-select-box">
                                             <select
                                                 className="modern-select"
