@@ -52,9 +52,9 @@ import {
     deleteDoc,
     Timestamp,
 } from 'firebase/firestore';
-import { db } from '../../firebase';
+import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { db, storage } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
-import StickyNote from '../../components/admin/StickyNote';
 import TeamChat from '../../components/admin/TeamChat';
 
 const STATUS_CONFIG = {
@@ -68,7 +68,18 @@ const STATUS_CONFIG = {
 const DEFAULT_DAILY_TARGET = 1500000;
 const DAILY_TARGET_STORAGE_KEY = 'sweet-secret-orders-daily-target';
 const DAILY_NEWS_STORAGE_KEY = 'sweet-secret-orders-daily-news';
+const ORDERS_REFRESH_PROMO_STORAGE_KEY = 'sweet-secret-orders-refresh-promo';
 const DAILY_REPORT_DELIVERY_FEE = 10000;
+const DEFAULT_REFRESH_PROMO = {
+    title: 'Энэ сарын урамшуулал',
+    images: [],
+};
+const WEEKLY_NEWS_REACTIONS = [
+    { key: 'like', emoji: '👍', label: 'Like' },
+    { key: 'love', emoji: '❤️', label: 'Love' },
+    { key: 'fire', emoji: '🔥', label: 'Fire' },
+    { key: 'clap', emoji: '👏', label: 'Clap' },
+];
 
 const calculateSubtotalAmount = (items = []) =>
     items.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0);
@@ -143,6 +154,227 @@ const getSavedDeliveryFee = (order) => {
     return Number.isFinite(deliveryFee) ? deliveryFee : 0;
 };
 
+const isBundleOrderItem = (item) => {
+    if (isPromotionLineItem(item)) return false;
+    const originalPrice = Number(item?.originalPrice) || 0;
+    const price = Number(item?.price) || 0;
+    const name = String(item?.name || '').toLowerCase();
+    const code = String(item?.code || '').toLowerCase();
+    return (
+        (originalPrice > 0 && originalPrice > price) ||
+        /bundle|kit|багц/.test(name) ||
+        /bundle|kit|багц/.test(code)
+    );
+};
+
+const getOrderCreatedDate = (order) => {
+    if (!order?.createdAt) return null;
+    const createdAt = typeof order.createdAt?.toMillis === 'function'
+        ? new Date(order.createdAt.toMillis())
+        : new Date(order.createdAt);
+    return Number.isNaN(createdAt.getTime()) ? null : createdAt;
+};
+
+const getWeekMeta = (value = new Date()) => {
+    const baseDate = new Date(value);
+    const normalizedDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+    const day = normalizedDate.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    const weekStart = new Date(normalizedDate);
+    weekStart.setDate(normalizedDate.getDate() + diffToMonday);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+
+    const weekKey = weekStart.toISOString().slice(0, 10);
+    const pad = (num) => String(num).padStart(2, '0');
+    const formatNumericDate = (date) => `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`;
+
+    return {
+        weekKey,
+        weekStart,
+        weekEnd,
+        rangeLabel: `${formatNumericDate(weekStart)} - ${formatNumericDate(weekEnd)}`,
+        fullDateLabel: formatNumericDate(normalizedDate),
+    };
+};
+
+const buildSalesPerformanceSnapshot = ({
+    orders = [],
+    startDate,
+    endDate,
+    target = 0,
+    paymentMethods = [],
+    sourceOptions = [],
+}) => {
+    const filteredOrders = orders.filter((order) => {
+        const createdAt = getOrderCreatedDate(order);
+        return createdAt && createdAt >= startDate && createdAt <= endDate;
+    });
+
+    const merchandiseSubtotal = filteredOrders.reduce(
+        (sum, order) => sum + calculateSubtotalAmount(order.items || []),
+        0
+    );
+    const totalDiscount = filteredOrders.reduce(
+        (sum, order) => sum + getScopedDiscountAmount(
+            order.items || [],
+            order.discount,
+            order.discountType,
+            order.discountScope || 'all',
+            order.discountedItemIds || []
+        ),
+        0
+    );
+    const totalDelivery = filteredOrders.reduce((sum, order) => sum + getSavedDeliveryFee(order), 0);
+    const totalSales = filteredOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+    const totalOrders = filteredOrders.length;
+    const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+    const progress = target > 0 ? (totalSales / target) * 100 : 0;
+    const gapAmount = Math.abs(target - totalSales);
+
+    const paymentColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#14b8a6'];
+    const sourceColors = ['#1d4ed8', '#db2777', '#0f766e', '#ea580c', '#7c3aed', '#0891b2', '#16a34a', '#64748b'];
+
+    const paymentBreakdown = paymentMethods.map((method, index) => {
+        const amount = filteredOrders
+            .filter((order) => order.paymentMethod === method.key)
+            .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
+        const share = totalSales > 0 ? (amount / totalSales) * 100 : 0;
+        return {
+            ...method,
+            amount,
+            share,
+            color: paymentColors[index % paymentColors.length],
+        };
+    }).sort((a, b) => b.amount - a.amount);
+
+    const sourceBreakdown = sourceOptions.map((source, index) => {
+        const count = filteredOrders.filter((order) => order.source === source.key).length;
+        const share = totalOrders > 0 ? (count / totalOrders) * 100 : 0;
+        return {
+            ...source,
+            count,
+            share,
+            color: sourceColors[index % sourceColors.length],
+        };
+    }).sort((a, b) => b.count - a.count);
+
+    const buildPieSegments = (items) => {
+        const total = items.reduce((sum, item) => sum + (item.share || 0), 0);
+        if (total <= 0) return 'conic-gradient(#e2e8f0 0% 100%)';
+
+        let current = 0;
+        const segments = items
+            .filter((item) => item.share > 0)
+            .map((item) => {
+                const start = current;
+                current += item.share;
+                return `${item.color} ${start}% ${current}%`;
+            });
+
+        return `conic-gradient(${segments.join(', ')})`;
+    };
+
+    const visiblePaymentBreakdown = paymentBreakdown.filter((item) => item.amount > 0);
+    const visibleSourceBreakdown = sourceBreakdown.filter((item) => item.count > 0);
+    const topProductsMap = new Map();
+
+    filteredOrders.forEach((order) => {
+        const orderItems = order.items || [];
+        const orderSubtotal = calculateSubtotalAmount(orderItems);
+        const orderDelivery = getSavedDeliveryFee(order);
+        const itemSubtotals = orderItems.map((item) => (Number(item.quantity) || 0) * (Number(item.price) || 0));
+        const itemWeights = orderSubtotal > 0 ? itemSubtotals : orderItems.map(() => 1);
+        const allocatedDeliveries = allocateAmountByWeight(itemWeights, orderDelivery);
+        const allocatedDiscounts = getDiscountAllocations(
+            orderItems,
+            order.discount,
+            order.discountType,
+            order.discountScope || 'all',
+            order.discountedItemIds || []
+        );
+
+        orderItems.forEach((item, index) => {
+            const key = item.id || item.code || item.name;
+            const current = topProductsMap.get(key) || {
+                key,
+                name: item.name || 'Бүтээгдэхүүн',
+                image: item.image || '',
+                quantity: 0,
+                revenue: 0,
+                delivery: 0,
+                discount: 0,
+                payable: 0,
+            };
+            const quantity = Number(item.quantity) || 0;
+            const price = Number(item.price) || 0;
+            const itemSubtotal = itemSubtotals[index] || (quantity * price);
+            const allocatedDelivery = allocatedDeliveries[index] || 0;
+            const allocatedDiscount = allocatedDiscounts[index] || 0;
+
+            current.quantity += quantity;
+            current.revenue += itemSubtotal;
+            current.delivery += allocatedDelivery;
+            current.discount += allocatedDiscount;
+            current.payable += itemSubtotal + allocatedDelivery - allocatedDiscount;
+            if (!current.image && item.image) {
+                current.image = item.image;
+            }
+            topProductsMap.set(key, current);
+        });
+    });
+
+    const productBreakdown = [...topProductsMap.values()]
+        .sort((a, b) => b.payable - a.payable)
+        .map((item) => ({
+            ...item,
+            share: totalSales > 0 ? (item.payable / totalSales) * 100 : 0,
+        }));
+    const revenueMix = filteredOrders.reduce((summary, order) => {
+        (order.items || []).forEach((item) => {
+            if (isPromotionLineItem(item)) return;
+            const lineRevenue = (Number(item.quantity) || 0) * (Number(item.price) || 0);
+            if (lineRevenue <= 0) return;
+            if (isBundleOrderItem(item)) {
+                summary.bundleRevenue += lineRevenue;
+            } else {
+                summary.productRevenue += lineRevenue;
+            }
+        });
+        return summary;
+    }, { bundleRevenue: 0, productRevenue: 0 });
+    revenueMix.totalRevenue = revenueMix.bundleRevenue + revenueMix.productRevenue;
+    revenueMix.bundleShare = revenueMix.totalRevenue > 0 ? (revenueMix.bundleRevenue / revenueMix.totalRevenue) * 100 : 0;
+    revenueMix.productShare = revenueMix.totalRevenue > 0 ? (revenueMix.productRevenue / revenueMix.totalRevenue) * 100 : 0;
+
+    let progressTone = 'neutral';
+    if (progress >= 100) progressTone = 'success';
+    else if (progress >= 80) progressTone = 'good';
+    else if (progress >= 50) progressTone = 'warning';
+
+    return {
+        totalSales,
+        merchandiseSubtotal,
+        totalDelivery,
+        totalDiscount,
+        totalOrders,
+        averageOrderValue,
+        target,
+        progress,
+        progressTone,
+        gapAmount,
+        isTargetMet: totalSales >= target,
+        paymentBreakdown,
+        visiblePaymentBreakdown,
+        paymentChartStyle: buildPieSegments(paymentBreakdown),
+        sourceBreakdown,
+        visibleSourceBreakdown,
+        sourceChartStyle: buildPieSegments(sourceBreakdown),
+        productBreakdown,
+        revenueMix,
+    };
+};
+
 const allocateAmountByWeight = (weights = [], totalAmount = 0) => {
     const normalizedTotal = Math.round(Number(totalAmount) || 0);
     if (!weights.length || normalizedTotal === 0) {
@@ -198,30 +430,6 @@ const DAILY_MOTIVATION_MESSAGES = [
     'Өнөөдрийн борлуулалтандаа амжилт. Жижиг шийдвэр бүр үр дүн авчирна.',
     'Өнөөдрийн борлуулалтандаа амжилт. Өнөөдрийн зорилгоо тайван, нягт гүйцээгээрэй.',
 ];
-
-const buildPieCallouts = (items = []) => {
-    const total = items.reduce((sum, item) => sum + (Number(item.share) || 0), 0);
-    if (!total) return [];
-
-    let currentAngle = -90;
-    return items.map((item) => {
-        const sliceAngle = ((Number(item.share) || 0) / total) * 360;
-        const midAngle = currentAngle + sliceAngle / 2;
-        const radians = (midAngle * Math.PI) / 180;
-        const centerX = 110;
-        const centerY = 68;
-        const radiusX = 66;
-        const radiusY = 42;
-        currentAngle += sliceAngle;
-
-        return {
-            ...item,
-            anchorX: centerX + Math.cos(radians) * radiusX,
-            anchorY: centerY + Math.sin(radians) * radiusY,
-            align: Math.cos(radians) >= 0 ? 'right' : 'left',
-        };
-    });
-};
 
 const getSellerAvatar = (seed = '', index = 0) => {
     const source = String(seed || index);
@@ -361,7 +569,7 @@ const renderHighlightedText = (value, query) => {
 };
 
 const Orders = () => {
-    const { user: currentUser, isAdmin } = useAuth();
+    const { user: currentUser, isAdmin, role } = useAuth();
     const [orders, setOrders] = useState([]);
     const [products, setProducts] = useState([]);
     const [promotions, setPromotions] = useState([]);
@@ -380,6 +588,12 @@ const Orders = () => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [isDailySummaryOpen, setIsDailySummaryOpen] = useState(false);
+    const [isRefreshIntroOpen, setIsRefreshIntroOpen] = useState(true);
+    const [refreshPromo, setRefreshPromo] = useState(DEFAULT_REFRESH_PROMO);
+    const [currentPromoSlide, setCurrentPromoSlide] = useState(0);
+    const [isPromoUploading, setIsPromoUploading] = useState(false);
+    const [dailySummaryMode, setDailySummaryMode] = useState('today');
+    const [dailySummaryDate, setDailySummaryDate] = useState(getTodayDateValue());
     const [dailyTarget, setDailyTarget] = useState(DEFAULT_DAILY_TARGET);
     const [dailyTargetDraft, setDailyTargetDraft] = useState(String(DEFAULT_DAILY_TARGET));
     const [dailyTargetSaved, setDailyTargetSaved] = useState(true);
@@ -388,6 +602,10 @@ const Orders = () => {
     const [dailyNews, setDailyNews] = useState('');
     const [dailyNewsDraft, setDailyNewsDraft] = useState('');
     const [isDailyNewsEditing, setIsDailyNewsEditing] = useState(false);
+    const [weeklyNewsReactions, setWeeklyNewsReactions] = useState({});
+    const [selectedWeeklyReaction, setSelectedWeeklyReaction] = useState('');
+    const [weeklyNewsAuthor, setWeeklyNewsAuthor] = useState('');
+    const [weeklyNewsUpdatedAt, setWeeklyNewsUpdatedAt] = useState('');
 
     // New Order Form State with Structured Address
     const [newOrder, setNewOrder] = useState(getDefaultOrderForm);
@@ -437,6 +655,8 @@ const Orders = () => {
     // Product Search State
     const [productSearch, setProductSearch] = useState('');
     const [isProductListOpen, setIsProductListOpen] = useState(false);
+    const weeklyNewsMeta = getWeekMeta();
+    const canManageWeeklyNews = role === 'super_admin' || String(role || '').endsWith('_admin');
 
     useEffect(() => {
         const qOrders = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
@@ -478,12 +698,38 @@ const Orders = () => {
     useEffect(() => {
         try {
             const storedNews = JSON.parse(window.localStorage.getItem(DAILY_NEWS_STORAGE_KEY) || '{}');
-            const todayKey = new Date().toISOString().slice(0, 10);
-            const todayNews = storedNews[todayKey] || '';
-            setDailyNews(todayNews);
-            setDailyNewsDraft(todayNews);
+            const currentWeekEntry = storedNews[weeklyNewsMeta.weekKey];
+            const normalizedEntry = typeof currentWeekEntry === 'string'
+                ? { content: currentWeekEntry, reactions: {}, author: '', updatedAt: '' }
+                : (currentWeekEntry || { content: '', reactions: {}, author: '', updatedAt: '' });
+            const sanitizedNews = normalizedEntry.content || Object.keys(normalizedEntry.reactions || {}).length
+                ? { [weeklyNewsMeta.weekKey]: normalizedEntry }
+                : {};
+            window.localStorage.setItem(DAILY_NEWS_STORAGE_KEY, JSON.stringify(sanitizedNews));
+            setDailyNews(normalizedEntry.content || '');
+            setDailyNewsDraft(normalizedEntry.content || '');
+            setWeeklyNewsReactions(normalizedEntry.reactions || {});
+            setSelectedWeeklyReaction('');
+            setWeeklyNewsAuthor(normalizedEntry.author || '');
+            setWeeklyNewsUpdatedAt(normalizedEntry.updatedAt || '');
         } catch (error) {
             console.error('Daily news read error:', error);
+        }
+    }, [weeklyNewsMeta.weekKey]);
+
+    useEffect(() => {
+        try {
+            const storedPromo = JSON.parse(window.localStorage.getItem(ORDERS_REFRESH_PROMO_STORAGE_KEY) || '{}');
+            const nextImages = Array.isArray(storedPromo.images) ? storedPromo.images.slice(0, 10) : [];
+            setRefreshPromo({
+                title: storedPromo.title || DEFAULT_REFRESH_PROMO.title,
+                images: nextImages,
+            });
+            setCurrentPromoSlide(0);
+        } catch (error) {
+            console.error('Refresh promo read error:', error);
+            setRefreshPromo(DEFAULT_REFRESH_PROMO);
+            setCurrentPromoSlide(0);
         }
     }, []);
 
@@ -611,161 +857,44 @@ const Orders = () => {
         startOfDay.setHours(0, 0, 0, 0);
         const endOfDay = new Date(now);
         endOfDay.setHours(23, 59, 59, 999);
-
-        const todaysOrders = orders.filter((order) => {
-            if (!order.createdAt) return false;
-            const createdAt = new Date(order.createdAt.toMillis());
-            return createdAt >= startOfDay && createdAt <= endOfDay;
-        });
-
-        const merchandiseSubtotal = todaysOrders.reduce(
-            (sum, order) => sum + calculateSubtotalAmount(order.items || []),
-            0
-        );
-        const totalDiscount = todaysOrders.reduce(
-            (sum, order) => sum + getScopedDiscountAmount(
-                order.items || [],
-                order.discount,
-                order.discountType,
-                order.discountScope || 'all',
-                order.discountedItemIds || []
-            ),
-            0
-        );
-        const totalDelivery = todaysOrders.reduce((sum, order) => {
-            return sum + getSavedDeliveryFee(order);
-        }, 0);
-        const totalSales = todaysOrders.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-        const totalOrders = todaysOrders.length;
-        const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
-        const progress = dailyTarget > 0 ? (totalSales / dailyTarget) * 100 : 0;
-        const gapAmount = Math.abs(dailyTarget - totalSales);
-
-        const paymentColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#14b8a6'];
-        const sourceColors = ['#1d4ed8', '#db2777', '#0f766e', '#ea580c', '#7c3aed', '#0891b2', '#16a34a', '#64748b'];
-
-        const paymentBreakdown = PAYMENT_METHODS.map((method, index) => {
-            const amount = todaysOrders
-                .filter((order) => order.paymentMethod === method.key)
-                .reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0);
-            const share = totalSales > 0 ? (amount / totalSales) * 100 : 0;
-            return {
-                ...method,
-                amount,
-                share,
-                color: paymentColors[index % paymentColors.length],
-            };
-        }).sort((a, b) => b.amount - a.amount);
-
-        const sourceBreakdown = SOURCE_OPTIONS.map((source, index) => {
-            const count = todaysOrders.filter((order) => order.source === source.key).length;
-            const share = totalOrders > 0 ? (count / totalOrders) * 100 : 0;
-            return {
-                ...source,
-                count,
-                share,
-                color: sourceColors[index % sourceColors.length],
-            };
-        }).sort((a, b) => b.count - a.count);
-
-        const buildPieSegments = (items) => {
-            const total = items.reduce((sum, item) => sum + (item.share || 0), 0);
-            if (total <= 0) return 'conic-gradient(#e2e8f0 0% 100%)';
-
-            let current = 0;
-            const segments = items
-                .filter((item) => item.share > 0)
-                .map((item) => {
-                    const start = current;
-                    current += item.share;
-                    return `${item.color} ${start}% ${current}%`;
-                });
-
-            return `conic-gradient(${segments.join(', ')})`;
-        };
-
-        const visiblePaymentBreakdown = paymentBreakdown.filter((item) => item.amount > 0);
-        const visibleSourceBreakdown = sourceBreakdown.filter((item) => item.count > 0);
-        const topProductsMap = new Map();
-
-        todaysOrders.forEach((order) => {
-            const orderItems = order.items || [];
-            const orderSubtotal = calculateSubtotalAmount(orderItems);
-            const orderDelivery = getSavedDeliveryFee(order);
-            const itemSubtotals = orderItems.map((item) => (Number(item.quantity) || 0) * (Number(item.price) || 0));
-            const itemWeights = orderSubtotal > 0
-                ? itemSubtotals
-                : orderItems.map(() => 1);
-            const allocatedDeliveries = allocateAmountByWeight(itemWeights, orderDelivery);
-            const allocatedDiscounts = getDiscountAllocations(
-                orderItems,
-                order.discount,
-                order.discountType,
-                order.discountScope || 'all',
-                order.discountedItemIds || []
-            );
-
-            orderItems.forEach((item, index) => {
-                const key = item.id || item.code || item.name;
-                const current = topProductsMap.get(key) || {
-                    key,
-                    name: item.name || 'Бүтээгдэхүүн',
-                    quantity: 0,
-                    revenue: 0,
-                    delivery: 0,
-                    discount: 0,
-                    payable: 0,
-                };
-                const quantity = Number(item.quantity) || 0;
-                const price = Number(item.price) || 0;
-                const itemSubtotal = itemSubtotals[index] || (quantity * price);
-                const allocatedDelivery = allocatedDeliveries[index] || 0;
-                const allocatedDiscount = allocatedDiscounts[index] || 0;
-
-                current.quantity += quantity;
-                current.revenue += itemSubtotal;
-                current.delivery += allocatedDelivery;
-                current.discount += allocatedDiscount;
-                current.payable += itemSubtotal + allocatedDelivery - allocatedDiscount;
-                topProductsMap.set(key, current);
-            });
-        });
-
-        const productBreakdown = [...topProductsMap.values()]
-            .sort((a, b) => b.payable - a.payable)
-            .map((item) => ({
-                ...item,
-                share: totalSales > 0 ? (item.payable / totalSales) * 100 : 0,
-            }));
-        const topProducts = productBreakdown.slice(0, 5);
-
-        let progressTone = 'neutral';
-        if (progress >= 100) progressTone = 'success';
-        else if (progress >= 80) progressTone = 'good';
-        else if (progress >= 50) progressTone = 'warning';
-
-        return {
-            totalSales,
-            merchandiseSubtotal,
-            totalDelivery,
-            totalDiscount,
-            totalOrders,
-            averageOrderValue,
+        return buildSalesPerformanceSnapshot({
+            orders,
+            startDate: startOfDay,
+            endDate: endOfDay,
             target: dailyTarget,
-            progress,
-            progressTone,
-            gapAmount,
-            isTargetMet: totalSales >= dailyTarget,
-            paymentBreakdown,
-            visiblePaymentBreakdown,
-            paymentChartStyle: buildPieSegments(paymentBreakdown),
-            sourceBreakdown,
-            visibleSourceBreakdown,
-            sourceChartStyle: buildPieSegments(sourceBreakdown),
-            productBreakdown,
-            topProducts,
+            paymentMethods: PAYMENT_METHODS,
+            sourceOptions: SOURCE_OPTIONS,
+        });
+    }, [SOURCE_OPTIONS, PAYMENT_METHODS, dailyTarget, orders]);
+
+    const dailySummaryMeta = useMemo(() => {
+        const summaryDate = dailySummaryMode === 'today'
+            ? new Date()
+            : new Date(`${dailySummaryDate || getTodayDateValue()}T12:00:00`);
+        return {
+            dateLabel: `${summaryDate.getFullYear()} оны ${MONGOLIAN_MONTHS[summaryDate.getMonth()]} ${summaryDate.getDate()}`,
+            weekdayLabel: MONGOLIAN_WEEKDAYS[summaryDate.getDay()],
         };
-    }, [dailyTarget, orders]);
+    }, [dailySummaryDate, dailySummaryMode]);
+
+    const dailySummaryPerformance = useMemo(() => {
+        const summaryDate = dailySummaryMode === 'today'
+            ? new Date()
+            : new Date(`${dailySummaryDate || getTodayDateValue()}T12:00:00`);
+        const startOfDay = new Date(summaryDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(summaryDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        return buildSalesPerformanceSnapshot({
+            orders,
+            startDate: startOfDay,
+            endDate: endOfDay,
+            target: dailyTarget,
+            paymentMethods: PAYMENT_METHODS,
+            sourceOptions: SOURCE_OPTIONS,
+        });
+    }, [SOURCE_OPTIONS, PAYMENT_METHODS, dailySummaryDate, dailySummaryMode, dailyTarget, orders]);
 
     const monthlyTopSellers = useMemo(() => {
         const now = new Date();
@@ -1182,6 +1311,16 @@ const Orders = () => {
     };
 
     const formatCurrency = (value) => `₮${(Number(value) || 0).toLocaleString()}`;
+    const weeklyNewsTimestampLabel = weeklyNewsUpdatedAt
+        ? new Intl.DateTimeFormat('mn-MN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        }).format(new Date(weeklyNewsUpdatedAt))
+        : '';
 
     const handleDailyTargetSave = () => {
         const nextTarget = parseNumberInput(dailyTargetDraft);
@@ -1200,29 +1339,155 @@ const Orders = () => {
 
     const handleDailyNewsSave = () => {
         const nextNews = String(dailyNewsDraft || '').trim();
-        const todayKey = new Date().toISOString().slice(0, 10);
+        const nextAuthor = currentUser?.displayName || currentUser?.email || 'Админ';
+        const nextUpdatedAt = new Date().toISOString();
         try {
-            const storedNews = JSON.parse(window.localStorage.getItem(DAILY_NEWS_STORAGE_KEY) || '{}');
-            storedNews[todayKey] = nextNews;
-            window.localStorage.setItem(DAILY_NEWS_STORAGE_KEY, JSON.stringify(storedNews));
+            const nextStoredNews = nextNews || Object.keys(weeklyNewsReactions).length
+                ? {
+                    [weeklyNewsMeta.weekKey]: {
+                        content: nextNews,
+                        reactions: weeklyNewsReactions,
+                        author: nextAuthor,
+                        updatedAt: nextUpdatedAt,
+                    },
+                }
+                : {};
+            window.localStorage.setItem(DAILY_NEWS_STORAGE_KEY, JSON.stringify(nextStoredNews));
         } catch (error) {
             console.error('Daily news write error:', error);
         }
         setDailyNews(nextNews);
         setDailyNewsDraft(nextNews);
+        setWeeklyNewsAuthor(nextAuthor);
+        setWeeklyNewsUpdatedAt(nextUpdatedAt);
         setIsDailyNewsEditing(false);
+    };
+
+    const handleWeeklyNewsReaction = (reactionKey) => {
+        const previousReaction = selectedWeeklyReaction;
+        const nextReaction = previousReaction === reactionKey ? '' : reactionKey;
+        const nextReactions = { ...weeklyNewsReactions };
+
+        if (previousReaction) {
+            nextReactions[previousReaction] = Math.max(0, (nextReactions[previousReaction] || 0) - 1);
+            if (nextReactions[previousReaction] === 0) {
+                delete nextReactions[previousReaction];
+            }
+        }
+
+        if (nextReaction) {
+            nextReactions[nextReaction] = (nextReactions[nextReaction] || 0) + 1;
+        }
+
+        try {
+            const nextStoredNews = (dailyNews || Object.keys(nextReactions).length)
+                ? {
+                    [weeklyNewsMeta.weekKey]: {
+                        content: dailyNews,
+                        reactions: nextReactions,
+                        author: weeklyNewsAuthor,
+                        updatedAt: weeklyNewsUpdatedAt,
+                    },
+                }
+                : {};
+            window.localStorage.setItem(DAILY_NEWS_STORAGE_KEY, JSON.stringify(nextStoredNews));
+        } catch (error) {
+            console.error('Weekly news reaction write error:', error);
+        }
+
+        setWeeklyNewsReactions(nextReactions);
+        setSelectedWeeklyReaction(nextReaction);
+    };
+
+    const handleRefreshPromoUpload = async (event) => {
+        const selectedFiles = Array.from(event.target.files || []);
+        event.target.value = '';
+        if (!selectedFiles.length) return;
+
+        const remainingSlots = Math.max(0, 10 - refreshPromo.images.length);
+        if (remainingSlots <= 0) {
+            alert('Дээд тал нь 10 зураг оруулна.');
+            return;
+        }
+
+        if (selectedFiles.length > remainingSlots) {
+            alert(`Одоо ${remainingSlots} зураг нэмэх боломжтой.`);
+            return;
+        }
+
+        const invalidFile = selectedFiles.find((file) => !String(file.type || '').startsWith('image/'));
+        if (invalidFile) {
+            alert('Зөвхөн зураг файл оруулна уу.');
+            return;
+        }
+
+        const oversizedFile = selectedFiles.find((file) => file.size > 6 * 1024 * 1024);
+        if (oversizedFile) {
+            alert('Зургийн хэмжээ 6MB-аас бага байх ёстой.');
+            return;
+        }
+
+        setIsPromoUploading(true);
+        try {
+            const uploadedImages = await Promise.all(selectedFiles.map(async (file) => {
+                const extension = file.name.split('.').pop() || 'jpg';
+                const fileName = `orders-refresh/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+                const imageRef = ref(storage, fileName);
+                await uploadBytes(imageRef, file, { contentType: file.type });
+                const url = await getDownloadURL(imageRef);
+                return {
+                    url,
+                    storagePath: imageRef.fullPath,
+                    name: file.name,
+                };
+            }));
+
+            const nextImages = [...refreshPromo.images, ...uploadedImages].slice(0, 10);
+            const nextPromo = {
+                title: DEFAULT_REFRESH_PROMO.title,
+                images: nextImages,
+            };
+            window.localStorage.setItem(ORDERS_REFRESH_PROMO_STORAGE_KEY, JSON.stringify(nextPromo));
+            setRefreshPromo(nextPromo);
+            setCurrentPromoSlide(Math.max(0, nextImages.length - uploadedImages.length));
+        } catch (error) {
+            console.error('Refresh promo upload error:', error);
+            alert('Урамшууллын зураг байршуулах үед алдаа гарлаа.');
+        } finally {
+            setIsPromoUploading(false);
+        }
+    };
+
+    const handleRefreshPromoRemove = async (index) => {
+        const targetImage = refreshPromo.images[index];
+        const nextImages = refreshPromo.images.filter((_, imageIndex) => imageIndex !== index);
+
+        try {
+            const nextPromo = {
+                title: DEFAULT_REFRESH_PROMO.title,
+                images: nextImages,
+            };
+            window.localStorage.setItem(ORDERS_REFRESH_PROMO_STORAGE_KEY, JSON.stringify(nextPromo));
+            setRefreshPromo(nextPromo);
+
+            if (targetImage?.storagePath) {
+                try {
+                    await deleteObject(ref(storage, targetImage.storagePath));
+                } catch (storageError) {
+                    console.error('Refresh promo image delete error:', storageError);
+                }
+            }
+
+            setCurrentPromoSlide((prev) => Math.max(0, Math.min(prev, nextImages.length - 1)));
+        } catch (error) {
+            console.error('Refresh promo remove error:', error);
+            alert('Зургийг устгах үед алдаа гарлаа.');
+        }
     };
 
     const paymentChartItems = todaysPerformance.visiblePaymentBreakdown.length
         ? todaysPerformance.visiblePaymentBreakdown
         : todaysPerformance.paymentBreakdown.slice(0, 3);
-
-    const sourceChartItems = todaysPerformance.visibleSourceBreakdown.length
-        ? todaysPerformance.visibleSourceBreakdown
-        : todaysPerformance.sourceBreakdown.slice(0, 3);
-
-    const paymentCallouts = useMemo(() => buildPieCallouts(paymentChartItems), [paymentChartItems]);
-    const sourceCallouts = useMemo(() => buildPieCallouts(sourceChartItems), [sourceChartItems]);
 
     const todayMeta = useMemo(() => {
         const now = new Date();
@@ -1257,104 +1522,65 @@ const Orders = () => {
     }, []);
 
     const handleDownloadDailySummaryPdf = () => {
-        const paymentRows = (todaysPerformance.visiblePaymentBreakdown.length
-            ? todaysPerformance.visiblePaymentBreakdown
-            : todaysPerformance.paymentBreakdown.slice(0, 3))
-            .map((item) => `
-                <tr>
-                    <td>${item.label}</td>
-                    <td>${formatCurrency(item.amount)}</td>
-                    <td>${item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</td>
-                </tr>
-            `)
-            .join('');
+        const summaryModal = document.querySelector('.daily-summary-modal');
+        if (!summaryModal) return;
 
-        const sourceRows = (todaysPerformance.visibleSourceBreakdown.length
-            ? todaysPerformance.visibleSourceBreakdown
-            : todaysPerformance.sourceBreakdown.slice(0, 3))
-            .map((item) => `
-                <tr>
-                    <td>${item.label}</td>
-                    <td>${item.count} захиалга</td>
-                    <td>${item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</td>
-                </tr>
-            `)
-            .join('');
-
-        const productRows = (todaysPerformance.productBreakdown.length
-            ? todaysPerformance.productBreakdown
-            : [{ name: 'Өнөөдөр хүргэлтийн бүтээгдэхүүнгүй', quantity: 0, revenue: 0, share: 0 }])
-            .map((item) => `
-                <tr>
-                    <td>${item.name}</td>
-                    <td>${item.quantity}ш</td>
-                    <td>${formatCurrency(item.revenue)}</td>
-                    <td>${item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</td>
-                </tr>
-            `)
-            .join('');
-
-        const printWindow = window.open('', '_blank', 'width=980,height=760');
+        const printWindow = window.open('', '_blank', 'width=1100,height=900');
         if (!printWindow) return;
+
+        const headMarkup = Array.from(document.head.querySelectorAll('style, link[rel="stylesheet"]'))
+            .map((node) => node.outerHTML)
+            .join('\n');
+
+        const clonedModal = summaryModal.cloneNode(true);
+        clonedModal.querySelectorAll('.close-btn, .modal-actions').forEach((element) => element.remove());
 
         printWindow.document.write(`
             <html lang="mn">
                 <head>
                     <title>Өдрийн нэгтгэл</title>
+                    ${headMarkup}
                     <style>
-                        body { font-family: Arial, sans-serif; margin: 32px; color: #0f172a; }
-                        h1 { margin: 0 0 8px; font-size: 28px; }
-                        .meta { color: #475569; margin-bottom: 24px; }
-                        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
-                        .card { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; background: #fff; }
-                        .label { font-size: 12px; text-transform: uppercase; color: #64748b; margin-bottom: 6px; }
-                        .value { font-size: 18px; font-weight: 700; }
-                        .note { border: 1px solid #fde68a; background: #fffbeb; border-radius: 14px; padding: 14px; margin-bottom: 18px; }
-                        .section { margin-bottom: 18px; }
-                        .section h2 { font-size: 15px; margin: 0 0 10px; text-transform: uppercase; color: #334155; }
-                        table { width: 100%; border-collapse: collapse; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; }
-                        th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
-                        th { background: #f8fafc; font-size: 12px; text-transform: uppercase; color: #64748b; }
-                        tr:last-child td { border-bottom: none; }
-                        .total { margin-top: 20px; padding: 14px 16px; border-radius: 14px; background: #0f172a; color: white; display: flex; justify-content: space-between; align-items: center; }
-                        .total span { color: rgba(255,255,255,0.8); text-transform: uppercase; font-size: 12px; }
-                        .total strong { font-size: 22px; }
-                        @media print { body { margin: 20px; } }
+                        body {
+                            margin: 0;
+                            padding: 24px;
+                            background: #ffffff;
+                            color: #0f172a;
+                        }
+
+                        .print-summary-shell {
+                            max-width: 1040px;
+                            margin: 0 auto;
+                        }
+
+                        .print-summary-shell .daily-summary-modal {
+                            max-width: none !important;
+                            width: 100%;
+                            box-shadow: none !important;
+                            border: 1px solid #e2e8f0;
+                        }
+
+                        .print-summary-shell .modal-header {
+                            position: static !important;
+                        }
+
+                        @media print {
+                            body {
+                                padding: 0;
+                            }
+
+                            .print-summary-shell {
+                                max-width: none;
+                            }
+
+                            .print-summary-shell .daily-summary-modal {
+                                border: none;
+                            }
+                        }
                     </style>
                 </head>
                 <body>
-                    <h1>Өдрийн нэгтгэл</h1>
-                    <div class="meta">${todayMeta.dateLabel} • ${todayMeta.weekdayLabel} • ${weatherSummary}</div>
-
-                    <div class="grid">
-                        <div class="card"><div class="label">Нийт борлуулалт</div><div class="value">${formatCurrency(todaysPerformance.totalSales)}</div></div>
-                        <div class="card"><div class="label">Нийт захиалга</div><div class="value">${todaysPerformance.totalOrders}</div></div>
-                        <div class="card"><div class="label">Дундаж сагс</div><div class="value">${formatCurrency(todaysPerformance.averageOrderValue)}</div></div>
-                        <div class="card"><div class="label">Гүйцэтгэл</div><div class="value">${Math.round(todaysPerformance.progress)}%</div></div>
-                        <div class="card"><div class="label">Ажилласан ажилтан</div><div class="value">${activeStaffLabel}</div></div>
-                        <div class="card"><div class="label">Өдрийн зорилго</div><div class="value">${formatCurrency(todaysPerformance.target)}</div></div>
-                    </div>
-
-                    <div class="note">${todaysPerformance.isTargetMet
-                ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
-                : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}</div>
-
-                    <div class="section">
-                        <h2>Төлбөрийн хуваалт</h2>
-                        <table><thead><tr><th>Төлбөр</th><th>Дүн</th><th>Share</th></tr></thead><tbody>${paymentRows}</tbody></table>
-                    </div>
-
-                    <div class="section">
-                        <h2>Сувгийн задаргаа</h2>
-                        <table><thead><tr><th>Суваг</th><th>Тоо</th><th>Share</th></tr></thead><tbody>${sourceRows}</tbody></table>
-                    </div>
-
-                    <div class="section">
-                        <h2>Бүтээгдэхүүний задаргаа</h2>
-                        <table><thead><tr><th>Бүтээгдэхүүн</th><th>Тоо</th><th>Дүн</th><th>Share</th></tr></thead><tbody>${productRows}</tbody></table>
-                    </div>
-
-                    <div class="total"><span>Нийт үнийн дүн</span><strong>${formatCurrency(todaysPerformance.totalSales)}</strong></div>
+                    <div class="print-summary-shell">${clonedModal.outerHTML}</div>
                 </body>
             </html>
         `);
@@ -1412,15 +1638,269 @@ const Orders = () => {
         }
     };
 
+    const refreshIntroDateLabel = new Intl.DateTimeFormat('mn-MN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        weekday: 'long',
+    }).format(new Date());
+
     return (
         <div className="admin-page orders-page">
+            {isRefreshIntroOpen && (
+                <div className="staff-confirm-overlay orders-refresh-overlay" onClick={() => setIsRefreshIntroOpen(false)}>
+                    <div className="orders-refresh-modal" onClick={(e) => e.stopPropagation()}>
+                        <button
+                            type="button"
+                            className="close-btn orders-refresh-close"
+                            onClick={() => setIsRefreshIntroOpen(false)}
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className="orders-refresh-hero">
+                            <div className="orders-refresh-copy">
+                                <span className="orders-refresh-kicker">Өдрийн эхлэл</span>
+                                <h3>Өнөөдрийн мэдээ</h3>
+                                <p>{refreshIntroDateLabel} • {weatherSummary}</p>
+
+                                <div className="orders-refresh-metrics">
+                                    <div className="orders-refresh-metric">
+                                        <CircleDollarSign size={16} />
+                                        <div>
+                                            <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                            <span>Өнөөдрийн борлуулалт</span>
+                                        </div>
+                                    </div>
+                                    <div className="orders-refresh-metric">
+                                        <ShoppingBag size={16} />
+                                        <div>
+                                            <strong>{todaysPerformance.totalOrders}</strong>
+                                            <span>Нийт захиалга</span>
+                                        </div>
+                                    </div>
+                                    <div className="orders-refresh-metric">
+                                        <Target size={16} />
+                                        <div>
+                                            <strong>{Math.round(todaysPerformance.progress)}%</strong>
+                                            <span>Өдрийн гүйцэтгэл</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="orders-refresh-visual">
+                                <div className="orders-refresh-poster orders-refresh-poster--carousel">
+                                    <div className="orders-refresh-poster-header">
+                                        <div className="orders-refresh-poster-badge">
+                                            <Sparkles size={18} />
+                                            <span>{refreshPromo.title}</span>
+                                        </div>
+                                        {refreshPromo.images.length > 0 && (
+                                            <div className="orders-refresh-poster-count">
+                                                {currentPromoSlide + 1} / {refreshPromo.images.length}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="orders-refresh-carousel">
+                                        {refreshPromo.images.length > 0 ? (
+                                            <>
+                                                <div
+                                                    className="orders-refresh-carousel-track"
+                                                    style={{ transform: `translateX(-${currentPromoSlide * 100}%)` }}
+                                                >
+                                                    {refreshPromo.images.map((image, index) => (
+                                                        <div key={`${image.url}-${index}`} className="orders-refresh-slide">
+                                                            <img
+                                                                src={image.url}
+                                                                alt={`${refreshPromo.title} ${index + 1}`}
+                                                                className="orders-refresh-slide-image"
+                                                            />
+                                                            {isAdmin && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="orders-refresh-remove-image"
+                                                                    onClick={() => handleRefreshPromoRemove(index)}
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {refreshPromo.images.length > 1 && (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            className="orders-refresh-carousel-nav prev"
+                                                            onClick={() => setCurrentPromoSlide((prev) => (
+                                                                prev === 0 ? refreshPromo.images.length - 1 : prev - 1
+                                                            ))}
+                                                        >
+                                                            <ArrowLeft size={16} />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className="orders-refresh-carousel-nav next"
+                                                            onClick={() => setCurrentPromoSlide((prev) => (
+                                                                prev === refreshPromo.images.length - 1 ? 0 : prev + 1
+                                                            ))}
+                                                        >
+                                                            <ArrowRight size={16} />
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </>
+                                        ) : (
+                                            <div className="orders-refresh-carousel-empty">
+                                                <div className="orders-refresh-ring orders-refresh-ring--orange" />
+                                                <div className="orders-refresh-ring orders-refresh-ring--blue" />
+                                                <div className="orders-refresh-core">
+                                                    <Truck size={24} />
+                                                </div>
+                                                <span>Урамшууллын зураг оруулаагүй байна</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {isAdmin && (
+                                        <div className="orders-refresh-upload-row" aria-hidden="false">
+                                            <label className="orders-refresh-upload-btn">
+                                                <input
+                                                    type="file"
+                                                    accept="image/*"
+                                                    multiple
+                                                    onChange={handleRefreshPromoUpload}
+                                                    disabled={isPromoUploading || refreshPromo.images.length >= 10}
+                                                />
+                                                <span>{isPromoUploading ? 'Зураг байршуулж байна...' : 'Зураг нэмэх'}</span>
+                                            </label>
+                                            <span className="orders-refresh-upload-note">
+                                                {refreshPromo.images.length}/10 зураг
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {refreshPromo.images.length > 1 && (
+                                        <div className="orders-refresh-dots">
+                                            {refreshPromo.images.map((image, index) => (
+                                                <button
+                                                    key={`${image.url}-dot-${index}`}
+                                                    type="button"
+                                                    className={`orders-refresh-dot ${currentPromoSlide === index ? 'active' : ''}`}
+                                                    onClick={() => setCurrentPromoSlide(index)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="orders-refresh-news">
+                            <div className="orders-refresh-news-header">
+                                <div>
+                                    <span>Менежерийн долоо хоногийн мэдээ</span>
+                                    <strong>Энэ 7 хоногийн мэдээлэл</strong>
+                                </div>
+                                <div className="orders-refresh-news-meta">
+                                    <span>{weeklyNewsMeta.fullDateLabel}</span>
+                                    <span className="orders-refresh-news-range">{weeklyNewsMeta.rangeLabel}</span>
+                                    <strong>Энэ 7 хоног</strong>
+                                </div>
+                            </div>
+                            {canManageWeeklyNews && isDailyNewsEditing ? (
+                                <>
+                                    <textarea
+                                        className="orders-refresh-news-editor"
+                                        value={dailyNewsDraft}
+                                        onChange={(e) => setDailyNewsDraft(e.target.value)}
+                                        placeholder="Энэ 7 хоногийн мэдээг энд оруулна уу..."
+                                        autoFocus
+                                    />
+                                    <div className="orders-refresh-news-actions">
+                                        <button
+                                            type="button"
+                                            className="orders-refresh-news-btn subtle"
+                                            onClick={() => {
+                                                setDailyNewsDraft(dailyNews);
+                                                setIsDailyNewsEditing(false);
+                                            }}
+                                        >
+                                            Болих
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="orders-refresh-news-btn"
+                                            onClick={handleDailyNewsSave}
+                                        >
+                                            Хадгалах
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p>{dailyNews || 'Энэ 7 хоногийн мэдээлэл хараахан ороогүй байна.'}</p>
+                                    <div className="orders-refresh-news-footer">
+                                        <div className="orders-refresh-news-attribution">
+                                            {weeklyNewsAuthor ? <span>{weeklyNewsAuthor}</span> : null}
+                                            {weeklyNewsTimestampLabel ? <span>{weeklyNewsTimestampLabel}</span> : null}
+                                        </div>
+                                        <div className="orders-refresh-news-inline">
+                                            <div className="orders-refresh-reactions">
+                                                {WEEKLY_NEWS_REACTIONS.map((reaction) => (
+                                                    <button
+                                                        key={reaction.key}
+                                                        type="button"
+                                                        className={`orders-refresh-reaction-chip ${selectedWeeklyReaction === reaction.key ? 'active' : ''}`}
+                                                        onClick={() => handleWeeklyNewsReaction(reaction.key)}
+                                                        aria-label={reaction.label}
+                                                    >
+                                                        <span>{reaction.emoji}</span>
+                                                        <strong>{weeklyNewsReactions[reaction.key] || 0}</strong>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {canManageWeeklyNews && (
+                                                <button
+                                                    type="button"
+                                                    className="orders-refresh-news-btn"
+                                                    onClick={() => setIsDailyNewsEditing(true)}
+                                                >
+                                                    Засах
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="orders-refresh-actions">
+                            <button type="button" className="export-btn" onClick={() => setIsRefreshIntroOpen(false)}>
+                                Ойлголоо
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="page-header">
                 <div className="header-info">
                     <h1>Захиалга Удирдах</h1>
                     <p>Нийт {stats.totalCount} захиалга бүртгэлтэй</p>
                 </div>
                 <div className="header-actions">
-                    <button className="export-btn" onClick={() => setIsDailySummaryOpen(true)}>
+                    <button
+                        className="export-btn"
+                        onClick={() => {
+                            setDailySummaryMode('today');
+                            setDailySummaryDate(getTodayDateValue());
+                            setIsDailySummaryOpen(true);
+                        }}
+                    >
                         <Download size={18} />
                         <span>Өдрийн нэгтгэл</span>
                     </button>
@@ -1978,9 +2458,6 @@ const Orders = () => {
 
             {!isAddModalOpen && (
                 <>
-                    {/* Floating Information Sticky Note */}
-                    <StickyNote />
-
                     {/* Team Chat Messenger Widget */}
                     <TeamChat />
 
@@ -2100,26 +2577,24 @@ const Orders = () => {
                                 <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
                             </div>
                         </div>
-                        <div className="performance-chart-layout">
-                            <div className="performance-pie-chart-panel">
+                        <div className="performance-chart-layout performance-chart-layout--compact">
+                            <div className="performance-pie-chart-panel performance-pie-chart-panel--compact">
                                 <div
                                     className="performance-pie-chart"
                                     style={{ background: todaysPerformance.paymentChartStyle }}
                                 >
                                     <div className="performance-pie-chart__center">Төлбөр</div>
                                 </div>
-                                {paymentCallouts.map((item) => (
-                                    <div
-                                        key={item.key}
-                                        className={`performance-pie-callout performance-pie-callout--${item.align}`}
-                                        style={{ left: `${item.anchorX}px`, top: `${item.anchorY}px` }}
-                                    >
-                                        <span className="performance-pie-callout-dot" style={{ background: item.color }} />
-                                        <div className="performance-pie-callout-copy">
+                            </div>
+                            <div className="performance-compact-list">
+                                {(paymentChartItems.length ? paymentChartItems : todaysPerformance.paymentBreakdown.slice(0, 3)).map((item) => (
+                                    <div key={item.key} className="performance-compact-item">
+                                        <span className="performance-compact-dot" style={{ background: item.color }} />
+                                        <div className="performance-compact-copy">
                                             <strong>{item.label}</strong>
                                             <span>{formatCurrency(item.amount)}</span>
-                                            <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
                                         </div>
+                                        <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
                                     </div>
                                 ))}
                             </div>
@@ -2133,28 +2608,63 @@ const Orders = () => {
                                 <strong>{todaysPerformance.totalOrders}</strong>
                             </div>
                         </div>
-                        <div className="performance-chart-layout">
-                            <div className="performance-pie-chart-panel">
+                        <div className="performance-chart-layout performance-chart-layout--compact">
+                            <div className="performance-pie-chart-panel performance-pie-chart-panel--compact">
                                 <div
                                     className="performance-pie-chart"
                                     style={{ background: todaysPerformance.sourceChartStyle }}
                                 >
                                     <div className="performance-pie-chart__center">Суваг</div>
                                 </div>
-                                {sourceCallouts.map((item) => (
-                                    <div
-                                        key={item.key}
-                                        className={`performance-pie-callout performance-pie-callout--${item.align}`}
-                                        style={{ left: `${item.anchorX}px`, top: `${item.anchorY}px` }}
-                                    >
-                                        <span className="performance-pie-callout-dot" style={{ background: item.color }} />
-                                        <div className="performance-pie-callout-copy">
+                            </div>
+                            <div className="performance-compact-list">
+                                {(todaysPerformance.visibleSourceBreakdown.length ? todaysPerformance.visibleSourceBreakdown : todaysPerformance.sourceBreakdown.slice(0, 3)).map((item) => (
+                                    <div key={item.key} className="performance-compact-item">
+                                        <span className="performance-compact-dot" style={{ background: item.color }} />
+                                        <div className="performance-compact-copy">
                                             <strong>{item.label}</strong>
                                             <span>{itemCountLabel(item.count)}</span>
-                                            <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
                                         </div>
+                                        <small>{item.share.toFixed(item.share % 1 === 0 ? 0 : 1)}%</small>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="performance-summary-card performance-summary-card--ratio">
+                        <div className="performance-chart-header">
+                            <div>
+                                <span>Багц ба энгийн бүтээгдэхүүн</span>
+                                <strong>{formatCurrency(todaysPerformance.revenueMix.totalRevenue || 0)}</strong>
+                            </div>
+                        </div>
+                        <div className="performance-revenue-mix performance-revenue-mix--standalone">
+                            <div className="performance-revenue-mix-track">
+                                <span
+                                    className="performance-revenue-mix-fill performance-revenue-mix-fill--bundle"
+                                    style={{ width: `${todaysPerformance.revenueMix.bundleShare}%` }}
+                                />
+                                <span
+                                    className="performance-revenue-mix-fill performance-revenue-mix-fill--product"
+                                    style={{ width: `${todaysPerformance.revenueMix.productShare}%` }}
+                                />
+                            </div>
+                            <div className="performance-revenue-mix-legend">
+                                <div className="performance-revenue-mix-item">
+                                    <span className="performance-revenue-mix-dot performance-revenue-mix-dot--bundle" />
+                                    <div>
+                                        <strong>Багц бүтээгдэхүүн</strong>
+                                        <small>{formatCurrency(todaysPerformance.revenueMix.bundleRevenue)} • {todaysPerformance.revenueMix.bundleShare.toFixed(1)}%</small>
+                                    </div>
+                                </div>
+                                <div className="performance-revenue-mix-item">
+                                    <span className="performance-revenue-mix-dot performance-revenue-mix-dot--product" />
+                                    <div>
+                                        <strong>Энгийн бүтээгдэхүүн</strong>
+                                        <small>{formatCurrency(todaysPerformance.revenueMix.productRevenue)} • {todaysPerformance.revenueMix.productShare.toFixed(1)}%</small>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2163,16 +2673,28 @@ const Orders = () => {
                         <div className="performance-chart-header">
                             <div>
                                 <span>Top 5 бүтээгдэхүүн</span>
-                                <strong>{todaysPerformance.topProducts.length || 0}</strong>
+                                <strong>{todaysPerformance.productBreakdown.length || 0}</strong>
                             </div>
                         </div>
                         <div className="store-top-products-card-list">
-                            {(todaysPerformance.topProducts.length ? todaysPerformance.topProducts : [{ key: 'empty', name: 'Өнөөдөр борлуулалтгүй', quantity: 0 }]).map((product, index) => (
+                            {(todaysPerformance.productBreakdown.length ? todaysPerformance.productBreakdown.slice(0, 5) : [{ key: 'empty', name: 'Өнөөдөр борлуулалтгүй', quantity: 0, image: '' }]).map((product, index) => (
                                 <div key={product.key} className="store-top-product-row">
                                     <div className="store-top-product-rank">{index + 1}</div>
+                                    <div className="store-top-product-thumb">
+                                        {product.image ? (
+                                            <img src={product.image} alt={product.name} />
+                                        ) : (
+                                            <ShoppingBag size={14} />
+                                        )}
+                                    </div>
                                     <div className="store-top-product-content">
-                                        <strong>{product.name}</strong>
-                                        <small>{product.quantity}ш гарсан</small>
+                                        <strong>
+                                            <span className="store-top-product-name">{product.name}</span>
+                                            {product.quantity > 0 && (
+                                                <span className="store-top-product-inline-meta">{product.quantity}ш</span>
+                                            )}
+                                        </strong>
+                                        <small>{formatCurrency(product.payable || 0)}</small>
                                     </div>
                                 </div>
                             ))}
@@ -2451,8 +2973,38 @@ const Orders = () => {
                         <div className="modal-header">
                             <div className="daily-summary-header-copy">
                                 <h3>Өдрийн нэгтгэл</h3>
-                                <p className="daily-summary-header-date">{todayMeta.dateLabel}</p>
-                                <p className="daily-summary-header-meta">{todayMeta.weekdayLabel} • {weatherSummary}</p>
+                                <p className="daily-summary-header-date">{dailySummaryMeta.dateLabel}</p>
+                                <p className="daily-summary-header-meta">{dailySummaryMeta.weekdayLabel} • {weatherSummary}</p>
+                                <div className="daily-summary-filter-row">
+                                    <div className="discount-scope-switch">
+                                        <button
+                                            type="button"
+                                            className={`discount-scope-chip ${dailySummaryMode === 'today' ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setDailySummaryMode('today');
+                                                setDailySummaryDate(getTodayDateValue());
+                                            }}
+                                        >
+                                            Өнөөдөр
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={`discount-scope-chip ${dailySummaryMode === 'custom' ? 'active' : ''}`}
+                                            onClick={() => setDailySummaryMode('custom')}
+                                        >
+                                            Огноо сонгох
+                                        </button>
+                                    </div>
+                                    {dailySummaryMode === 'custom' && (
+                                        <input
+                                            type="date"
+                                            className="form-input daily-summary-date-input"
+                                            value={dailySummaryDate}
+                                            max={getTodayDateValue()}
+                                            onChange={(e) => setDailySummaryDate(e.target.value)}
+                                        />
+                                    )}
+                                </div>
                             </div>
                             <button className="close-btn" onClick={() => setIsDailySummaryOpen(false)}><X size={20} /></button>
                         </div>
@@ -2461,19 +3013,19 @@ const Orders = () => {
                             <div className="daily-summary-topline">
                                 <div className="daily-summary-metric">
                                     <span>Нийт борлуулалт</span>
-                                    <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                    <strong>{formatCurrency(dailySummaryPerformance.totalSales)}</strong>
                                 </div>
                                 <div className="daily-summary-metric">
                                     <span>Нийт захиалга</span>
-                                    <strong>{todaysPerformance.totalOrders}</strong>
+                                    <strong>{dailySummaryPerformance.totalOrders}</strong>
                                 </div>
                                 <div className="daily-summary-metric">
                                     <span>Дундаж сагс</span>
-                                    <strong>{formatCurrency(todaysPerformance.averageOrderValue)}</strong>
+                                    <strong>{formatCurrency(dailySummaryPerformance.averageOrderValue)}</strong>
                                 </div>
                                 <div className="daily-summary-metric">
                                     <span>Гүйцэтгэл</span>
-                                    <strong>{Math.round(todaysPerformance.progress)}%</strong>
+                                    <strong>{Math.round(dailySummaryPerformance.progress)}%</strong>
                                 </div>
                                 <div className="daily-summary-metric">
                                     <span>Ажилласан ажилтан</span>
@@ -2484,9 +3036,9 @@ const Orders = () => {
                             <div className="daily-summary-insight daily-summary-insight--plan">
                                 <span>Өдрийн тайлбар</span>
                                 <p>
-                                    {todaysPerformance.isTargetMet
-                                        ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
-                                        : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}
+                                    {dailySummaryPerformance.isTargetMet
+                                        ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(dailySummaryPerformance.gapAmount)} давсан байна`
+                                        : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(dailySummaryPerformance.gapAmount)} дутуу байна`}
                                 </p>
                             </div>
 
@@ -2494,7 +3046,7 @@ const Orders = () => {
                                 <div className="daily-summary-section daily-summary-section--compact daily-summary-section--payment">
                                     <div className="sidebar-section-title">Төлбөрийн хуваалт</div>
                                     <div className="payment-history-list">
-                                        {(todaysPerformance.visiblePaymentBreakdown.length ? todaysPerformance.visiblePaymentBreakdown : todaysPerformance.paymentBreakdown.slice(0, 3)).map((item) => (
+                                        {(dailySummaryPerformance.visiblePaymentBreakdown.length ? dailySummaryPerformance.visiblePaymentBreakdown : dailySummaryPerformance.paymentBreakdown.slice(0, 3)).map((item) => (
                                             <div key={item.key} className="payment-history-row">
                                                 <div className="payment-history-row-main">
                                                     <div>
@@ -2511,7 +3063,7 @@ const Orders = () => {
                                 <div className="daily-summary-section daily-summary-section--compact daily-summary-section--source">
                                     <div className="sidebar-section-title">Сувгийн задаргаа</div>
                                     <div className="payment-history-list">
-                                        {(todaysPerformance.visibleSourceBreakdown.length ? todaysPerformance.visibleSourceBreakdown : todaysPerformance.sourceBreakdown.slice(0, 3)).map((item) => (
+                                        {(dailySummaryPerformance.visibleSourceBreakdown.length ? dailySummaryPerformance.visibleSourceBreakdown : dailySummaryPerformance.sourceBreakdown.slice(0, 3)).map((item) => (
                                             <div key={item.key} className="payment-history-row">
                                                 <div className="payment-history-row-main">
                                                     <div>
@@ -2527,6 +3079,38 @@ const Orders = () => {
                             </div>
 
                             <div className="daily-summary-section daily-summary-section--product">
+                                <div className="sidebar-section-title">Орлогын харьцаа</div>
+                                <div className="performance-revenue-mix daily-summary-revenue-mix">
+                                    <div className="performance-revenue-mix-track">
+                                        <span
+                                            className="performance-revenue-mix-fill performance-revenue-mix-fill--bundle"
+                                            style={{ width: `${dailySummaryPerformance.revenueMix.bundleShare}%` }}
+                                        />
+                                        <span
+                                            className="performance-revenue-mix-fill performance-revenue-mix-fill--product"
+                                            style={{ width: `${dailySummaryPerformance.revenueMix.productShare}%` }}
+                                        />
+                                    </div>
+                                    <div className="performance-revenue-mix-legend">
+                                        <div className="performance-revenue-mix-item">
+                                            <span className="performance-revenue-mix-dot performance-revenue-mix-dot--bundle" />
+                                            <div>
+                                                <strong>Багц бүтээгдэхүүн</strong>
+                                                <small>{formatCurrency(dailySummaryPerformance.revenueMix.bundleRevenue)} • {dailySummaryPerformance.revenueMix.bundleShare.toFixed(1)}%</small>
+                                            </div>
+                                        </div>
+                                        <div className="performance-revenue-mix-item">
+                                            <span className="performance-revenue-mix-dot performance-revenue-mix-dot--product" />
+                                            <div>
+                                                <strong>Энгийн бүтээгдэхүүн</strong>
+                                                <small>{formatCurrency(dailySummaryPerformance.revenueMix.productRevenue)} • {dailySummaryPerformance.revenueMix.productShare.toFixed(1)}%</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="daily-summary-section daily-summary-section--product">
                                 <div className="sidebar-section-title">Бүтээгдэхүүний задаргаа</div>
                                 <div className="daily-report-table">
                                     <div className="daily-report-head">
@@ -2535,7 +3119,7 @@ const Orders = () => {
                                         <span>Дүн</span>
                                         <span>Share</span>
                                     </div>
-                                    {(todaysPerformance.productBreakdown.length ? todaysPerformance.productBreakdown : [{ key: 'empty', name: 'Өнөөдөр хүргэлтийн бүтээгдэхүүнгүй', quantity: 0, revenue: 0, share: 0 }]).map((product) => (
+                                    {(dailySummaryPerformance.productBreakdown.length ? dailySummaryPerformance.productBreakdown : [{ key: 'empty', name: 'Сонгосон өдөр хүргэлтийн бүтээгдэхүүнгүй', quantity: 0, revenue: 0, share: 0 }]).map((product) => (
                                         <div key={product.key} className="daily-report-row">
                                             <span className="daily-report-product">{product.name}</span>
                                             <span>{product.quantity}ш</span>
@@ -2552,19 +3136,19 @@ const Orders = () => {
                                 <div className="daily-financial-ledger">
                                     <div className="daily-financial-line">
                                         <span>Үндсэн дүн</span>
-                                        <strong>{formatCurrency(todaysPerformance.merchandiseSubtotal)}</strong>
+                                        <strong>{formatCurrency(dailySummaryPerformance.merchandiseSubtotal)}</strong>
                                     </div>
                                     <div className="daily-financial-line">
                                         <span>Хүргэлтийн дүн</span>
-                                        <strong>+ {formatCurrency(todaysPerformance.totalDelivery)}</strong>
+                                        <strong>+ {formatCurrency(dailySummaryPerformance.totalDelivery)}</strong>
                                     </div>
                                     <div className="daily-financial-line daily-financial-line--discount">
                                         <span>Хөнгөлөлт</span>
-                                        <strong>- {formatCurrency(todaysPerformance.totalDiscount)}</strong>
+                                        <strong>- {formatCurrency(dailySummaryPerformance.totalDiscount)}</strong>
                                     </div>
                                     <div className="daily-financial-total">
                                         <span>Төлөх дүн</span>
-                                        <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                        <strong>{formatCurrency(dailySummaryPerformance.totalSales)}</strong>
                                     </div>
                                 </div>
                             </div>
