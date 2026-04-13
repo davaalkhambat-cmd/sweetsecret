@@ -363,7 +363,25 @@ const StaffRoles = () => {
         // Check if email already exists in users list
         const existing = users.find(u => u.email.toLowerCase() === newStaff.email.toLowerCase());
         if (existing) {
-            setErrorMessage('Энэ и-мэйл бүртгэлтэй байна. Та жагсаалтаас эрхийг нь сольж болно.');
+            // User already exists — update their role directly
+            try {
+                const userRef = doc(db, 'users', existing.id);
+                await updateDoc(userRef, {
+                    role: newStaff.role,
+                    status: 'active',
+                    updatedAt: serverTimestamp(),
+                    roleUpdatedBy: currentUser?.uid || 'unknown',
+                    roleUpdatedAt: serverTimestamp(),
+                });
+                const roleInfo = roles[newStaff.role] || roles.customer;
+                setSuccessMessage(`✅ "${existing.displayName || existing.email}" → ${roleInfo.icon} ${roleInfo.label} болгосон`);
+                setIsAddStaffModalOpen(false);
+                setNewStaff({ email: '', displayName: '', role: 'staff_operator' });
+                setTimeout(() => setSuccessMessage(''), 5000);
+            } catch (error) {
+                console.error('Role update error for existing user:', error);
+                setErrorMessage('Эрх өөрчлөхөд алдаа гарлаа. Дахин оролдоно уу.');
+            }
             return;
         }
 
