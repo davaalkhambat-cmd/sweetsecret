@@ -109,13 +109,9 @@ export const AuthProvider = ({ children }) => {
             payload.createdAt = existingUIDData?.createdAt || invitationData.createdAt || serverTimestamp();
             payload.loyaltyPoints = existingUIDData?.loyaltyPoints || invitationData.loyaltyPoints || 0;
 
-            // Cleanup: Delete the temporary invitation document if it's separate from UID doc
+            // Attempt cleanup of invitation placeholder (may fail if not admin — that's OK)
             if (invitationData.docId !== firebaseUser.uid) {
-                try {
-                    await deleteDoc(doc(db, 'users', invitationData.docId));
-                } catch (e) {
-                    console.error("Cleanup invited doc failed:", e);
-                }
+                deleteDoc(doc(db, 'users', invitationData.docId)).catch(() => {});
             }
         } else if (existingUIDData) {
             // EXISTING USER: Regular sync

@@ -57,8 +57,7 @@ service cloud.firestore {
       allow create: if isAdmin() || isOwnProfilePayload(userId);
       allow update: if isAdmin() || (
         isOwner(userId) &&
-        request.resource.data.email == resource.data.email &&
-        request.resource.data.uid == resource.data.uid
+        request.resource.data.email == resource.data.email
       );
       allow delete: if isAdmin();
     }
