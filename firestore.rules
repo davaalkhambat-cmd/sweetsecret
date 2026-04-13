@@ -51,7 +51,7 @@ service cloud.firestore {
 
     // Private user profile
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin() || canReadOwnInvitation();
+      allow read: if isOwner(userId) || isStaff() || isAdmin() || canReadOwnInvitation();
       // NOTE: This allows client-side invite activation on first login.
       // For stricter security, move invitation acceptance to trusted backend code.
       allow create: if isAdmin() || isOwnProfilePayload(userId);
@@ -68,22 +68,27 @@ service cloud.firestore {
       allow create: if isSignedIn();
       allow read: if isSignedIn() && (
         resource.data.userId == request.auth.uid ||
+        isStaff() ||
         isAdmin()
       );
-      allow update, delete: if isAdmin();
+      allow update: if isStaff() || isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Promotions management
     match /coupons/{couponId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff() || isAdmin();
+      allow write: if isAdmin();
     }
 
     match /giftCards/{giftCardId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff() || isAdmin();
+      allow write: if isAdmin();
     }
 
     match /promotions/{promotionId} {
-      allow read, write: if isAdmin();
+      allow read: if isStaff() || isAdmin();
+      allow write: if isAdmin();
     }
 
     match /role_definitions/{roleId} {
