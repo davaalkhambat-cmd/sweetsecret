@@ -368,7 +368,8 @@ const StaffRoles = () => {
                 await Promise.all(matchingDocs.map(u =>
                     updateDoc(doc(db, 'users', u.id), {
                         role: newStaff.role,
-                        status: 'active',
+                        // Keep invited_ docs as 'invited' so syncUserProfile can still pick them up
+                        ...(u.id.startsWith('invited_') ? {} : { status: 'active' }),
                         updatedAt: serverTimestamp(),
                         roleUpdatedBy: currentUser?.uid || 'unknown',
                         roleUpdatedAt: serverTimestamp(),
