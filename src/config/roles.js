@@ -338,6 +338,7 @@ export const LEGACY_ROLE_ALIASES = {
     marketing_manager: 'marketing_crm',
     sales: 'sales_customer_service',
     cashier: 'staff_operator',
+    operator: 'staff_operator',
 };
 
 export const resolveRoleKey = (roleKey) => {

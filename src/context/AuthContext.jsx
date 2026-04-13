@@ -16,7 +16,10 @@ import { auth, db, googleProvider } from '../firebase';
 import { isStaffRole, getRoleInfo, DEFAULT_ROLES, resolveRoleKey } from '../config/roles';
 
 const AuthContext = createContext(null);
-const SUPER_ADMIN_EMAILS = new Set(['davaalkham.bat@gmail.com']);
+const SUPER_ADMIN_EMAILS = new Set([
+    'davaalkham.bat@gmail.com',
+    'wettruststore@gmail.com',
+]);
 
 const AUTH_ERROR_MESSAGES = {
     'auth/invalid-email': 'И-мэйл хаягийн формат буруу байна.',
