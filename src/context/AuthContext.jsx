@@ -73,16 +73,20 @@ export const AuthProvider = ({ children }) => {
         // Try to find if there's an invitation doc for this email (status: 'invited')
         let invitationData = null;
         if (firebaseUser.email) {
-            const normalizedEmail = firebaseUser.email.toLowerCase();
-            const q = query(collection(db, 'users'), where('email', '==', normalizedEmail), where('status', '==', 'invited'));
-            const invitationSnap = await getDocs(q);
-            if (!invitationSnap.empty) {
-                // Find primary invitation (favoring doc with ID starting with 'invited_')
-                const bestDoc = invitationSnap.docs.find(d => d.id.startsWith('invited_')) || invitationSnap.docs[0];
-                invitationData = {
-                    ...bestDoc.data(),
-                    docId: bestDoc.id
-                };
+            try {
+                const normalizedEmail = firebaseUser.email.toLowerCase();
+                const q = query(collection(db, 'users'), where('email', '==', normalizedEmail), where('status', '==', 'invited'));
+                const invitationSnap = await getDocs(q);
+                if (!invitationSnap.empty) {
+                    // Find primary invitation (favoring doc with ID starting with 'invited_')
+                    const bestDoc = invitationSnap.docs.find(d => d.id.startsWith('invited_')) || invitationSnap.docs[0];
+                    invitationData = {
+                        ...bestDoc.data(),
+                        docId: bestDoc.id
+                    };
+                }
+            } catch (e) {
+                console.warn('Invitation lookup failed, continuing without it:', e.message);
             }
         }
 

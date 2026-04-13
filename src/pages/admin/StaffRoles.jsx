@@ -360,21 +360,23 @@ const StaffRoles = () => {
             return;
         }
 
-        // Check if email already exists in users list
-        const existing = users.find(u => u.email.toLowerCase() === newStaff.email.toLowerCase());
-        if (existing) {
-            // User already exists — update their role directly
+        // Check if email already exists in users list (could be UID doc or invited_ placeholder)
+        const matchingDocs = users.filter(u => u.email.toLowerCase() === newStaff.email.toLowerCase());
+        if (matchingDocs.length > 0) {
+            // Update ALL matching docs (covers both invited_ placeholder and real UID doc)
             try {
-                const userRef = doc(db, 'users', existing.id);
-                await updateDoc(userRef, {
-                    role: newStaff.role,
-                    status: 'active',
-                    updatedAt: serverTimestamp(),
-                    roleUpdatedBy: currentUser?.uid || 'unknown',
-                    roleUpdatedAt: serverTimestamp(),
-                });
+                await Promise.all(matchingDocs.map(u =>
+                    updateDoc(doc(db, 'users', u.id), {
+                        role: newStaff.role,
+                        status: 'active',
+                        updatedAt: serverTimestamp(),
+                        roleUpdatedBy: currentUser?.uid || 'unknown',
+                        roleUpdatedAt: serverTimestamp(),
+                    })
+                ));
                 const roleInfo = roles[newStaff.role] || roles.customer;
-                setSuccessMessage(`✅ "${existing.displayName || existing.email}" → ${roleInfo.icon} ${roleInfo.label} болгосон`);
+                const target = matchingDocs.find(u => !u.id.startsWith('invited_')) || matchingDocs[0];
+                setSuccessMessage(`✅ "${target.displayName || target.email}" → ${roleInfo.icon} ${roleInfo.label} болгосон`);
                 setIsAddStaffModalOpen(false);
                 setNewStaff({ email: '', displayName: '', role: 'staff_operator' });
                 setTimeout(() => setSuccessMessage(''), 5000);
