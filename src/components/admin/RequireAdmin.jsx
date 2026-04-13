@@ -9,7 +9,7 @@ import { useAuth } from '../../context/AuthContext';
  */
 const RequireAdmin = ({ children, requiredPermission }) => {
     const location = useLocation();
-    const { user, isStaff, hasPermission, loading } = useAuth();
+    const { user, isStaff, isBackofficeAllowed, accountStatus, hasPermission, loading } = useAuth();
 
     if (loading) {
         return (
@@ -30,6 +30,29 @@ const RequireAdmin = ({ children, requiredPermission }) => {
 
     if (!user || !isStaff) {
         return <Navigate to="/admin/login" replace state={{ from: location.pathname }} />;
+    }
+
+    if (!isBackofficeAllowed) {
+        return (
+            <div
+                style={{
+                    minHeight: '60vh',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '12px',
+                    textAlign: 'center',
+                    padding: '2rem',
+                }}
+            >
+                <div style={{ fontSize: '3rem' }}>⛔</div>
+                <h2 style={{ fontSize: '1.4rem', color: '#1a1a2e' }}>Нэвтрэх эрх түр хаагдсан</h2>
+                <p style={{ color: '#6b7280', maxWidth: '420px' }}>
+                    Таны back office дансны төлөв одоогоор <strong>{accountStatus}</strong> байна. Системийн админтай холбогдоно уу.
+                </p>
+            </div>
+        );
     }
 
     // Хэрэв тодорхой permission шаардагдаж байвал шалгана

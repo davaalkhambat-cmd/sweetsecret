@@ -14,9 +14,23 @@ service firebase.storage {
         request.auth.token.admin == true ||
         (
           firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
-          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in ['admin', 'manager']
+          firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role in [
+            'admin',
+            'manager',
+            'super_admin',
+            'system_admin',
+            'operation_admin',
+            'branch_manager'
+          ]
         )
       );
+    }
+
+    function isStaff() {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/users/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role != 'customer' &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.status == 'active';
     }
 
     // User uploads are private by default, scoped by uid.
@@ -27,7 +41,12 @@ service firebase.storage {
     // Product images are public read, admin write.
     match /products/{allPaths=**} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /team_chats/{allPaths=**} {
+      allow read: if isStaff() || isAdmin();
+      allow write: if isStaff() || isAdmin();
     }
 
     // Default: deny all

@@ -54,6 +54,63 @@ const resolveUserRole = (roleKey, email = '') => {
     return resolveRoleKey(roleKey || 'customer');
 };
 
+const pickProfileIdentity = (firebaseUser, fallbackEmail = '') => ({
+    uid: firebaseUser.uid,
+    email: firebaseUser.email || fallbackEmail || '',
+    providerIds: (firebaseUser.providerData || [])
+        .map((provider) => provider?.providerId)
+        .filter(Boolean),
+    updatedAt: serverTimestamp(),
+});
+
+const buildSafeProfileFields = ({ firebaseUser, existingUIDData, invitationData, fallbackName }) => ({
+    displayName:
+        firebaseUser.displayName ||
+        invitationData?.displayName ||
+        existingUIDData?.displayName ||
+        fallbackName,
+    photoURL: firebaseUser.photoURL || existingUIDData?.photoURL || '',
+    phoneNumber: firebaseUser.phoneNumber || invitationData?.phoneNumber || existingUIDData?.phoneNumber || '',
+});
+
+const buildManagedAccessFields = ({ firebaseUser, existingUIDData, invitationData, isNewUser }) => {
+    if (invitationData) {
+        return {
+            role: resolveUserRole(invitationData.role || existingUIDData?.role || 'customer', firebaseUser.email),
+            status: 'active',
+            createdAt: existingUIDData?.createdAt || invitationData.createdAt || serverTimestamp(),
+            loyaltyPoints: existingUIDData?.loyaltyPoints || invitationData.loyaltyPoints || 0,
+        };
+    }
+
+    if (existingUIDData) {
+        return {
+            role: resolveUserRole(existingUIDData.role || 'customer', firebaseUser.email),
+            status: existingUIDData.status || 'active',
+            createdAt: existingUIDData.createdAt || serverTimestamp(),
+            loyaltyPoints: existingUIDData.loyaltyPoints || 0,
+        };
+    }
+
+    return {
+        role: isNewUser ? 'customer' : resolveUserRole('customer', firebaseUser.email),
+        status: 'active',
+        createdAt: serverTimestamp(),
+        loyaltyPoints: 0,
+    };
+};
+
+const shouldSyncManagedAccessFields = ({ firebaseUser, existingUIDData, invitationData, isNewUser }) => {
+    if (invitationData || isNewUser || !existingUIDData) return true;
+
+    const resolvedRole = resolveUserRole(existingUIDData.role || 'customer', firebaseUser.email);
+    if (resolvedRole !== existingUIDData.role) return true;
+
+    if (!existingUIDData.status || !existingUIDData.createdAt) return true;
+
+    return typeof existingUIDData.loyaltyPoints === 'undefined';
+};
+
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -91,41 +148,36 @@ export const AuthProvider = ({ children }) => {
         }
 
         const payload = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || invitationData?.displayName || existingUIDData?.displayName || fallbackName,
-            photoURL: firebaseUser.photoURL || existingUIDData?.photoURL || '',
-            phoneNumber: firebaseUser.phoneNumber || invitationData?.phoneNumber || existingUIDData?.phoneNumber || '',
-            providerIds: (firebaseUser.providerData || [])
-                .map((provider) => provider?.providerId)
-                .filter(Boolean),
-            updatedAt: serverTimestamp(),
-            role: resolveUserRole(invitationData?.role || existingUIDData?.role || 'customer', firebaseUser.email)
+            ...pickProfileIdentity(firebaseUser),
+            ...buildSafeProfileFields({
+                firebaseUser,
+                existingUIDData,
+                invitationData,
+                fallbackName,
+            }),
         };
 
-        if (invitationData) {
-            // USER WAS INVITED: Explicitly upgrade role and mark as active
-            payload.status = 'active';
-            payload.createdAt = existingUIDData?.createdAt || invitationData.createdAt || serverTimestamp();
-            payload.loyaltyPoints = existingUIDData?.loyaltyPoints || invitationData.loyaltyPoints || 0;
+        if (shouldSyncManagedAccessFields({
+            firebaseUser,
+            existingUIDData,
+            invitationData,
+            isNewUser: options.isNewUser,
+        })) {
+            Object.assign(payload, buildManagedAccessFields({
+                firebaseUser,
+                existingUIDData,
+                invitationData,
+                isNewUser: options.isNewUser,
+            }));
+        }
 
-            // Attempt cleanup of invitation placeholder (may fail if not admin — that's OK)
+        if (invitationData) {
+            // Invitation activation is still handled client-side for compatibility.
+            // The sensitive fields are isolated here so rules can be tightened next.
+            // Cleanup: delete the temporary invitation document if it's separate from the UID doc.
+            // This may fail for non-admin callers, which is acceptable because the profile is already synced.
             if (invitationData.docId !== firebaseUser.uid) {
                 deleteDoc(doc(db, 'users', invitationData.docId)).catch(() => {});
-            }
-        } else if (existingUIDData) {
-            // EXISTING USER: Regular sync
-            payload.status = existingUIDData.status || 'active';
-            payload.createdAt = existingUIDData.createdAt || serverTimestamp();
-            payload.loyaltyPoints = existingUIDData.loyaltyPoints || 0;
-            payload.role = resolveUserRole(existingUIDData.role || 'customer', firebaseUser.email);
-        } else {
-            // BRAND NEW USER: Initialize as customer
-            payload.status = 'active';
-            payload.createdAt = serverTimestamp();
-            if (options.isNewUser) {
-                payload.role = 'customer';
-                payload.loyaltyPoints = 0;
             }
         }
 
@@ -195,8 +247,10 @@ export const AuthProvider = ({ children }) => {
 
     const userRole = resolveUserRole(userProfile?.role || 'customer', userProfile?.email || user?.email);
     const roleData = getRoleInfo(userRole, roles);
+    const accountStatus = String(userProfile?.status || 'active').toLowerCase();
     const isStaff = isStaffRole(userRole);
     const isAdmin = roleData.permissions.includes('manage_roles') || roleData.permissions.includes('manage_settings');
+    const isBackofficeAllowed = isStaff && accountStatus === 'active';
 
     const hasPermission = useCallback(
         (permission) => {
@@ -214,8 +268,10 @@ export const AuthProvider = ({ children }) => {
             roles,
             role: userRole,
             roleInfo: roleData,
+            accountStatus,
             isAdmin,
             isStaff,
+            isBackofficeAllowed,
             hasPermission,
             loading,
             signInWithGoogle: async () => {
@@ -262,7 +318,7 @@ export const AuthProvider = ({ children }) => {
                 }
             },
         }),
-        [user, userProfile, loading, userRole, isAdmin, isStaff, roleData, hasPermission, roles]
+        [user, userProfile, loading, userRole, accountStatus, isAdmin, isStaff, isBackofficeAllowed, roleData, hasPermission, roles]
     );
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

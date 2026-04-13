@@ -4,7 +4,7 @@ import { LoaderCircle, LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 const AdminLogin = () => {
-    const { user, role, isStaff, loading, signInWithEmail, signInWithGoogle, logout } = useAuth();
+    const { user, role, isStaff, loading, accountStatus, isBackofficeAllowed, signInWithEmail, signInWithGoogle, logout } = useAuth();
     const location = useLocation();
     const navigate = useNavigate();
     const [email, setEmail] = useState('');
@@ -17,7 +17,7 @@ const AdminLogin = () => {
         return typeof fromPath === 'string' && fromPath.startsWith('/admin') ? fromPath : '/admin';
     }, [location.state]);
 
-    if (!loading && user && isStaff) {
+    if (!loading && user && isBackofficeAllowed) {
         return <Navigate to={targetPath} replace />;
     }
 
@@ -77,6 +77,13 @@ const AdminLogin = () => {
                     <div className="admin-login-alert">
                         Энэ хэрэглэгч ажилтны эрхгүй байна
                         {role ? ` (role: ${role})` : ''}. Ажилтны эрхтэй аккаунтаар дахин нэвтэрнэ үү.
+                    </div>
+                )}
+
+                {!loading && user && isStaff && !isBackofficeAllowed && (
+                    <div className="admin-login-alert">
+                        Энэ ажилтны back office эрх идэвхгүй байна
+                        {accountStatus ? ` (status: ${accountStatus})` : ''}. Системийн админтай холбогдоно уу.
                     </div>
                 )}
 

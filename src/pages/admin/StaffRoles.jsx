@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+    addDoc,
     collection,
     doc,
     onSnapshot,
@@ -135,6 +136,33 @@ const PERMISSION_LABELS = {
     [PERMISSIONS.VIEW_AUDIT]: 'Аудит харах',
 };
 
+const writeAuditLog = async ({
+    actorUid,
+    action,
+    targetType,
+    targetId,
+    targetLabel = '',
+    before = null,
+    after = null,
+    metadata = {},
+}) => {
+    try {
+        await addDoc(collection(db, 'audit_logs'), {
+            actorUid: actorUid || 'unknown',
+            action,
+            targetType,
+            targetId,
+            targetLabel,
+            before,
+            after,
+            metadata,
+            createdAt: serverTimestamp(),
+        });
+    } catch (error) {
+        console.error('Audit log write failed:', error);
+    }
+};
+
 // ─── Main Component ─────────────────────────────────────────────
 const StaffRoles = () => {
     const { user: currentUser, roles, isAdmin } = useAuth();
@@ -268,6 +296,15 @@ const StaffRoles = () => {
                 roleUpdatedBy: currentUser?.uid || 'unknown',
                 roleUpdatedAt: serverTimestamp(),
             });
+            await writeAuditLog({
+                actorUid: currentUser?.uid,
+                action: 'user.role_changed',
+                targetType: 'user',
+                targetId: targetUser.id,
+                targetLabel: targetUser.email || targetUser.displayName || targetUser.id,
+                before: { role: resolveRoleKey(targetUser.role) },
+                after: { role: newRole },
+            });
             const roleInfo = roles[newRole] || roles.customer;
             setSuccessMessage(
                 `✅ "${targetUser.displayName || targetUser.email}" → ${roleInfo.icon} ${roleInfo.label} болгосон`
@@ -296,6 +333,15 @@ const StaffRoles = () => {
             await updateDoc(userRef, {
                 status: newStatus,
                 updatedAt: serverTimestamp(),
+            });
+            await writeAuditLog({
+                actorUid: currentUser?.uid,
+                action: 'user.status_changed',
+                targetType: 'user',
+                targetId: targetUser.id,
+                targetLabel: targetUser.email || targetUser.displayName || targetUser.id,
+                before: { status: targetUser.status },
+                after: { status: newStatus },
             });
             setSuccessMessage(`✅ "${targetUser.displayName || targetUser.email}" төлөв "${newStatus}" боллоо.`);
             setTimeout(() => setSuccessMessage(''), 4000);
@@ -389,6 +435,18 @@ const StaffRoles = () => {
                 ...newRole,
                 createdAt: serverTimestamp()
             });
+            await writeAuditLog({
+                actorUid: currentUser?.uid,
+                action: 'role.created',
+                targetType: 'role_definition',
+                targetId: newRole.key,
+                targetLabel: newRole.label,
+                after: {
+                    key: newRole.key,
+                    label: newRole.label,
+                    permissions: [...newRole.permissions],
+                },
+            });
             setSuccessMessage(`✅ "${newRole.label}" роль амжилттай үүсгэгдлээ.`);
             setIsRoleModalOpen(false);
             setNewRole({
@@ -466,6 +524,19 @@ const StaffRoles = () => {
                 status: 'invited',
                 createdAt: serverTimestamp(),
                 invitedBy: currentUser?.uid || 'admin'
+            });
+            await writeAuditLog({
+                actorUid: currentUser?.uid,
+                action: 'user.invited',
+                targetType: 'user_invitation',
+                targetId: tempId,
+                targetLabel: newStaff.email.toLowerCase(),
+                after: {
+                    email: newStaff.email.toLowerCase(),
+                    displayName: newStaff.displayName || '',
+                    role: newStaff.role,
+                    status: 'invited',
+                },
             });
 
             setSuccessMessage(`✅ "${newStaff.email}" ажилтан амжилттай бүртгэгдлээ. Тэр энэ и-мэйлээрээ нэвтрэхэд эрх нь шууд идэвхжинэ.`);

@@ -25,7 +25,10 @@ service cloud.firestore {
     }
 
     function isStaff() {
-      return isSignedIn() && myRole() != 'customer';
+      return isSignedIn() &&
+        myRole() != 'customer' &&
+        exists(myUserDocPath()) &&
+        get(myUserDocPath()).data.status == 'active';
     }
 
     function canReadOwnInvitation() {
@@ -40,13 +43,27 @@ service cloud.firestore {
         request.resource.data.email == request.auth.token.email;
     }
 
+    function ownerProfileUpdateOnly(userId) {
+      return isOwner(userId) &&
+        request.resource.data.email == resource.data.email &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'displayName',
+          'photoURL',
+          'phoneNumber',
+          'providerIds',
+          'updatedAt'
+        ]);
+    }
+
     // Public catalog
     match /products/{productId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     match /catalog_categories/{categoryId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
     // Private user profile
@@ -55,10 +72,7 @@ service cloud.firestore {
       // NOTE: This allows client-side invite activation on first login.
       // For stricter security, move invitation acceptance to trusted backend code.
       allow create: if isAdmin() || isOwnProfilePayload(userId);
-      allow update: if isAdmin() || (
-        isOwner(userId) &&
-        request.resource.data.email == resource.data.email
-      );
+      allow update: if isAdmin() || ownerProfileUpdateOnly(userId);
       allow delete: if isAdmin();
     }
 
@@ -95,11 +109,23 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /audit_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
     match /team_chats/{chatId} {
       allow read, write: if isStaff() || isAdmin();
     }
 
+    match /team_chat_meta/{docId} {
+      allow read, write: if isStaff() || isAdmin();
+    }
+
     match /sticky_notes/{noteId} {
+      allow read, write: if isStaff() || isAdmin();
+    }
+
+    match /sales/{saleId} {
       allow read, write: if isStaff() || isAdmin();
     }
 

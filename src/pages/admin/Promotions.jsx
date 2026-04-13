@@ -72,6 +72,36 @@ const getPromotionErrorMessage = (error, fallbackMessage) => {
     return fallbackMessage;
 };
 
+const promotionPresets = [
+    {
+        id: 'welcome-oil',
+        title: 'Шинэ хэрэглэгчийн бэлэг',
+        description: 'Innergarm x Elle Light up Oil 40ml-ийг 1ш бэлгэнд өгөх preset.',
+        type: 'free_gift_over_amount',
+        minOrderAmount: '150000',
+        minQuantity: '1',
+        giftQuantity: '1',
+    },
+    {
+        id: 'cup-bundle',
+        title: 'Menstrual Cup 1+1',
+        description: 'Menstrual Cup авбал дагалдах бүтээгдэхүүн бэлгэнд өгөх preset.',
+        type: 'buy_x_get_y',
+        minOrderAmount: '',
+        minQuantity: '1',
+        giftQuantity: '1',
+    },
+    {
+        id: 'high-value-gift',
+        title: '250,000₮+ тусгай бэлэг',
+        description: 'Өндөр дүнтэй захиалгад 1ш бэлэг автоматаар идэвхжих preset.',
+        type: 'free_gift_over_amount',
+        minOrderAmount: '250000',
+        minQuantity: '1',
+        giftQuantity: '1',
+    },
+];
+
 const Promotions = () => {
     const [activeTab, setActiveTab] = useState('coupons');
     const [searchTerm, setSearchTerm] = useState('');
@@ -305,6 +335,23 @@ const Promotions = () => {
     const resetGiftCardForm = () => setGiftCardForm(giftCardInitial);
     const resetPromotionForm = () => {
         setPromotionForm(promotionInitial);
+        setTriggerProductSearch('');
+        setGiftProductSearch('');
+        setIsTriggerSearchOpen(false);
+        setIsGiftSearchOpen(false);
+    };
+
+    const applyPromotionPreset = (preset) => {
+        setPromotionForm((prev) => ({
+            ...promotionInitial,
+            id: prev.id,
+            title: preset.title,
+            type: preset.type,
+            minOrderAmount: preset.minOrderAmount,
+            minQuantity: preset.minQuantity,
+            giftQuantity: preset.giftQuantity,
+            isActive: true,
+        }));
         setTriggerProductSearch('');
         setGiftProductSearch('');
         setIsTriggerSearchOpen(false);
@@ -844,6 +891,20 @@ const Promotions = () => {
                         </form>
                     ) : (
                         <form className="promotions-form" onSubmit={handleSavePromotion}>
+                            <div className="promotion-presets">
+                                {promotionPresets.map((preset) => (
+                                    <button
+                                        key={preset.id}
+                                        type="button"
+                                        className="promotion-preset-card"
+                                        onClick={() => applyPromotionPreset(preset)}
+                                    >
+                                        <span>Preset</span>
+                                        <strong>{preset.title}</strong>
+                                        <small>{preset.description}</small>
+                                    </button>
+                                ))}
+                            </div>
                             <label>Урамшууллын нэр<input name="title" value={promotionForm.title} onChange={handlePromotionChange} required /></label>
                             <label>Төрөл
                                 <select className="form-select" name="type" value={promotionForm.type} onChange={handlePromotionChange}>

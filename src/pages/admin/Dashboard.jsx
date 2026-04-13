@@ -1421,15 +1421,16 @@ const Dashboard = ({ variant = 'delivery' }) => {
             turnaroundMinutes.length > 0
                 ? turnaroundMinutes.reduce((sum, minutes) => sum + minutes, 0) / turnaroundMinutes.length
                 : 0;
-        const recommendedTarget = Math.max(
-            100000,
-            Math.round(
-                Math.max(
-                    comparisonPeriodRevenue || 0,
-                    selectedElapsedDays > 0 ? (selectedPeriodRevenue / selectedElapsedDays) * Math.max(selectedElapsedDays, 30) : 0
-                ) * 1.1
-            )
+        const targetBaseline = Math.max(
+            comparisonPeriodRevenue || 0,
+            selectedElapsedDays > 0 ? (selectedPeriodRevenue / selectedElapsedDays) * Math.max(selectedElapsedDays, 30) : 0
         );
+        const recommendedTarget =
+            dateFilterMode === 'custom_range' && selectedPeriodOrderCount === 0
+                ? 0
+                : targetBaseline > 0
+                    ? Math.round(targetBaseline * 1.1)
+                    : 0;
         const todayActual = todaysDeliveries.length;
         const maxChartValue = Math.max(...dayBuckets.map((item) => item.total), 1);
         const breakdownBaseDate = new Date(selectedStartMs);
