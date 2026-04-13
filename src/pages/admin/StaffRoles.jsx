@@ -6,6 +6,7 @@ import {
     updateDoc,
     serverTimestamp,
     setDoc,
+    deleteDoc,
 } from 'firebase/firestore';
 import {
     Search,
@@ -24,6 +25,8 @@ import {
     Palette,
     UserPlus,
     Mail,
+    Trash2,
+    Pencil,
 } from 'lucide-react';
 import { db } from '../../firebase';
 import { useAuth } from '../../context/AuthContext';
@@ -161,6 +164,9 @@ const StaffRoles = () => {
         displayName: '',
         role: 'staff_operator'
     });
+    const [deleteDialog, setDeleteDialog] = useState(null);
+    const [editDialog, setEditDialog] = useState(null);
+    const [editName, setEditName] = useState('');
     // Firestore listener
     useEffect(() => {
         const unsubscribe = onSnapshot(
@@ -303,6 +309,67 @@ const StaffRoles = () => {
     };
 
     const assignableRoles = useMemo(() => getAssignableRoles(roles), [roles]);
+
+    const handleDeleteUser = (targetUser) => {
+        setDeleteDialog(targetUser);
+    };
+
+    const confirmDelete = async () => {
+        if (!deleteDialog) return;
+        const target = deleteDialog;
+        setDeleteDialog(null);
+        setUpdatingUid(target.id);
+        setErrorMessage('');
+        try {
+            if (target.id.startsWith('invited_')) {
+                // Placeholder — actually delete
+                await deleteDoc(doc(db, 'users', target.id));
+            } else {
+                // Real user — demote to customer
+                await updateDoc(doc(db, 'users', target.id), {
+                    role: 'customer',
+                    updatedAt: serverTimestamp(),
+                    roleUpdatedBy: currentUser?.uid || 'unknown',
+                    roleUpdatedAt: serverTimestamp(),
+                });
+            }
+            setSuccessMessage(`✅ "${target.displayName || target.email}" жагсаалтаас хасагдлаа.`);
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (error) {
+            console.error('Delete error:', error);
+            setErrorMessage('Устгахад алдаа гарлаа. Дахин оролдоно уу.');
+            setTimeout(() => setErrorMessage(''), 4000);
+        } finally {
+            setUpdatingUid(null);
+        }
+    };
+
+    const openEditDialog = (targetUser) => {
+        setEditName(targetUser.displayName || '');
+        setEditDialog(targetUser);
+    };
+
+    const confirmEdit = async () => {
+        if (!editDialog) return;
+        const target = editDialog;
+        setEditDialog(null);
+        setUpdatingUid(target.id);
+        setErrorMessage('');
+        try {
+            await updateDoc(doc(db, 'users', target.id), {
+                displayName: editName.trim(),
+                updatedAt: serverTimestamp(),
+            });
+            setSuccessMessage(`✅ "${target.email}" нэр шинэчлэгдлээ.`);
+            setTimeout(() => setSuccessMessage(''), 4000);
+        } catch (error) {
+            console.error('Edit error:', error);
+            setErrorMessage('Нэр засахад алдаа гарлаа.');
+            setTimeout(() => setErrorMessage(''), 4000);
+        } finally {
+            setUpdatingUid(null);
+        }
+    };
 
     const handleCreateRole = async (e) => {
         e.preventDefault();
@@ -709,12 +776,13 @@ const StaffRoles = () => {
                                     <th>Одоогийн роль</th>
                                     <th>Төлөв</th>
                                     <th>Роль өөрчлөх</th>
+                                    <th>Үйлдэл</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan={5}>
+                                        <td colSpan={6}>
                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '8px 0' }}>
                                                 <LoaderCircle size={16} className="spin" />
                                                 <span>Уншиж байна...</span>
@@ -805,12 +873,34 @@ const StaffRoles = () => {
                                                         </select>
                                                     )}
                                                 </td>
+                                                <td>
+                                                    {!isSelf && isAdmin && (
+                                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                                            <button
+                                                                className="action-btn edit-btn"
+                                                                onClick={() => openEditDialog(u)}
+                                                                disabled={isUpdating}
+                                                                title="Нэр засах"
+                                                            >
+                                                                <Pencil size={14} />
+                                                            </button>
+                                                            <button
+                                                                className="action-btn delete-btn"
+                                                                onClick={() => handleDeleteUser(u)}
+                                                                disabled={isUpdating}
+                                                                title="Жагсаалтаас хасах"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </td>
                                             </tr>
                                         );
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan={5}>Илэрц олдсонгүй.</td>
+                                        <td colSpan={6}>Илэрц олдсонгүй.</td>
                                     </tr>
                                 )}
                             </tbody>
@@ -852,6 +942,69 @@ const StaffRoles = () => {
                             >
                                 <Check size={16} />
                                 Баталгаажуулах
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirm Modal */}
+            {deleteDialog && (
+                <div className="staff-confirm-overlay" onClick={() => setDeleteDialog(null)}>
+                    <div className="staff-confirm-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="staff-confirm-icon" style={{ background: '#fee2e2' }}>
+                            <Trash2 size={28} color="#dc2626" />
+                        </div>
+                        <h3>Жагсаалтаас хасах</h3>
+                        <p>
+                            <strong>{deleteDialog.displayName || deleteDialog.email}</strong>-г ажилтны жагсаалтаас хасах уу?
+                            {!deleteDialog.id.startsWith('invited_') && ' Энэ хэрэглэгч customer эрхтэй болно.'}
+                        </p>
+                        <div className="staff-confirm-actions">
+                            <button className="staff-btn-cancel" onClick={() => setDeleteDialog(null)}>
+                                Болих
+                            </button>
+                            <button className="staff-btn-confirm" style={{ background: '#dc2626' }} onClick={confirmDelete}>
+                                <Trash2 size={16} />
+                                Хасах
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Name Modal */}
+            {editDialog && (
+                <div className="staff-confirm-overlay" onClick={() => setEditDialog(null)}>
+                    <div className="staff-confirm-modal" onClick={(e) => e.stopPropagation()}>
+                        <div className="staff-confirm-icon" style={{ background: '#eff6ff' }}>
+                            <Pencil size={24} color="#2563eb" />
+                        </div>
+                        <h3>Нэр засах</h3>
+                        <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>{editDialog.email}</p>
+                        <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            placeholder="Ажилтны нэр"
+                            style={{
+                                width: '100%',
+                                padding: '10px 12px',
+                                border: '1px solid #d1d5db',
+                                borderRadius: '8px',
+                                fontSize: '0.95rem',
+                                marginTop: '8px',
+                            }}
+                            onKeyDown={(e) => e.key === 'Enter' && confirmEdit()}
+                            autoFocus
+                        />
+                        <div className="staff-confirm-actions" style={{ marginTop: '16px' }}>
+                            <button className="staff-btn-cancel" onClick={() => setEditDialog(null)}>
+                                Болих
+                            </button>
+                            <button className="staff-btn-confirm" onClick={confirmEdit}>
+                                <Check size={16} />
+                                Хадгалах
                             </button>
                         </div>
                     </div>
