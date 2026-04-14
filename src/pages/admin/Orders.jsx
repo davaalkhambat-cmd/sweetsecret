@@ -445,6 +445,9 @@ const getTodayDateValue = () => {
     return new Date(today.getTime() - timezoneOffsetMs).toISOString().split('T')[0];
 };
 
+const DASHBOARD_MIN_DATE = new Date(0);
+const DASHBOARD_MAX_DATE = new Date(8640000000000000);
+
 const PROMOTION_LINE_PREFIX = 'promo-gift-';
 
 const isPromotionLineItem = (item) => Boolean(item?.promotionMeta?.isPromotionGift);
@@ -813,6 +816,15 @@ const Orders = () => {
         return matchesSearch && matchesStatus && matchesSource && matchesPayment && matchesDate;
     }), [orders, searchTerm, statusFilter, sourceFilter, paymentFilter, startDate, endDate]);
 
+    const hasActiveFilters = useMemo(() => (
+        Boolean(searchTerm.trim()) ||
+        statusFilter !== 'all' ||
+        sourceFilter !== 'all' ||
+        paymentFilter !== 'all' ||
+        Boolean(startDate) ||
+        Boolean(endDate)
+    ), [searchTerm, statusFilter, sourceFilter, paymentFilter, startDate, endDate]);
+
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm, statusFilter, sourceFilter, paymentFilter, startDate, endDate]);
@@ -844,12 +856,14 @@ const Orders = () => {
         return [1, 'ellipsis-left', currentPage, 'ellipsis-right', totalPages];
     }, [currentPage, totalPages]);
 
+    const statsSource = hasActiveFilters ? filteredOrders : orders;
+
     const stats = useMemo(() => ({
-        totalCount: orders.length,
-        pendingCount: orders.filter(o => o.status === 'pending').length,
-        processingCount: orders.filter(o => o.status === 'processing').length,
-        totalRevenue: orders.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0)
-    }), [orders]);
+        totalCount: statsSource.length,
+        pendingCount: statsSource.filter((order) => order.status === 'pending').length,
+        processingCount: statsSource.filter((order) => order.status === 'processing').length,
+        totalRevenue: statsSource.reduce((sum, order) => sum + (Number(order.totalAmount) || 0), 0)
+    }), [statsSource]);
 
     const todaysPerformance = useMemo(() => {
         const now = new Date();
@@ -866,6 +880,17 @@ const Orders = () => {
             sourceOptions: SOURCE_OPTIONS,
         });
     }, [SOURCE_OPTIONS, PAYMENT_METHODS, dailyTarget, orders]);
+
+    const filteredPerformance = useMemo(() => buildSalesPerformanceSnapshot({
+        orders: filteredOrders,
+        startDate: DASHBOARD_MIN_DATE,
+        endDate: DASHBOARD_MAX_DATE,
+        target: dailyTarget,
+        paymentMethods: PAYMENT_METHODS,
+        sourceOptions: SOURCE_OPTIONS,
+    }), [SOURCE_OPTIONS, PAYMENT_METHODS, dailyTarget, filteredOrders]);
+
+    const dashboardPerformance = hasActiveFilters ? filteredPerformance : todaysPerformance;
 
     const dailySummaryMeta = useMemo(() => {
         const summaryDate = dailySummaryMode === 'today'
@@ -896,13 +921,17 @@ const Orders = () => {
         });
     }, [SOURCE_OPTIONS, PAYMENT_METHODS, dailySummaryDate, dailySummaryMode, dailyTarget, orders]);
 
-    const monthlyTopSellers = useMemo(() => {
-        const now = new Date();
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const dashboardTopSellers = useMemo(() => {
+        const sellerOrders = hasActiveFilters ? filteredOrders : orders;
+        const monthStart = hasActiveFilters
+            ? DASHBOARD_MIN_DATE
+            : new Date(new Date().getFullYear(), new Date().getMonth(), 1, 0, 0, 0, 0);
+        const monthEnd = hasActiveFilters
+            ? DASHBOARD_MAX_DATE
+            : new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0, 23, 59, 59, 999);
         const sellerMap = new Map();
 
-        orders.forEach((order) => {
+        sellerOrders.forEach((order) => {
             if (!order.createdAt || !order.createdBy) return;
             const createdAt =
                 typeof order.createdAt?.toMillis === 'function'
@@ -934,7 +963,7 @@ const Orders = () => {
             ...seller,
             share: topSellerTotal > 0 ? (seller.totalSales / topSellerTotal) * 100 : 0,
         }));
-    }, [orders, users]);
+    }, [filteredOrders, hasActiveFilters, orders, users]);
 
     const selectedCustomerPaymentInsights = useMemo(() => {
         if (!selectedOrder) return null;
@@ -1485,9 +1514,9 @@ const Orders = () => {
         }
     };
 
-    const paymentChartItems = todaysPerformance.visiblePaymentBreakdown.length
-        ? todaysPerformance.visiblePaymentBreakdown
-        : todaysPerformance.paymentBreakdown.slice(0, 3);
+    const paymentChartItems = dashboardPerformance.visiblePaymentBreakdown.length
+        ? dashboardPerformance.visiblePaymentBreakdown
+        : dashboardPerformance.paymentBreakdown.slice(0, 3);
 
     const todayMeta = useMemo(() => {
         const now = new Date();
@@ -1496,6 +1525,42 @@ const Orders = () => {
             weekdayLabel: MONGOLIAN_WEEKDAYS[now.getDay()],
         };
     }, []);
+
+    const dashboardMeta = useMemo(() => {
+        if (!hasActiveFilters) {
+            return {
+                kicker: 'Өнөөдрийн дэлгүүрийн гүйцэтгэл',
+                dateLabel: todayMeta.dateLabel,
+                weekdayLabel: todayMeta.weekdayLabel,
+                topProductsEmptyLabel: 'Өнөөдөр борлуулалтгүй',
+                sellerTitle: 'Сарын борлуулалтын лидер',
+                sellerSubtitle: 'Top 2 борлуулагч',
+                sellerCaption: `${MONGOLIAN_MONTHS[new Date().getMonth()]}-ийн борлуулалтын дүн`,
+                orderSummaryLabel: 'Өнөөдөр бүртгэгдсэн захиалгын тоо',
+                progressSummaryLabel: 'Өдрийн борлуулалтын төлөвлөгөөнд дөхөж байна',
+            };
+        }
+
+        const rangeLabel = startDate && endDate
+            ? `${startDate} - ${endDate}`
+            : startDate
+                ? `${startDate}-с хойш`
+                : endDate
+                    ? `${endDate} хүртэл`
+                    : 'Бүх шүүлтийн дүн';
+
+        return {
+            kicker: 'Шүүсэн захиалгын гүйцэтгэл',
+            dateLabel: rangeLabel,
+            weekdayLabel: `${filteredOrders.length} захиалга`,
+            topProductsEmptyLabel: 'Сонгосон шүүлтээр борлуулалтгүй',
+            sellerTitle: 'Шүүлтийн борлуулалтын лидер',
+            sellerSubtitle: 'Top 2 борлуулагч',
+            sellerCaption: 'Одоогийн filter-ийн хүрээнд',
+            orderSummaryLabel: 'Сонгосон шүүлтээр олдсон захиалга',
+            progressSummaryLabel: 'Сонгосон шүүлтийн борлуулалтын гүйцэтгэл',
+        };
+    }, [endDate, filteredOrders.length, hasActiveFilters, startDate, todayMeta.dateLabel, todayMeta.weekdayLabel]);
 
     const activeStaffLabel = useMemo(() => {
         const matchedUser = users.find((user) => user.uid === currentUser?.uid || user.id === currentUser?.uid);
@@ -1890,7 +1955,7 @@ const Orders = () => {
             <div className="page-header">
                 <div className="header-info">
                     <h1>Захиалга Удирдах</h1>
-                    <p>Нийт {stats.totalCount} захиалга бүртгэлтэй</p>
+                    <p>{hasActiveFilters ? 'Шүүлтэд' : 'Нийт'} {stats.totalCount} захиалга {hasActiveFilters ? 'таарлаа' : 'бүртгэлтэй'}</p>
                 </div>
                 <div className="header-actions">
                     <button
@@ -2464,10 +2529,10 @@ const Orders = () => {
                     <section className="store-performance-panel">
                 <div className="store-performance-header">
                     <div>
-                        <span className="store-performance-kicker">Өнөөдрийн дэлгүүрийн гүйцэтгэл</span>
+                        <span className="store-performance-kicker">{dashboardMeta.kicker}</span>
                         <div className="store-performance-meta">
-                            <span>{todayMeta.dateLabel}</span>
-                            <span>{todayMeta.weekdayLabel}</span>
+                            <span>{dashboardMeta.dateLabel}</span>
+                            <span>{dashboardMeta.weekdayLabel}</span>
                             <span>{weatherSummary}</span>
                         </div>
                     </div>
@@ -2478,7 +2543,7 @@ const Orders = () => {
                         <div className="performance-summary-topline">
                             <div>
                                 <span>Нийт борлуулалт</span>
-                                <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                <strong>{formatCurrency(dashboardPerformance.totalSales)}</strong>
                             </div>
                             <div className="performance-summary-icon">
                                 <CircleDollarSign size={20} />
@@ -2486,31 +2551,31 @@ const Orders = () => {
                         </div>
                         <div className="performance-progress-meta">
                             <span>Гүйцэтгэл</span>
-                            <strong>{Math.round(todaysPerformance.progress)}%</strong>
+                            <strong>{Math.round(dashboardPerformance.progress)}%</strong>
                         </div>
-                        <div className={`performance-progress-track performance-progress-track--${todaysPerformance.progressTone}`}>
+                        <div className={`performance-progress-track performance-progress-track--${dashboardPerformance.progressTone}`}>
                             <span
-                                className={`performance-progress-fill performance-progress-fill--${todaysPerformance.progressTone}`}
-                                style={{ width: `${Math.min(todaysPerformance.progress, 100)}%` }}
+                                className={`performance-progress-fill performance-progress-fill--${dashboardPerformance.progressTone}`}
+                                style={{ width: `${Math.min(dashboardPerformance.progress, 100)}%` }}
                             />
                         </div>
                         <p className="performance-progress-note">
-                            {todaysPerformance.isTargetMet
-                                ? `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} давсан байна`
-                                : `Өдрийн борлуулалтын төлөвлөгөөнөөс ${formatCurrency(todaysPerformance.gapAmount)} дутуу байна`}
+                            {dashboardPerformance.isTargetMet
+                                ? `Борлуулалтын зорилгоос ${formatCurrency(dashboardPerformance.gapAmount)} давсан байна`
+                                : `Борлуулалтын зорилгоос ${formatCurrency(dashboardPerformance.gapAmount)} дутуу байна`}
                         </p>
                     </div>
 
                     <div className="performance-summary-card">
                         <span>Нийт захиалга</span>
-                        <strong>{todaysPerformance.totalOrders}</strong>
-                        <small>Өнөөдөр бүртгэгдсэн захиалгын тоо</small>
+                        <strong>{dashboardPerformance.totalOrders}</strong>
+                        <small>{dashboardMeta.orderSummaryLabel}</small>
                         <div className="performance-mini-icon"><ShoppingBag size={16} /></div>
                     </div>
 
                     <div className="performance-summary-card">
                         <span>Дундаж сагс (AOV)</span>
-                        <strong>{formatCurrency(todaysPerformance.averageOrderValue)}</strong>
+                        <strong>{formatCurrency(dashboardPerformance.averageOrderValue)}</strong>
                         <small>Нэг захиалгад ногдох дундаж дүн</small>
                         <div className="performance-mini-icon"><ChartNoAxesColumn size={16} /></div>
                     </div>
@@ -2563,8 +2628,8 @@ const Orders = () => {
 
                     <div className="performance-summary-card">
                         <span>Гүйцэтгэл</span>
-                        <strong>{Math.round(todaysPerformance.progress)}%</strong>
-                        <small>{todaysPerformance.isTargetMet ? 'Өдрийн борлуулалтын төлөвлөгөөг давсан' : 'Өдрийн борлуулалтын төлөвлөгөөнд дөхөж байна'}</small>
+                        <strong>{Math.round(dashboardPerformance.progress)}%</strong>
+                        <small>{dashboardPerformance.isTargetMet ? 'Борлуулалтын зорилгыг давсан' : dashboardMeta.progressSummaryLabel}</small>
                         <div className="performance-mini-icon"><TrendingUp size={16} /></div>
                     </div>
                 </div>
@@ -2574,20 +2639,20 @@ const Orders = () => {
                         <div className="performance-chart-header">
                             <div>
                                 <span>Нийт төлбөрийн хуваалт</span>
-                                <strong>{formatCurrency(todaysPerformance.totalSales)}</strong>
+                                <strong>{formatCurrency(dashboardPerformance.totalSales)}</strong>
                             </div>
                         </div>
                         <div className="performance-chart-layout performance-chart-layout--compact">
                             <div className="performance-pie-chart-panel performance-pie-chart-panel--compact">
                                 <div
                                     className="performance-pie-chart"
-                                    style={{ background: todaysPerformance.paymentChartStyle }}
+                                    style={{ background: dashboardPerformance.paymentChartStyle }}
                                 >
                                     <div className="performance-pie-chart__center">Төлбөр</div>
                                 </div>
                             </div>
                             <div className="performance-compact-list">
-                                {(paymentChartItems.length ? paymentChartItems : todaysPerformance.paymentBreakdown.slice(0, 3)).map((item) => (
+                                {(paymentChartItems.length ? paymentChartItems : dashboardPerformance.paymentBreakdown.slice(0, 3)).map((item) => (
                                     <div key={item.key} className="performance-compact-item">
                                         <span className="performance-compact-dot" style={{ background: item.color }} />
                                         <div className="performance-compact-copy">
@@ -2605,20 +2670,20 @@ const Orders = () => {
                         <div className="performance-chart-header">
                             <div>
                                 <span>Захиалгын суваг</span>
-                                <strong>{todaysPerformance.totalOrders}</strong>
+                                <strong>{dashboardPerformance.totalOrders}</strong>
                             </div>
                         </div>
                         <div className="performance-chart-layout performance-chart-layout--compact">
                             <div className="performance-pie-chart-panel performance-pie-chart-panel--compact">
                                 <div
                                     className="performance-pie-chart"
-                                    style={{ background: todaysPerformance.sourceChartStyle }}
+                                    style={{ background: dashboardPerformance.sourceChartStyle }}
                                 >
                                     <div className="performance-pie-chart__center">Суваг</div>
                                 </div>
                             </div>
                             <div className="performance-compact-list">
-                                {(todaysPerformance.visibleSourceBreakdown.length ? todaysPerformance.visibleSourceBreakdown : todaysPerformance.sourceBreakdown.slice(0, 3)).map((item) => (
+                                {(dashboardPerformance.visibleSourceBreakdown.length ? dashboardPerformance.visibleSourceBreakdown : dashboardPerformance.sourceBreakdown.slice(0, 3)).map((item) => (
                                     <div key={item.key} className="performance-compact-item">
                                         <span className="performance-compact-dot" style={{ background: item.color }} />
                                         <div className="performance-compact-copy">
@@ -2636,18 +2701,18 @@ const Orders = () => {
                         <div className="performance-chart-header">
                             <div>
                                 <span>Багц ба энгийн бүтээгдэхүүн</span>
-                                <strong>{formatCurrency(todaysPerformance.revenueMix.totalRevenue || 0)}</strong>
+                                <strong>{formatCurrency(dashboardPerformance.revenueMix.totalRevenue || 0)}</strong>
                             </div>
                         </div>
                         <div className="performance-revenue-mix performance-revenue-mix--standalone">
                             <div className="performance-revenue-mix-track">
                                 <span
                                     className="performance-revenue-mix-fill performance-revenue-mix-fill--bundle"
-                                    style={{ width: `${todaysPerformance.revenueMix.bundleShare}%` }}
+                                    style={{ width: `${dashboardPerformance.revenueMix.bundleShare}%` }}
                                 />
                                 <span
                                     className="performance-revenue-mix-fill performance-revenue-mix-fill--product"
-                                    style={{ width: `${todaysPerformance.revenueMix.productShare}%` }}
+                                    style={{ width: `${dashboardPerformance.revenueMix.productShare}%` }}
                                 />
                             </div>
                             <div className="performance-revenue-mix-legend">
@@ -2655,14 +2720,14 @@ const Orders = () => {
                                     <span className="performance-revenue-mix-dot performance-revenue-mix-dot--bundle" />
                                     <div>
                                         <strong>Багц бүтээгдэхүүн</strong>
-                                        <small>{formatCurrency(todaysPerformance.revenueMix.bundleRevenue)} • {todaysPerformance.revenueMix.bundleShare.toFixed(1)}%</small>
+                                        <small>{formatCurrency(dashboardPerformance.revenueMix.bundleRevenue)} • {dashboardPerformance.revenueMix.bundleShare.toFixed(1)}%</small>
                                     </div>
                                 </div>
                                 <div className="performance-revenue-mix-item">
                                     <span className="performance-revenue-mix-dot performance-revenue-mix-dot--product" />
                                     <div>
                                         <strong>Энгийн бүтээгдэхүүн</strong>
-                                        <small>{formatCurrency(todaysPerformance.revenueMix.productRevenue)} • {todaysPerformance.revenueMix.productShare.toFixed(1)}%</small>
+                                        <small>{formatCurrency(dashboardPerformance.revenueMix.productRevenue)} • {dashboardPerformance.revenueMix.productShare.toFixed(1)}%</small>
                                     </div>
                                 </div>
                             </div>
@@ -2673,11 +2738,11 @@ const Orders = () => {
                         <div className="performance-chart-header">
                             <div>
                                 <span>Top 5 бүтээгдэхүүн</span>
-                                <strong>{todaysPerformance.productBreakdown.length || 0}</strong>
+                                <strong>{dashboardPerformance.productBreakdown.length || 0}</strong>
                             </div>
                         </div>
                         <div className="store-top-products-card-list">
-                            {(todaysPerformance.productBreakdown.length ? todaysPerformance.productBreakdown.slice(0, 5) : [{ key: 'empty', name: 'Өнөөдөр борлуулалтгүй', quantity: 0, image: '' }]).map((product, index) => (
+                            {(dashboardPerformance.productBreakdown.length ? dashboardPerformance.productBreakdown.slice(0, 5) : [{ key: 'empty', name: dashboardMeta.topProductsEmptyLabel, quantity: 0, image: '' }]).map((product, index) => (
                                 <div key={product.key} className="store-top-product-row">
                                     <div className="store-top-product-rank">{index + 1}</div>
                                     <div className="store-top-product-thumb">
@@ -2705,14 +2770,14 @@ const Orders = () => {
                 <div className="sales-leaderboard">
                     <div className="sales-leaderboard-header">
                         <div>
-                            <span>Сарын борлуулалтын лидер</span>
-                            <strong>Top 2 борлуулагч</strong>
+                            <span>{dashboardMeta.sellerTitle}</span>
+                            <strong>{dashboardMeta.sellerSubtitle}</strong>
                         </div>
-                        <small>{MONGOLIAN_MONTHS[new Date().getMonth()]}-ийн борлуулалтын дүн</small>
+                        <small>{dashboardMeta.sellerCaption}</small>
                     </div>
 
                     <div className="sales-leaderboard-grid">
-                        {(monthlyTopSellers.length ? monthlyTopSellers : [
+                        {(dashboardTopSellers.length ? dashboardTopSellers : [
                             { key: 'empty-1', name: 'Одоогоор бүртгэлгүй', totalSales: 0, orderCount: 0, share: 0 },
                             { key: 'empty-2', name: 'Одоогоор бүртгэлгүй', totalSales: 0, orderCount: 0, share: 0 },
                         ]).map((seller, index) => (
