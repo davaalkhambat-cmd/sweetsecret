@@ -24,6 +24,20 @@ service cloud.firestore {
       );
     }
 
+    function canViewFinance() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        myRole() in ['super_admin', 'admin', 'executive_ceo', 'finance', 'viewer_auditor']
+      );
+    }
+
+    function canManageFinance() {
+      return isSignedIn() && (
+        request.auth.token.admin == true ||
+        myRole() in ['super_admin', 'admin', 'finance']
+      );
+    }
+
     function isStaff() {
       return isSignedIn() &&
         myRole() != 'customer' &&
@@ -127,6 +141,22 @@ service cloud.firestore {
 
     match /sales/{saleId} {
       allow read, write: if isStaff() || isAdmin();
+    }
+
+    // Санхүүгийн борлуулалтын тайлан (сар тутам Google Sheets-ээс
+    // синк хийсэн snapshot). Бичих эрх зөвхөн MANAGE_FINANCE-тэй
+    // хэрэглэгч (super_admin, finance). Унших эрх VIEW_FINANCE-тэй
+    // хэрэглэгч (дээрхээс гадна executive_ceo, viewer_auditor).
+    match /sales_reports/{yearMonth} {
+      allow read: if canViewFinance();
+      allow create, update: if canManageFinance();
+      allow delete: if isAdmin();
+    }
+
+    // Google Sheet-ийн тохиргоо (SHEET_ID + сар бүрийн GID mapping).
+    match /sales_sheet_config/{docId} {
+      allow read: if canViewFinance();
+      allow write: if canManageFinance();
     }
 
     // Default: deny all
