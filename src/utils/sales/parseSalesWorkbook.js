@@ -27,8 +27,10 @@ export const COLUMN = {
     DISC_AMT: 14,   // Хөнгөлөлтийн дүн
     PRE_VAT: 15,    // НӨАТ-гүй дүн
     VAT: 16,        // НӨАТ
-    TOTAL: 17,      // Нийт дүн
-    NET: 19,        // Цэвэр борлуулалт (Dashboard-д энэ ашиглагдана)
+    // Google Sheets CSV export-д 17 болон 19-р баганууд нь spacer (merged/empty)
+    // учир Нийт дүн = 18, Цэвэр борлуулалт = 20.
+    TOTAL: 18,      // Нийт дүн
+    NET: 20,        // Цэвэр борлуулалт (Dashboard-д энэ ашиглагдана)
 };
 
 const CHANNEL_DELIVERY = 'Хүргэлт';
