@@ -11,27 +11,69 @@
  * байгааг заана (0-с эхэлнэ).
  */
 
-// Excel дэх column индекс (header row дээр merged cell байдаг учир
-// header нэрсээр таних биш index-ээр шууд тогтоосон — санхүүгээс
-// ирдэг формат нь тогтвортой).
+// Default column индексүүд — fallback зориулалттай. Санхүүгийн format нь
+// цаг хугацаанд багана нэмэгдэж индекс шилждэг тул runtime-д header
+// мөрнөөс нэрээр хайж олно.
 export const COLUMN = {
-    DATE: 2,        // Огноо (Excel serial number, e.g. 46113 = 2026-04-01)
-    TRANSACTION: 3, // Гүйлгээний утга — Хүргэлт танихад ашиглана
-    LOCATION: 6,    // Байршил — И-Март /Хан-Уул /, Шангри-ла, УИД салбар
-    CODE: 8,        // Барааны код
-    NAME: 9,        // Барааны нэр
-    UNIT: 10,       // Хэмжих нэгж
-    PRICE: 11,      // Үнэ
-    QTY: 12,        // Тоо хэмжээ
-    DISC_PCT: 13,   // Хөнгөлөлтийн %
-    DISC_AMT: 14,   // Хөнгөлөлтийн дүн
-    PRE_VAT: 15,    // НӨАТ-гүй дүн
-    VAT: 16,        // НӨАТ
-    // Google Sheets CSV export-д 17 болон 19-р баганууд нь spacer (merged/empty)
-    // учир Нийт дүн = 18, Цэвэр борлуулалт = 20.
-    TOTAL: 18,      // Нийт дүн
-    NET: 20,        // Цэвэр борлуулалт (Dashboard-д энэ ашиглагдана)
+    DATE: 2,
+    TRANSACTION: 3,
+    LOCATION: 6,
+    CODE: 8,
+    NAME: 9,
+    UNIT: 10,
+    PRICE: 11,
+    QTY: 12,
+    DISC_PCT: 13,
+    DISC_AMT: 14,
+    PRE_VAT: 15,
+    VAT: 16,
+    TOTAL: 18,
+    NET: 20,
 };
+
+// Header row-оос column-г олох regex.
+const HEADER_PATTERNS = {
+    DATE: /^Огноо/i,
+    TRANSACTION: /^Гүйлгээний\s*утга/i,
+    LOCATION: /^Байршил/i,
+    CODE: /^Барааны\s*код/i,
+    NAME: /^Барааны\s*нэр/i,
+    UNIT: /^Хэмжих\s*нэгж/i,
+    PRICE: /^Үнэ/i,
+    QTY: /^Тоо\s*хэмжээ/i,
+    DISC_PCT: /^Хөнгөлөлтийн\s*%/i,
+    DISC_AMT: /^Хөнгөлөлтийн\s*дүн/i,
+    PRE_VAT: /^НӨАТ[\s-]*гүй\s*дүн/i,
+    VAT: /^НӨАТ\s*$/i,
+    TOTAL: /Нийт\s*дүн/i,
+    NET: /Цэвэр\s*борлуулалт/i,
+};
+
+/**
+ * Rows-оос header мөрийг олоод column индексүүдийг тодорхойлно.
+ * Олдоогүй багануудыг default COLUMN-оор орлуулна.
+ */
+export function resolveColumns(rows) {
+    // "Огноо" үгтэй эхний мөр бол header. Санхүүгийн форматад энэ нь
+    // ихэвчлэн row 3, гэхдээ зарим тохиолдолд row 0 (Google Sheets
+    // merged cells нийлсэн) байдаг.
+    let headerRow = null;
+    for (let i = 0; i < Math.min(rows.length, 15); i++) {
+        const row = rows[i] || [];
+        if (row.some((c) => c != null && HEADER_PATTERNS.DATE.test(String(c).trim()))) {
+            headerRow = row;
+            break;
+        }
+    }
+    if (!headerRow) return { ...COLUMN };
+
+    const resolved = { ...COLUMN };
+    for (const [key, re] of Object.entries(HEADER_PATTERNS)) {
+        const idx = headerRow.findIndex((c) => c != null && re.test(String(c).trim()));
+        if (idx !== -1) resolved[key] = idx;
+    }
+    return resolved;
+}
 
 const CHANNEL_DELIVERY = 'Хүргэлт';
 
@@ -141,6 +183,8 @@ function toNumber(v) {
 export function extractLineItems(rows) {
     const items = [];
     let currentReceipt = -1;
+    // Header row-оос column индексийг тодорхойлно. Формат шилжвэл ч ажиллана.
+    const cols = resolveColumns(rows);
 
     for (let i = 0; i < rows.length; i++) {
         const row = rows[i] || [];
@@ -149,15 +193,14 @@ export function extractLineItems(rows) {
         // Sheets export нь merged cells-г нийлүүлдэг)
         if (rowReceiptMarkerIndex(row) !== -1) {
             currentReceipt += 1;
-            // Заримдаа marker мөрөнд product info ч байдаггүй — үргэлжилнэ
             continue;
         }
 
         // Тайлангийн төгсгөлийн мөрүүд
         if (isPrintedFooter(row)) break;
 
-        const dateCell = row[COLUMN.DATE];
-        const productName = row[COLUMN.NAME];
+        const dateCell = row[cols.DATE];
+        const productName = row[cols.NAME];
 
         // Нэгдсэн нийлбэр мөр: огноо ч, нэр ч байхгүй — алгасна
         if (!dateCell || !productName) continue;
@@ -171,20 +214,20 @@ export function extractLineItems(rows) {
         items.push({
             receiptIndex: currentReceipt,
             date: dateToYMD(dateObj),
-            transaction: String(row[COLUMN.TRANSACTION] || '').trim(),
-            location: String(row[COLUMN.LOCATION] || '').trim(),
-            channel: detectChannel(row[COLUMN.TRANSACTION], row[COLUMN.LOCATION]),
-            productCode: String(row[COLUMN.CODE] || '').trim(),
+            transaction: String(row[cols.TRANSACTION] || '').trim(),
+            location: String(row[cols.LOCATION] || '').trim(),
+            channel: detectChannel(row[cols.TRANSACTION], row[cols.LOCATION]),
+            productCode: String(row[cols.CODE] || '').trim(),
             productName: String(productName).trim(),
-            unit: String(row[COLUMN.UNIT] || '').trim(),
-            unitPrice: toNumber(row[COLUMN.PRICE]),
-            qty: toNumber(row[COLUMN.QTY]),
-            discountPct: toNumber(row[COLUMN.DISC_PCT]),
-            discountAmount: toNumber(row[COLUMN.DISC_AMT]),
-            preVat: toNumber(row[COLUMN.PRE_VAT]),
-            vat: toNumber(row[COLUMN.VAT]),
-            total: toNumber(row[COLUMN.TOTAL]),
-            net: toNumber(row[COLUMN.NET]),
+            unit: String(row[cols.UNIT] || '').trim(),
+            unitPrice: toNumber(row[cols.PRICE]),
+            qty: toNumber(row[cols.QTY]),
+            discountPct: toNumber(row[cols.DISC_PCT]),
+            discountAmount: toNumber(row[cols.DISC_AMT]),
+            preVat: toNumber(row[cols.PRE_VAT]),
+            vat: toNumber(row[cols.VAT]),
+            total: toNumber(row[cols.TOTAL]),
+            net: toNumber(row[cols.NET]),
         });
     }
 
