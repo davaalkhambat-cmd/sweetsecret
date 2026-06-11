@@ -79,6 +79,7 @@ export default function SalesDashboard() {
     const [channelFilter, setChannelFilter] = useState('all');
     const [dateRange, setDateRange] = useState({ mode: 'off', start: null, end: null });
     const [syncModalOpen, setSyncModalOpen] = useState(false);
+    const [breakdownOpen, setBreakdownOpen] = useState(false);
 
     /* ---------- Loading ---------- */
 
@@ -516,15 +517,31 @@ export default function SalesDashboard() {
                         {/* Product breakdown by month */}
                         {months.length > 1 && (
                             <>
-                                <div className="sd-section-title">
+                                <div
+                                    className="sd-section-title clickable"
+                                    onClick={() => setBreakdownOpen((v) => !v)}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            setBreakdownOpen((v) => !v);
+                                        }
+                                    }}
+                                >
                                     <span className="sd-emoji">📋</span> Сар бүрийн бүтээгдэхүүний задаргаа
+                                    <span className="sd-collapse-toggle">
+                                        {breakdownOpen ? '▲ Хаах' : '▼ Дэлгэрэнгүй харах'}
+                                    </span>
                                 </div>
-                                <div className="sd-card">
-                                    <div className="sd-desc" style={{ marginBottom: 12 }}>
-                                        Сонгосон сард зарагдсан бүтээгдэхүүний жагсаалт — тоо, орлого, хувийн жин. Доорх таб-аас сараа сонгоно.
+                                {breakdownOpen && (
+                                    <div className="sd-card">
+                                        <div className="sd-desc" style={{ marginBottom: 12 }}>
+                                            Сонгосон сард зарагдсан бүтээгдэхүүний жагсаалт — тоо, орлого, хувийн жин. Доорх таб-аас сараа сонгоно.
+                                        </div>
+                                        <ProductBreakdown months={months} reports={allReports} channelFilter={channelFilter} />
                                     </div>
-                                    <ProductBreakdown months={months} reports={allReports} channelFilter={channelFilter} />
-                                </div>
+                                )}
                             </>
                         )}
 
