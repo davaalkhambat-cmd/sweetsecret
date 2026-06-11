@@ -13515,10 +13515,14 @@ tbody tr:last-child td {
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 .ss-ov-card.clickable { cursor: pointer; }
-.ss-ov-card.clickable:hover {
+.ss-ov-card.clickable:hover,
+.ss-ov-card.warm:hover,
+.ss-ov-card.botanica:hover {
   transform: translateY(-6px);
   box-shadow: 0 38px 70px -32px rgba(107, 24, 57, 0.42);
 }
+.ss-ov-card.warm,
+.ss-ov-card.botanica { cursor: pointer; }
 .ss-ov-card:focus-visible {
   outline: 2px solid #6B1839;
   outline-offset: 4px;
@@ -13549,6 +13553,13 @@ tbody tr:last-child td {
 .ss-ov-card.soon-b .ss-ov-head {
   background: linear-gradient(135deg, #B49EA8 0%, #D6C6CC 100%);
   color: #5E4350;
+}
+/* "Манай компани" хэсгийн warm + botanica variants */
+.ss-ov-card.warm .ss-ov-head {
+  background: linear-gradient(135deg, #6B1839 0%, #A14060 50%, #D88FA8 100%);
+}
+.ss-ov-card.botanica .ss-ov-head {
+  background: linear-gradient(135deg, #4F6B5E 0%, #7C9A84 52%, #AFC2A4 100%);
 }
 
 .ss-ov-badge {
@@ -13681,10 +13692,25 @@ tbody tr:last-child td {
   color: #9B8B86;
   transition: transform 0.25s ease, color 0.25s ease;
 }
-.ss-ov-card.live.clickable:hover .ss-ov-arr {
+.ss-ov-card.live.clickable:hover .ss-ov-arr,
+.ss-ov-card.warm:hover .ss-ov-arr {
   color: #6B1839;
   transform: translateX(6px);
 }
+.ss-ov-card.botanica:hover .ss-ov-arr {
+  color: #4F6B5E;
+  transform: translateX(6px);
+}
+
+/* warm/botanica bullets — reference styled */
+.ss-ov-card.warm .ss-ov-body li::before { background: #D88FA8; }
+.ss-ov-card.botanica .ss-ov-body li::before { background: #B5BFA1; }
+
+/* warm/botanica нь муудсан өнгөгүй — текст үндсэн өнгөтэйгөө */
+.ss-ov-card.warm .ss-ov-body > p,
+.ss-ov-card.botanica .ss-ov-body > p { color: #2C2C2A; }
+.ss-ov-card.warm .ss-ov-foot span,
+.ss-ov-card.botanica .ss-ov-foot span { color: #2C2C2A; }
 
 @media (prefers-reduced-motion: reduce) {
   .ss-ov-card,

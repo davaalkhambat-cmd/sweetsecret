@@ -60,8 +60,11 @@ export default function SectionOverview({ sectionKey }) {
                     {items.map((item, idx) => {
                         const num = String(idx + 1).padStart(2, '0');
                         const isLive = !item.comingSoon && item.allowed;
-                        const variant = !item.comingSoon ? 'live' : (idx % 2 === 0 ? 'soon-a' : 'soon-b');
+                        // Тусгай variant байвал хэрэглэнэ, үгүй бол стандарт live/soon-a/soon-b
+                        const variant = item.variant
+                            || (!item.comingSoon ? 'live' : (idx % 2 === 0 ? 'soon-a' : 'soon-b'));
                         const clickable = isLive;
+                        const footText = item.foot || (isLive ? 'Нээх' : 'Тун удахгүй');
 
                         const onClick = () => {
                             if (!clickable) return;
@@ -83,16 +86,18 @@ export default function SectionOverview({ sectionKey }) {
                                 tabIndex={clickable ? 0 : undefined}
                             >
                                 <div className="ss-ov-head">
-                                    {isLive ? (
-                                        <span className="ss-ov-badge live">
-                                            <span className="ss-ov-pulse" />
-                                            Идэвхтэй
-                                        </span>
-                                    ) : (
-                                        <span className="ss-ov-badge">
-                                            <Clock size={12} strokeWidth={2} />
-                                            Тун удахгүй
-                                        </span>
+                                    {!item.hideBadge && (
+                                        isLive ? (
+                                            <span className="ss-ov-badge live">
+                                                <span className="ss-ov-pulse" />
+                                                Идэвхтэй
+                                            </span>
+                                        ) : (
+                                            <span className="ss-ov-badge">
+                                                <Clock size={12} strokeWidth={2} />
+                                                Тун удахгүй
+                                            </span>
+                                        )
                                     )}
                                     <div className="ss-ov-num">{num}</div>
                                     <div className="ss-ov-keyb">{item.keyb}</div>
@@ -109,7 +114,7 @@ export default function SectionOverview({ sectionKey }) {
                                         </ul>
                                     )}
                                     <div className="ss-ov-foot">
-                                        <span>{isLive ? 'Нээх' : 'Тун удахгүй'}</span>
+                                        <span>{footText}</span>
                                         <ArrowRight size={20} strokeWidth={2} className="ss-ov-arr" />
                                     </div>
                                 </div>
