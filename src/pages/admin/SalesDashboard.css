@@ -1358,6 +1358,45 @@
     width: 30px;
 }
 
+/* Tab-based breakdown */
+.sd-pb-months {
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: var(--sd-bg);
+    border: 1px solid var(--sd-border);
+    border-radius: 10px;
+    flex-wrap: wrap;
+}
+.sd-pb-months button {
+    padding: 8px 15px;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    color: var(--sd-ink-soft);
+    font-family: 'Manrope';
+    transition: all 0.2s;
+}
+.sd-pb-months button:hover { color: var(--sd-wine); }
+.sd-pb-months button.active {
+    background: #fff;
+    color: var(--sd-wine);
+    box-shadow: 0 2px 8px rgba(107, 24, 57, 0.12);
+}
+.sd-pb-month-head.static { cursor: default; }
+.sd-pb-share {
+    color: var(--sd-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'Manrope';
+    margin-left: 6px;
+}
+.sd-pb-unit { color: var(--sd-wine-light); }
+.sd-pb-rev { color: var(--sd-green); }
+
 /* ============ PRODUCT ANALYSIS (search) ============ */
 .sd-psearch-row {
     display: flex;

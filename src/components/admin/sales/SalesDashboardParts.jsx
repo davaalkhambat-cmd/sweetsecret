@@ -741,97 +741,120 @@ export function WeekdayBars({ weekday }) {
 }
 
 /* ============================================================
-   PRODUCT BREAKDOWN (collapsible months)
+   PRODUCT BREAKDOWN (tab-based — one month at a time)
    ============================================================ */
 export function ProductBreakdown({ months, reports, channelFilter }) {
-    const [openMonth, setOpenMonth] = useState(null);
-    const [sort, setSort] = useState('revenue');
+    const monthList = useMemo(() => months.map((m) => m.yearMonth).sort(), [months]);
+    const [selectedMonth, setSelectedMonth] = useState(() => monthList[monthList.length - 1] || null);
+    const [sort, setSort] = useState('qty');
 
-    const monthRows = useMemo(() => {
-        return months.map((m) => {
-            const r = reports[m.yearMonth];
-            if (!r) return null;
-            const items = r.line_items || [];
-            const filtered = channelFilter === 'all' ? items : items.filter((it) => it.c === channelFilter);
-            const map = new Map();
-            let total = 0, qty = 0;
-            const receipts = new Set();
-            for (const it of filtered) {
-                total += it.n || 0;
-                qty += it.q || 0;
-                receipts.add(`${it.r}@${it.c}@${it.d}`);
-                const key = it.pn || '—';
-                if (!map.has(key)) map.set(key, { product_name: key, qty: 0, revenue: 0 });
-                const p = map.get(key);
-                p.qty += it.q || 0;
-                p.revenue += it.n || 0;
-            }
-            const products = [...map.values()].sort((a, b) =>
-                sort === 'revenue' ? b.revenue - a.revenue : b.qty - a.qty
-            );
-            return { yearMonth: m.yearMonth, total, qty, receipts: receipts.size, products };
-        }).filter(Boolean);
-    }, [months, reports, channelFilter, sort]);
+    useEffect(() => {
+        if (!selectedMonth && monthList.length) setSelectedMonth(monthList[monthList.length - 1]);
+        else if (selectedMonth && !monthList.includes(selectedMonth)) {
+            setSelectedMonth(monthList[monthList.length - 1] || null);
+        }
+    }, [monthList, selectedMonth]);
+
+    const monthData = useMemo(() => {
+        if (!selectedMonth) return null;
+        const r = reports[selectedMonth];
+        if (!r) return null;
+        const items = r.line_items || [];
+        const filtered = channelFilter === 'all' ? items : items.filter((it) => it.c === channelFilter);
+        const map = new Map();
+        let totalRev = 0, totalQty = 0;
+        const receipts = new Set();
+        for (const it of filtered) {
+            totalRev += it.n || 0;
+            totalQty += it.q || 0;
+            receipts.add(`${it.r}@${it.c}@${it.d}`);
+            const key = it.pn || '—';
+            if (!map.has(key)) map.set(key, { product_name: key, qty: 0, revenue: 0 });
+            const p = map.get(key);
+            p.qty += it.q || 0;
+            p.revenue += it.n || 0;
+        }
+        const products = [...map.values()].sort((a, b) =>
+            sort === 'qty' ? b.qty - a.qty : b.revenue - a.revenue
+        );
+        const totalReceipts = receipts.size;
+        const avgBasket = totalReceipts ? Math.round(totalRev / totalReceipts) : 0;
+        return { totalRev, totalQty, totalReceipts, avgBasket, products };
+    }, [selectedMonth, reports, channelFilter, sort]);
+
+    if (!monthList.length) {
+        return <div className="sd-empty">Өгөгдөл алга</div>;
+    }
 
     return (
         <>
             <div className="sd-pb-controls">
-                <div className="sd-pb-sort-label">Эрэмбэлэх:</div>
-                <div className="sd-pb-sort">
-                    <button className={sort === 'revenue' ? 'active' : ''} onClick={() => setSort('revenue')}>Орлогоор</button>
-                    <button className={sort === 'qty' ? 'active' : ''} onClick={() => setSort('qty')}>Тоогоор</button>
+                <div className="sd-pb-months">
+                    {monthList.map((ym) => (
+                        <button
+                            key={ym}
+                            type="button"
+                            className={selectedMonth === ym ? 'active' : ''}
+                            onClick={() => setSelectedMonth(ym)}
+                        >
+                            {formatMonthShort(ym)}
+                        </button>
+                    ))}
+                </div>
+                <div className="sd-pb-sort-wrap" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div className="sd-pb-sort-label">Эрэмбэлэх:</div>
+                    <div className="sd-pb-sort">
+                        <button type="button" className={sort === 'qty' ? 'active' : ''} onClick={() => setSort('qty')}>📊 Тоогоор</button>
+                        <button type="button" className={sort === 'revenue' ? 'active' : ''} onClick={() => setSort('revenue')}>💰 Орлогоор</button>
+                    </div>
                 </div>
             </div>
-            {monthRows.map((row) => {
-                const open = openMonth === row.yearMonth;
-                const top = row.products.slice(0, 12);
-                const maxVal = top[0] ? (sort === 'revenue' ? top[0].revenue : top[0].qty) : 1;
-                return (
-                    <div key={row.yearMonth} className={`sd-pb-month ${open ? 'open' : ''}`}>
-                        <div className="sd-pb-month-head" onClick={() => setOpenMonth(open ? null : row.yearMonth)}>
-                            <div className="sd-pb-mo-name">{formatMonthShort(row.yearMonth)}</div>
-                            <div className="sd-pb-mo-metrics">
-                                <div className="sd-pb-m"><b>{fmtT(row.total)}</b><span>Орлого</span></div>
-                                <div className="sd-pb-m"><b>{fmt(row.qty)}</b><span>Бараа</span></div>
-                                <div className="sd-pb-m"><b>{fmt(row.receipts)}</b><span>Чек</span></div>
-                            </div>
-                            <div className="sd-pb-caret">▼</div>
+
+            {monthData && (
+                <div className="sd-pb-month open">
+                    <div className="sd-pb-month-head static">
+                        <div className="sd-pb-mo-name">{formatMonthShort(selectedMonth)}</div>
+                        <div className="sd-pb-mo-metrics">
+                            <div className="sd-pb-m"><b>{fmt(monthData.totalQty)}</b><span>ширхэг</span></div>
+                            <div className="sd-pb-m"><b>{fmtT(monthData.totalRev)}</b><span>орлого</span></div>
+                            <div className="sd-pb-m"><b>{fmt(monthData.totalReceipts)}</b><span>чек</span></div>
+                            <div className="sd-pb-m"><b>{fmtT(monthData.avgBasket)}</b><span>дундаж чек</span></div>
                         </div>
-                        {open && (
-                            <div className="sd-pb-detail">
-                                <table className="sd-table">
-                                    <thead>
-                                        <tr>
-                                            <th>#</th>
-                                            <th>Бүтээгдэхүүн</th>
-                                            <th className="sd-num">Ш</th>
-                                            <th className="sd-num">Орлого</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {top.map((p, i) => {
-                                            const v = sort === 'revenue' ? p.revenue : p.qty;
-                                            const w = (v / maxVal) * 100;
-                                            const name = p.product_name.length > 40 ? p.product_name.slice(0, 40) + '…' : p.product_name;
-                                            return (
-                                                <tr key={p.product_name}>
-                                                    <td className="sd-pb-rank">{i + 1}</td>
-                                                    <td title={p.product_name}>{name}</td>
-                                                    <td className="sd-num">{p.qty}</td>
-                                                    <td className="sd-num sd-bar-cell">
-                                                        <div className="sd-bar-fill" style={{ width: `${w}%` }} />
-                                                        <span className="sd-bar-text">{fmtT(p.revenue)}</span>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
-                        )}
                     </div>
-                );
-            })}
+                    <div className="sd-pb-detail">
+                        <table className="sd-table">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th>Бүтээгдэхүүн</th>
+                                    <th className="sd-num">Тоо</th>
+                                    <th className="sd-num">Нэгж үнэ</th>
+                                    <th className="sd-num">Нийт орлого</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {monthData.products.map((p, i) => {
+                                    const share = monthData.totalQty > 0 ? ((p.qty / monthData.totalQty) * 100).toFixed(1) : '0.0';
+                                    const unit = p.qty > 0 ? Math.round(p.revenue / p.qty) : 0;
+                                    const name = p.product_name.length > 44 ? p.product_name.slice(0, 44) + '…' : p.product_name;
+                                    return (
+                                        <tr key={p.product_name}>
+                                            <td className="sd-pb-rank">{i + 1}</td>
+                                            <td title={p.product_name}>{name}</td>
+                                            <td className="sd-num">
+                                                {p.qty}
+                                                <span className="sd-pb-share">{share}%</span>
+                                            </td>
+                                            <td className="sd-num sd-pb-unit">{unit > 0 ? fmtT(unit) : '—'}</td>
+                                            <td className="sd-num sd-pb-rev">{fmtT(p.revenue)}</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

@@ -520,6 +520,9 @@ export default function SalesDashboard() {
                                     <span className="sd-emoji">📋</span> Сар бүрийн бүтээгдэхүүний задаргаа
                                 </div>
                                 <div className="sd-card">
+                                    <div className="sd-desc" style={{ marginBottom: 12 }}>
+                                        Сонгосон сард зарагдсан бүтээгдэхүүний жагсаалт — тоо, орлого, хувийн жин. Доорх таб-аас сараа сонгоно.
+                                    </div>
                                     <ProductBreakdown months={months} reports={allReports} channelFilter={channelFilter} />
                                 </div>
                             </>
@@ -539,7 +542,9 @@ export default function SalesDashboard() {
                         </div>
                         <div className="sd-card">
                             <h3>Сар бүрийн календар</h3>
-                            <div className="sd-desc">Өдөр бүрийн борлуулалтын халуун хүйтэн зураг</div>
+                            <div className="sd-desc">
+                                Өдөр бүрийн борлуулалтын дүн ({channelFilter === 'all' ? 'бүх суваг' : channelFilter}) — бүх сар зэрэгцүүлсэн · гүн өнгө = өндөр борлуулалт
+                            </div>
                             <MonthCalendars daily={filteredReport.daily} channelFilter={channelFilter} />
                         </div>
                         <div className="sd-grid-2-eq" style={{ marginTop: 16 }}>
