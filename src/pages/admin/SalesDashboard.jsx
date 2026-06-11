@@ -11,13 +11,10 @@ import SyncModal from '../../components/admin/sales/SyncModal';
 import {
     TrendChart,
     DonutChart,
-    ReceiptsChart,
-    ChannelBarChart,
-    WeekdayChart,
     FamilyChart,
     BundleChannelChart,
-    Heatmap,
-    DateHeatmap,
+    MonthlyBarChart,
+    MonthlyChannelChart,
     ProductsTable,
     BundlesTable,
     ChannelDetailTable,
@@ -26,6 +23,19 @@ import {
     fmtT,
     fmtShort,
 } from '../../components/admin/sales/SalesCharts';
+import {
+    DateFilter,
+    DayHighlight,
+    TopFamilyHero,
+    SalesPlan,
+    MonthCalendars,
+    WeekdayBars,
+    ProductBreakdown,
+    ProductAnalysis,
+    buildMonthly,
+    MonthlySummaryTable,
+    DiscountBox,
+} from '../../components/admin/sales/SalesDashboardParts';
 import './SalesDashboard.css';
 
 function formatMonthShort(yearMonth) {
@@ -58,17 +68,18 @@ export default function SalesDashboard() {
     const canManage = hasPermission(PERMISSIONS.MANAGE_FINANCE);
     const canView = hasPermission(PERMISSIONS.VIEW_FINANCE);
 
-    const [months, setMonths] = useState([]);          // { yearMonth, totalSales, syncedAt, ... }
-    const [allReports, setAllReports] = useState({});  // { yearMonth: fullReport }
+    const [months, setMonths] = useState([]);
+    const [allReports, setAllReports] = useState({});
     const [loadingMonths, setLoadingMonths] = useState(true);
     const [loadingReports, setLoadingReports] = useState(false);
     const [loadError, setLoadError] = useState(null);
 
-    const [selectedPeriod, setSelectedPeriod] = useState('all');   // 'all' | yearMonth
+    const [selectedPeriod, setSelectedPeriod] = useState('all');
     const [channelFilter, setChannelFilter] = useState('all');
+    const [dateRange, setDateRange] = useState({ mode: 'off', start: null, end: null });
     const [syncModalOpen, setSyncModalOpen] = useState(false);
 
-    /* ----------- Loading ----------- */
+    /* ---------- Loading ---------- */
 
     const loadMonths = async () => {
         setLoadingMonths(true);
@@ -126,32 +137,46 @@ export default function SalesDashboard() {
         }
     };
 
-    /* ----------- Derived data ----------- */
+    /* ---------- Derived data ---------- */
 
-    // Line items pool (based on selectedPeriod)
-    const activeLineItems = useMemo(() => {
+    // Pool by period
+    const periodLineItems = useMemo(() => {
         if (selectedPeriod === 'all') {
             return months.flatMap((m) => expandCompactItems(allReports[m.yearMonth]?.line_items || []));
         }
         return expandCompactItems(allReports[selectedPeriod]?.line_items || []);
     }, [allReports, months, selectedPeriod]);
 
-    const hasAnyLineItems = activeLineItems.length > 0;
+    // Date bounds (for date filter limits)
+    const dateBounds = useMemo(() => {
+        if (!periodLineItems.length) return { min: null, max: null };
+        const dates = periodLineItems.map((it) => it.date).filter(Boolean).sort();
+        return { min: dates[0], max: dates[dates.length - 1] };
+    }, [periodLineItems]);
 
-    // Filtered aggregation based on (selectedPeriod, channelFilter)
+    // Apply date filter
+    const dateFilteredItems = useMemo(() => {
+        if (!dateRange.mode || dateRange.mode === 'off') return periodLineItems;
+        const s = dateRange.start;
+        const e = dateRange.end || dateRange.start;
+        if (!s) return periodLineItems;
+        return periodLineItems.filter((it) => it.date && it.date >= s && it.date <= e);
+    }, [periodLineItems, dateRange]);
+
+    const hasAnyLineItems = dateFilteredItems.length > 0;
+
+    // Aggregated report filtered by channel
     const filteredReport = useMemo(() => {
         if (!hasAnyLineItems) return null;
-        return aggregateByChannel(activeLineItems, channelFilter);
-    }, [activeLineItems, channelFilter, hasAnyLineItems]);
+        return aggregateByChannel(dateFilteredItems, channelFilter);
+    }, [dateFilteredItems, channelFilter, hasAnyLineItems]);
 
-    // Period chip values — total for each period filtered by current channel
+    // Period chip values
     const periodChipValues = useMemo(() => {
         const vals = { all: 0 };
         for (const m of months) {
             const items = expandCompactItems(allReports[m.yearMonth]?.line_items || []);
-            const filtered = channelFilter === 'all'
-                ? items
-                : items.filter((it) => it.channel === channelFilter);
+            const filtered = channelFilter === 'all' ? items : items.filter((it) => it.channel === channelFilter);
             const total = filtered.reduce((s, it) => s + (it.net || 0), 0);
             vals[m.yearMonth] = total;
             vals.all += total;
@@ -159,18 +184,29 @@ export default function SalesDashboard() {
         return vals;
     }, [allReports, months, channelFilter]);
 
-    // Channel chip values — total for each channel filtered by current period
+    // Channel chip values
     const channelChipValues = useMemo(() => {
         const vals = { all: 0 };
         for (const c of Object.keys(CHANNEL_COLORS)) vals[c] = 0;
-        for (const it of activeLineItems) {
+        for (const it of periodLineItems) {
             vals.all += it.net || 0;
             if (vals[it.channel] != null) vals[it.channel] += it.net || 0;
         }
         return vals;
-    }, [activeLineItems]);
+    }, [periodLineItems]);
 
-    // Date range label for sub-header
+    // Active channels (only those with sales)
+    const activeChannels = useMemo(() => {
+        return Object.keys(CHANNEL_COLORS).filter((c) => (channelChipValues[c] || 0) > 0);
+    }, [channelChipValues]);
+
+    // Monthly compare data (only when 'all' period)
+    const monthlyData = useMemo(() => {
+        if (selectedPeriod !== 'all' || months.length < 2) return null;
+        return buildMonthly(months, allReports, channelFilter);
+    }, [months, allReports, channelFilter, selectedPeriod]);
+
+    // Header sub label
     const dateRangeLabel = useMemo(() => {
         if (!filteredReport) return '';
         const k = filteredReport.kpis;
@@ -178,29 +214,26 @@ export default function SalesDashboard() {
         return `${k.date_start} → ${k.date_end}`;
     }, [filteredReport]);
 
-    const topProduct = filteredReport?.products?.[0];
-    const topChannel = filteredReport?.channels?.[0];
-    const promoFamily = filteredReport?.families?.find((f) => f.family?.includes('Урамшуулал'));
-    const weekdayBest = useMemo(() => {
-        if (!filteredReport?.weekday) return null;
-        return filteredReport.weekday.reduce((a, b) => (b.avg_sales_per_day > (a?.avg_sales_per_day || 0) ? b : a), null);
-    }, [filteredReport]);
-    const weekdayWorst = useMemo(() => {
-        if (!filteredReport?.weekday) return null;
-        return filteredReport.weekday.reduce((a, b) => (a == null || b.avg_sales_per_day < a.avg_sales_per_day ? b : a), null);
-    }, [filteredReport]);
-
-    const hasFilter = selectedPeriod !== 'all' || channelFilter !== 'all';
+    const hasFilter = selectedPeriod !== 'all' || channelFilter !== 'all' || (dateRange.mode && dateRange.mode !== 'off');
     const getPeriodLabel = (p) => p === 'all' ? 'Бүх сар' : formatMonthLabel(p);
     const getChannelLabel = (c) => c === 'all' ? 'Бүх суваг' : c;
 
     const lastSync = useMemo(() => {
-        const r = selectedPeriod !== 'all' ? allReports[selectedPeriod] : null;
-        return r?.syncedAt || null;
-    }, [allReports, selectedPeriod]);
+        if (selectedPeriod !== 'all') return allReports[selectedPeriod]?.syncedAt || null;
+        // latest across months
+        const all = months
+            .map((m) => allReports[m.yearMonth]?.syncedAt)
+            .filter(Boolean);
+        if (!all.length) return null;
+        return all.reduce((a, b) => {
+            const da = a?.toDate ? a.toDate() : new Date(a);
+            const db = b?.toDate ? b.toDate() : new Date(b);
+            return db > da ? b : a;
+        });
+    }, [allReports, months, selectedPeriod]);
     const lastSyncedBy = useMemo(() => {
-        const r = selectedPeriod !== 'all' ? allReports[selectedPeriod] : null;
-        return r?.syncedBy || null;
+        if (selectedPeriod !== 'all') return allReports[selectedPeriod]?.syncedBy || null;
+        return null;
     }, [allReports, selectedPeriod]);
 
     if (!canView) {
@@ -219,6 +252,10 @@ export default function SalesDashboard() {
     const k = filteredReport?.kpis;
     const bk = filteredReport?.bundle_kpis;
     const totalFromChannels = filteredReport?.channels?.reduce((s, c) => s + c.sales, 0) || 0;
+    const topChannel = filteredReport?.channels?.[0];
+    const topProduct = filteredReport?.products?.[0];
+    const promoFamily = filteredReport?.families?.find((f) => f.family?.includes('Урамшуулал'));
+    const planKey = `${selectedPeriod}:${channelFilter}:${dateRange.mode}:${dateRange.start || ''}:${dateRange.end || ''}`;
 
     return (
         <div className="sales-dashboard">
@@ -226,8 +263,8 @@ export default function SalesDashboard() {
                 {/* Header */}
                 <div className="sd-header">
                     <div>
-                        <div className="sd-brand-tag">WETTRUST · SWEETSECRET</div>
-                        <h1>Борлуулалтын дашбоард</h1>
+                        <div className="sd-brand-tag">✦ Sweet Secret · Wettrust · Intimate Wellness</div>
+                        <h1><em>Борлуулалт</em> — Дашбоардын тойм</h1>
                         <div className="sd-sub">
                             {getPeriodLabel(selectedPeriod)}
                             {dateRangeLabel ? ` · ${dateRangeLabel}` : ''}
@@ -235,34 +272,38 @@ export default function SalesDashboard() {
                         </div>
                     </div>
                     <div className="sd-header-actions">
-                        {lastSync && (
-                            <div>
-                                <div className="sd-updated-label">Сүүлд шинэчилсэн</div>
-                                <div className="sd-updated-value">{formatSyncedAt(lastSync)}</div>
-                                {lastSyncedBy?.email && (
-                                    <div style={{ fontSize: 11 }}>{lastSyncedBy.email}</div>
-                                )}
+                        <div className="sd-status-block">
+                            <div className="sd-status-dot"></div>
+                            <div className="sd-status-info">
+                                <div className="sd-upd-label">Шинэчилсэн</div>
+                                <div className="sd-upd-date">{formatSyncedAt(lastSync)}</div>
+                                {lastSyncedBy?.email && <div className="sd-upd-email">{lastSyncedBy.email}</div>}
                             </div>
-                        )}
-                        {canManage && (
-                            <button
-                                type="button"
-                                className="sd-btn sd-btn-primary"
-                                onClick={() => setSyncModalOpen(true)}
-                            >
-                                🔄 Синк / тохируулах
-                            </button>
-                        )}
+                            {canManage && (
+                                <button
+                                    type="button"
+                                    className="sd-btn sd-btn-primary"
+                                    onClick={() => setSyncModalOpen(true)}
+                                >
+                                    🔄 Синк
+                                </button>
+                            )}
+                        </div>
+                        <DateFilter
+                            value={dateRange}
+                            onChange={setDateRange}
+                            minDate={dateBounds.min}
+                            maxDate={dateBounds.max}
+                        />
                     </div>
                 </div>
 
-                {/* Empty / loading states */}
                 {loadingMonths && <div className="sd-empty"><p>Ачааллаж байна…</p></div>}
                 {!loadingMonths && months.length === 0 && (
                     <div className="sd-empty">
                         <h2>Өгөгдөл байхгүй байна</h2>
                         <p>Google Sheet-ээс эхний синк хийж эхлээрэй.</p>
-                        {canManage ? (
+                        {canManage && (
                             <button
                                 type="button"
                                 className="sd-btn sd-btn-primary"
@@ -271,10 +312,6 @@ export default function SalesDashboard() {
                             >
                                 🔄 Одоо синк хийх
                             </button>
-                        ) : (
-                            <p style={{ marginTop: 14 }}>
-                                Финанс / админ эрхтэй хүмүүс синк хийж чадна.
-                            </p>
                         )}
                     </div>
                 )}
@@ -283,15 +320,15 @@ export default function SalesDashboard() {
 
                 {!loadingMonths && months.length > 0 && (
                     <>
-                        {/* Period switcher — "Цаг хугацаа" */}
+                        {/* Period switcher */}
                         <div className="sd-period-switcher">
-                            <span className="sd-period-label">Цаг хугацаа:</span>
+                            <span className="sd-period-label">📆 Хугацаа</span>
                             <button
                                 type="button"
                                 className={`sd-period-btn all-btn ${selectedPeriod === 'all' ? 'active' : ''}`}
                                 onClick={() => setSelectedPeriod('all')}
                             >
-                                Бүгд
+                                <span className="sd-pb-main">Бүгд</span>
                                 <span className="sd-btn-val">{fmtShort(periodChipValues.all || 0)}</span>
                             </button>
                             {[...months].reverse().map((m) => (
@@ -301,7 +338,7 @@ export default function SalesDashboard() {
                                     className={`sd-period-btn ${selectedPeriod === m.yearMonth ? 'active' : ''}`}
                                     onClick={() => setSelectedPeriod(m.yearMonth)}
                                 >
-                                    {formatMonthShort(m.yearMonth)}
+                                    <span className="sd-pb-main">{formatMonthShort(m.yearMonth)}</span>
                                     <span className="sd-btn-val">{fmtShort(periodChipValues[m.yearMonth] || 0)}</span>
                                     {canManage && (
                                         <button
@@ -319,18 +356,19 @@ export default function SalesDashboard() {
 
                         {/* Channel filter */}
                         <div className="sd-channel-filter">
-                            <span className="sd-filter-label">Суваг:</span>
+                            <span className="sd-filter-label">Суваг</span>
                             <button
                                 type="button"
                                 className={`sd-chip ${channelFilter === 'all' ? 'active' : ''}`}
                                 onClick={() => setChannelFilter('all')}
-                                style={channelFilter === 'all' ? { background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' } : undefined}
+                                style={channelFilter === 'all' ? { background: 'linear-gradient(135deg,#6B1839,#4A0F26)' } : undefined}
                             >
                                 <span className="sd-chip-dot" style={{ background: '#fff' }} />
                                 Бүгд
                                 <span className="sd-chip-val">{fmtShort(channelChipValues.all || 0)}</span>
                             </button>
                             {Object.keys(CHANNEL_COLORS).map((c) => {
+                                if ((channelChipValues[c] || 0) === 0 && channelFilter !== c) return null;
                                 const active = channelFilter === c;
                                 const color = CHANNEL_COLORS[c];
                                 return (
@@ -349,107 +387,172 @@ export default function SalesDashboard() {
                             })}
                         </div>
 
-                        {/* Current-view banner */}
                         {hasFilter && (
                             <div className="sd-filter-banner">
                                 <div className="sd-banner-text">
                                     📍 Одоо харж байгаа: <b>{getChannelLabel(channelFilter)}</b> · <b>{getPeriodLabel(selectedPeriod)}</b>
+                                    {dateRange.mode !== 'off' && dateRange.start && (
+                                        <> · <b>{dateRange.mode === 'single' ? dateRange.start : `${dateRange.start} → ${dateRange.end}`}</b></>
+                                    )}
                                 </div>
                                 <button
                                     type="button"
                                     className="sd-clear-btn"
-                                    onClick={() => { setSelectedPeriod('all'); setChannelFilter('all'); }}
+                                    onClick={() => {
+                                        setSelectedPeriod('all');
+                                        setChannelFilter('all');
+                                        setDateRange({ mode: 'off', start: null, end: null });
+                                    }}
                                 >
                                     Бүгдийг харах
                                 </button>
                             </div>
                         )}
 
-                        {/* Loading / empty line items warning */}
                         {loadingReports && !filteredReport && (
                             <div className="sd-empty"><p>Тайлан ачааллаж байна…</p></div>
                         )}
                         {!loadingReports && !hasAnyLineItems && months.length > 0 && (
                             <div className="sd-error" style={{ marginBottom: 14 }}>
-                                ⚠️ Ямар ч line items хадгалагдаагүй байна. Глобал суваг/хугацааны филтер ажиллах бол
-                                дашбоард дээр &quot;🔄 Синк / тохируулах&quot; товч дарж бүх сараа дахин синк хийгээрэй.
+                                ⚠️ Ямар ч line items хадгалагдаагүй байна. Бүх сараа дахин синк хийх шаардлагатай.
                             </div>
                         )}
                     </>
                 )}
 
-                {/* Main dashboard */}
                 {filteredReport && (
                     <>
                         {/* KPIs */}
-                        <div className="sd-kpi-grid">
+                        <div className="sd-kpi-grid sd-fade-in">
                             <Kpi cls="k1" label="Нийт цэвэр борлуулалт" value={fmtT(k.total_sales)} sub={`${k.n_days} хоногийн дүн`} />
-                            <Kpi cls="k2" label="Үйлчлүүлсэн хүний тоо" value={fmt(k.total_receipts)} sub="чек/баримт" />
+                            <Kpi cls="k2" label="Үйлчлүүлсэн хүн" value={fmt(k.total_receipts)} sub="чек/баримт" />
                             <Kpi cls="k3" label="Борлуулсан бараа" value={`${fmt(k.total_qty)} ш`} sub="нийт тоо ширхэг" />
                             <Kpi cls="k4" label="Дундаж чек" value={fmtT(k.avg_basket)} sub={`${k.avg_items} бараа/чек`} />
-                            <Kpi cls="k5" label="Өдрийн дундаж орлого" value={fmtT(k.avg_daily_sales)} sub={`${k.avg_daily_receipts} чек/өдөр`} />
+                            <Kpi cls="k5" label="Өдрийн дундаж" value={fmtT(k.avg_daily_sales)} sub={`${k.avg_daily_receipts} чек/өдөр`} />
                         </div>
 
-                        {/* Section 1: Dynamics */}
-                        <div className="sd-section-title"><span className="sd-emoji">📊</span> Борлуулалтын динамик</div>
+                        {/* Best/worst day */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">🏆</span> Эрэлттэй өдрүүд
+                            <span className="sd-period-chip">{getPeriodLabel(selectedPeriod)}</span>
+                        </div>
+                        <DayHighlight lineItems={dateFilteredItems} />
+
+                        {/* Top family hero */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">✨</span> Тэргүүлэх ангилал
+                            <span className="sd-period-chip">{getPeriodLabel(selectedPeriod)}</span>
+                        </div>
+                        <TopFamilyHero families={filteredReport.families || []} totalSales={k.total_sales} />
+
+                        {/* Sales plan */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">🎯</span> Борлуулалтын төлөвлөгөө
+                            <span className="sd-period-chip">{getPeriodLabel(selectedPeriod)}</span>
+                        </div>
+                        <SalesPlan planKey={planKey} totalSales={k.total_sales} nDays={k.n_days} />
+
+                        {/* Dynamics */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">📊</span> Борлуулалтын динамик
+                            <span className="sd-period-chip">{getChannelLabel(channelFilter)}</span>
+                        </div>
                         <div className="sd-grid-2">
-                            <Card title="Өдрийн борлуулалтын тренд" desc="Сувгаар задарсан нийт цэвэр орлогын динамик">
-                                <div className="sd-chart-box">
+                            <div className="sd-card">
+                                <h3>Өдрийн борлуулалтын тренд</h3>
+                                <div className="sd-desc">Сувгаар задарсан нийт цэвэр орлогын динамик</div>
+                                <div className="sd-chart-box tall">
                                     <TrendChart daily={filteredReport.daily} selectedChannel={channelFilter} />
                                 </div>
-                            </Card>
-                            <Card title="Сувгийн эзлэх хувь" desc="Нийт орлогын түгэлт">
-                                <div className="sd-chart-box">
+                            </div>
+                            <div className="sd-card">
+                                <h3>Сувгийн эзлэх хувь</h3>
+                                <div className="sd-desc">Нийт орлогын түгэлт</div>
+                                <div className="sd-chart-box tall">
                                     <DonutChart channels={filteredReport.channels} />
                                 </div>
-                            </Card>
-                        </div>
-                        <div className="sd-grid-2-eq">
-                            <Card title="Үйлчлүүлэгчийн тоо (өдрөөр)" desc="Чекийн тоо — замын хөдөлгөөн">
-                                <div className="sd-chart-box">
-                                    <ReceiptsChart receipts={filteredReport.receipts} />
-                                </div>
-                            </Card>
-                            <Card title="Сувгийн гүйцэтгэлийн харьцуулалт" desc="Орлого, бараа, үйлчлүүлэгчийн нийт тоо">
-                                <div className="sd-chart-box">
-                                    <ChannelBarChart channels={filteredReport.channels} />
-                                </div>
-                            </Card>
+                            </div>
                         </div>
 
-                        {/* Section 2: Time */}
-                        <div className="sd-section-title"><span className="sd-emoji">🗓️</span> Цаг хугацааны зүй тогтол</div>
-                        <Card
-                            title={channelFilter === 'all' ? 'Суваг × Өдөр — дулааны зураг' : `${channelFilter} — өдрийн дулааны зураг`}
-                            desc="Өдөр бүр суваг тус бүрт хэдэн төгрөгийн борлуулалт болсныг харуулна"
-                        >
-                            <DateHeatmap daily={filteredReport.daily} selectedChannel={channelFilter} />
-                        </Card>
-                        <div className="sd-grid-2-eq">
-                            <Card title="Гараг бүрийн дундаж борлуулалт" desc="Аль гараг хамгийн ашигтай вэ?">
-                                <div className="sd-chart-box small">
-                                    <WeekdayChart weekday={filteredReport.weekday} />
+                        {/* Monthly compare (only when all) */}
+                        {monthlyData && monthlyData.length >= 2 && (
+                            <>
+                                <div className="sd-section-title">
+                                    <span className="sd-emoji">📅</span> Сарын харьцуулалт
+                                    <span className="sd-period-chip">{getChannelLabel(channelFilter)}</span>
                                 </div>
-                                {weekdayBest && weekdayWorst && weekdayBest.avg_sales_per_day > 0 && weekdayWorst.avg_sales_per_day > 0 && (
-                                    <div className="sd-insight">
-                                        <b>{weekdayBest.weekday_mn}</b> гараг хамгийн идэвхтэй (дундаж {fmtT(weekdayBest.avg_sales_per_day)}),{' '}
-                                        <b>{weekdayWorst.weekday_mn}</b>-оос{' '}
-                                        <span className="sd-highlight">
-                                            {(((weekdayBest.avg_sales_per_day - weekdayWorst.avg_sales_per_day) / weekdayWorst.avg_sales_per_day) * 100).toFixed(0)}% илүү
-                                        </span>{' '}
-                                        орлого авчирдаг.
+                                <div className="sd-grid-2-eq">
+                                    <div className="sd-card">
+                                        <h3>Сар бүрийн борлуулалт</h3>
+                                        <div className="sd-desc">Нийт цэвэр орлого + өдрийн дундаж</div>
+                                        <div className="sd-chart-box">
+                                            <MonthlyBarChart monthly={monthlyData} />
+                                        </div>
                                     </div>
-                                )}
-                            </Card>
-                            <Card title="Сувгийн гүйцэтгэл" desc="Хамгийн идэвхтэй гараг + суваг">
-                                <Heatmap heatmap={filteredReport.heatmap} />
-                            </Card>
+                                    <div className="sd-card">
+                                        <h3>Сар × Суваг</h3>
+                                        <div className="sd-desc">Сар бүрд сувгийн задаргаа</div>
+                                        <div className="sd-chart-box">
+                                            <MonthlyChannelChart monthly={monthlyData} />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="sd-card" style={{ marginBottom: 16 }}>
+                                    <h3>Сарын гол үзүүлэлтүүд</h3>
+                                    <div className="sd-desc">Орлого, өдрийн дундаж, өдрийн тоо</div>
+                                    <MonthlySummaryTable monthly={monthlyData} />
+                                </div>
+                            </>
+                        )}
+
+                        {/* Product breakdown by month */}
+                        {months.length > 1 && (
+                            <>
+                                <div className="sd-section-title">
+                                    <span className="sd-emoji">📋</span> Сар бүрийн бүтээгдэхүүний задаргаа
+                                </div>
+                                <div className="sd-card">
+                                    <ProductBreakdown months={months} reports={allReports} channelFilter={channelFilter} />
+                                </div>
+                            </>
+                        )}
+
+                        {/* Product search */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">🔍</span> Бүтээгдэхүүний шинжилгээ
+                        </div>
+                        <div className="sd-card">
+                            <ProductAnalysis months={months} reports={allReports} channelFilter={channelFilter} />
                         </div>
 
-                        {/* Section 3: Bundle */}
+                        {/* Time patterns */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">🗓️</span> Цаг хугацааны зүй тогтол
+                        </div>
+                        <div className="sd-card">
+                            <h3>Сар бүрийн календар</h3>
+                            <div className="sd-desc">Өдөр бүрийн борлуулалтын халуун хүйтэн зураг</div>
+                            <MonthCalendars daily={filteredReport.daily} channelFilter={channelFilter} />
+                        </div>
+                        <div className="sd-grid-2-eq" style={{ marginTop: 16 }}>
+                            <div className="sd-card">
+                                <h3>Гараг бүрийн дундаж борлуулалт</h3>
+                                <div className="sd-desc">Аль гараг хамгийн ашигтай вэ?</div>
+                                <WeekdayBars weekday={filteredReport.weekday} />
+                            </div>
+                            <div className="sd-card">
+                                <h3>Топ 15 бүтээгдэхүүн (орлогоор)</h3>
+                                <div className="sd-desc">Хамгийн их орлого оруулсан барааны жагсаалт</div>
+                                <ProductsTable products={filteredReport.products || []} />
+                            </div>
+                        </div>
+
+                        {/* Bundle */}
                         {bk && bk.total_bundles_qty > 0 && (
                             <>
-                                <div className="sd-section-title"><span className="sd-emoji">🎁</span> Багцын шинжилгээ</div>
+                                <div className="sd-section-title">
+                                    <span className="sd-emoji">🎁</span> Багцын шинжилгээ
+                                </div>
                                 <div className="sd-kpi-grid">
                                     <Kpi cls="k5" label="Багцны орлого" value={fmtT(bk.total_bundles_revenue)} sub={`${bk.bundle_share_pct}% нийт орлогын`} />
                                     <Kpi cls="k1" label="Зарагдсан багц" value={`${fmt(bk.total_bundles_qty)} ш`} sub={`${bk.unique_bundles} төрлийн багц`} />
@@ -457,64 +560,74 @@ export default function SalesDashboard() {
                                     <Kpi cls="k3" label="Багцны төрөл" value={fmt(bk.unique_bundles)} sub="идэвхтэй SKU" />
                                 </div>
                                 <div className="sd-grid-2">
-                                    <Card title="Топ зарагдсан багцууд">
+                                    <div className="sd-card">
+                                        <h3>Топ зарагдсан багцууд</h3>
+                                        <div className="sd-desc">Топ 10 багцын жагсаалт</div>
                                         <BundlesTable bundles={filteredReport.bundles || []} />
-                                    </Card>
-                                    <Card title="Багц сувгаар" desc="Топ 8 багцын сувгийн задаргаа">
+                                    </div>
+                                    <div className="sd-card">
+                                        <h3>Багц сувгаар</h3>
+                                        <div className="sd-desc">Топ 8 багцын сувгийн задаргаа</div>
                                         <div className="sd-chart-box">
                                             <BundleChannelChart
                                                 bundlesByChannel={filteredReport.bundles_by_channel || []}
                                                 bundles={filteredReport.bundles || []}
                                             />
                                         </div>
-                                    </Card>
+                                    </div>
                                 </div>
                             </>
                         )}
 
-                        {/* Section 4: Products */}
-                        <div className="sd-section-title"><span className="sd-emoji">📦</span> Бүтээгдэхүүн &amp; Ангилал</div>
-                        <div className="sd-grid-2">
-                            <Card title="Топ 15 бүтээгдэхүүн (орлогоор)" desc="Хамгийн их мөнгө оруулж буй бараанууд">
-                                <ProductsTable products={filteredReport.products || []} />
-                            </Card>
-                            <Card title="Бүтээгдэхүүний ангилал" desc="Брэнд/серийн бүлэг">
+                        {/* Product family + channel detail + discount */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">📦</span> Бүтээгдэхүүн &amp; Хөнгөлөлт
+                        </div>
+                        <div className="sd-grid-3">
+                            <div className="sd-card">
+                                <h3>Бүтээгдэхүүний ангилал</h3>
+                                <div className="sd-desc">Брэнд/серийн бүлэг</div>
                                 <div className="sd-chart-box">
                                     <FamilyChart families={filteredReport.families || []} />
                                 </div>
-                            </Card>
+                            </div>
+                            <div className="sd-card">
+                                <h3>Сувгийн дэлгэрэнгүй</h3>
+                                <div className="sd-desc">Дундаж чек, бараа/чек</div>
+                                <ChannelDetailTable channels={filteredReport.channels || []} />
+                            </div>
+                            <div className="sd-card">
+                                <h3>Хөнгөлөлтийн шинжилгээ</h3>
+                                <div className="sd-desc">Промо, хямдралын үр нөлөө</div>
+                                <DiscountBox kpis={k} />
+                            </div>
                         </div>
 
-                        {/* Section 5: Summary */}
-                        <div className="sd-grid-3">
-                            <Card title="Сувгийн дэлгэрэнгүй" desc="Дундаж чек, бараа/чек">
-                                <ChannelDetailTable channels={filteredReport.channels || []} />
-                            </Card>
-                            <Card title="Гол дүгнэлт" desc="Өгөгдлөөс гарсан стратеги санаа">
-                                {topChannel && (
-                                    <Insight>
-                                        <b>{topChannel.channel}</b> тэргүүлж байна — нийт орлогын{' '}
-                                        <span className="sd-highlight">{((topChannel.sales / (totalFromChannels || 1)) * 100).toFixed(1)}%</span>.
-                                    </Insight>
-                                )}
-                                {topProduct && (
-                                    <Insight>
-                                        Топ бараа: <b>{topProduct.product_name.slice(0, 30)}…</b> — {fmtT(topProduct.revenue)} ({topProduct.qty} ш).
-                                    </Insight>
-                                )}
-                                {promoFamily && (
-                                    <Insight>
-                                        <b>Урамшууллын багц</b> орлогын{' '}
-                                        <span className="sd-highlight">{((promoFamily.revenue / (k.total_sales || 1)) * 100).toFixed(1)}%</span> бүрдүүлж байна.
-                                    </Insight>
-                                )}
-                                <Insight>
-                                    Дундаж чек {fmtT(k.avg_basket)} — <span className="sd-highlight">cross-sell</span> сайн ({k.avg_items} бараа/чек).
-                                </Insight>
-                            </Card>
-                            <Card title="Хөнгөлөлт" desc="Промо, хямдралын үр нөлөө">
-                                <DiscountBox kpis={k} />
-                            </Card>
+                        {/* Strategy insights */}
+                        <div className="sd-section-title">
+                            <span className="sd-emoji">💡</span> Дүгнэлт &amp; Стратеги
+                        </div>
+                        <div className="sd-card">
+                            {topChannel && (
+                                <div className="sd-insight">
+                                    <b>{topChannel.channel}</b> тэргүүлж байна — нийт орлогын{' '}
+                                    <span className="sd-highlight">{((topChannel.sales / (totalFromChannels || 1)) * 100).toFixed(1)}%</span>.
+                                </div>
+                            )}
+                            {topProduct && (
+                                <div className="sd-insight">
+                                    Топ бараа: <b>{topProduct.product_name.slice(0, 40)}{topProduct.product_name.length > 40 ? '…' : ''}</b> — {fmtT(topProduct.revenue)} ({topProduct.qty} ш).
+                                </div>
+                            )}
+                            {promoFamily && (
+                                <div className="sd-insight pink">
+                                    <b>Урамшууллын багц</b> орлогын{' '}
+                                    <span className="sd-highlight">{((promoFamily.revenue / (k.total_sales || 1)) * 100).toFixed(1)}%</span> бүрдүүлж байна.
+                                </div>
+                            )}
+                            <div className="sd-insight">
+                                Дундаж чек {fmtT(k.avg_basket)} — <span className="sd-highlight">cross-sell</span> сайн ({k.avg_items} бараа/чек).
+                            </div>
                         </div>
 
                         <div className="sd-footer">
@@ -536,58 +649,12 @@ export default function SalesDashboard() {
     );
 }
 
-/* ---------- helpers ---------- */
-
 function Kpi({ cls, label, value, sub }) {
     return (
         <div className={`sd-kpi ${cls}`}>
             <div className="sd-kpi-label">{label}</div>
             <div className="sd-kpi-value">{value}</div>
             {sub && <div className="sd-kpi-sub">{sub}</div>}
-        </div>
-    );
-}
-
-function Card({ title, desc, children }) {
-    return (
-        <div className="sd-card">
-            {title && <h3>{title}</h3>}
-            {desc && <div className="sd-desc">{desc}</div>}
-            {children}
-        </div>
-    );
-}
-
-function Insight({ children }) {
-    return (
-        <div style={{ padding: '10px 0', borderBottom: '1px solid var(--sd-border)', fontSize: 13, lineHeight: 1.6, color: '#cbd5e1' }}>
-            → {children}
-        </div>
-    );
-}
-
-function DiscountBox({ kpis }) {
-    if (!kpis) return null;
-    const gross = kpis.total_sales + kpis.total_discount;
-    return (
-        <div>
-            <div style={{ padding: '12px 0' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 6 }}>
-                    <span style={{ color: '#94a3b8', fontSize: 13 }}>Нийт хөнгөлөлт</span>
-                    <span style={{ fontSize: 22, fontWeight: 700, color: '#fbbf24' }}>{fmtT(kpis.total_discount)}</span>
-                </div>
-                <div style={{ height: 8, background: '#1f2937', borderRadius: 4, overflow: 'hidden', margin: '8px 0' }}>
-                    <div style={{ height: '100%', width: `${kpis.discount_rate}%`, background: 'linear-gradient(90deg,#f59e0b,#ef4444)' }} />
-                </div>
-                <div style={{ fontSize: 12, color: '#64748b' }}>
-                    Хямдралын хувь: <b style={{ color: '#fbbf24' }}>{kpis.discount_rate}%</b> бохир орлогоос
-                </div>
-            </div>
-            <div style={{ borderTop: '1px solid var(--sd-border)', paddingTop: 12, marginTop: 6, fontSize: 12, color: '#cbd5e1', lineHeight: 1.7 }}>
-                <div>• Бохир борлуулалт: <b>{fmtT(gross)}</b></div>
-                <div>• Хөнгөлсөн: <b>{fmtT(kpis.total_discount)}</b></div>
-                <div>• Цэвэр орлого: <b style={{ color: '#34d399' }}>{fmtT(kpis.total_sales)}</b></div>
-            </div>
         </div>
     );
 }
