@@ -406,40 +406,244 @@
     max-width: 560px;
 }
 
-/* ====== TEAM PLACEHOLDER ====== */
-.cabt-team-placeholder {
-    background: var(--cabt-surface);
-    border: 1.5px dashed var(--cabt-line);
-    border-radius: 22px;
-    padding: 40px 30px;
-    text-align: center;
+/* ====== TEAM ORG CHART ====== */
+.cabt-org {
+    position: relative;
 }
-.cabt-team-ph-icon { font-size: 40px; margin-bottom: 10px; }
-.cabt-team-ph-title {
+
+/* Director */
+.cabt-director-row {
+    display: flex;
+    justify-content: center;
+    padding-bottom: 18px;
+}
+.cabt-director-card {
+    text-align: center;
+    position: relative;
+    padding: 28px 16px 14px;
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 22px;
+    min-width: 200px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.cabt-director-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 38px rgba(0, 0, 0, 0.08);
+}
+.cabt-director-crown {
+    position: absolute;
+    top: -14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #f4b24a, #e8932f);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 6px 18px;
+    border-radius: 999px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    z-index: 3;
+    box-shadow: 0 8px 18px rgba(226, 147, 47, 0.35);
+}
+.cabt-mc-avatar.director-avatar {
+    width: 92px;
+    height: 92px;
+    margin: 6px auto 8px;
+}
+.cabt-mc-initials.director-initials {
+    font-size: 38px;
+    background: linear-gradient(140deg, #d6ab73, var(--cabt-gold-deep));
+}
+.cabt-director-name {
     font-family: 'Fraunces', serif;
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 600;
     color: var(--cabt-ink);
-    margin-bottom: 8px;
+    margin-top: 4px;
 }
-.cabt-team-ph-desc {
+.cabt-director-role {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--cabt-gold-deep);
+    margin-top: 2px;
+}
+
+/* Connector */
+.cabt-connector {
+    width: 2px;
+    height: 24px;
+    background: var(--cabt-line);
+    margin: 0 auto;
+}
+
+/* Team badge */
+.cabt-team-badge {
+    padding: 12px 20px;
+    border-radius: 16px;
+    color: #fff;
+    font-family: 'Fraunces', serif;
+    font-weight: 500;
+    font-size: 15px;
+    letter-spacing: -0.2px;
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    margin-bottom: 22px;
+}
+.cabt-team-badge::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    right: -20px;
+    width: 100px;
+    height: 100px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 70%);
+    pointer-events: none;
+}
+.cabt-team-badge.mgmt { background: var(--cabt-grad-cta); }
+.cabt-team-badge.b1 { background: linear-gradient(135deg, #d97aa0, #c44d87); }
+.cabt-team-badge.b2 { background: linear-gradient(135deg, #a9b58e, var(--cabt-sage-deep)); }
+.cabt-team-badge.b3 { background: linear-gradient(135deg, #c79a63, var(--cabt-gold-deep)); }
+.cabt-team-badge em { font-style: italic; font-weight: 600; }
+.cabt-team-badge.compact {
+    font-size: 13.5px;
+    padding: 10px 14px;
+    border-radius: 13px;
+    margin-bottom: 14px;
+}
+.cabt-badge-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.25);
+    display: grid;
+    place-items: center;
     font-size: 13px;
-    color: var(--cabt-ink-2);
-    line-height: 1.55;
-    max-width: 440px;
-    margin: 0 auto 14px;
+    flex-shrink: 0;
 }
-.cabt-team-ph-pill {
-    display: inline-block;
-    padding: 5px 14px;
-    border-radius: 999px;
-    font-size: 10.5px;
-    font-weight: 800;
-    letter-spacing: 0.6px;
+.cabt-badge-count {
+    margin-left: auto;
+    padding-left: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.9;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
-    background: var(--cabt-wine-soft);
-    color: var(--cabt-wine);
-    border: 1px solid #f3d6e0;
+    white-space: nowrap;
+    font-family: 'Manrope', sans-serif;
+}
+
+/* Mgmt block */
+.cabt-mgmt-wrap {
+    max-width: 720px;
+    margin: 0 auto 28px;
+}
+.cabt-members.mgmt-members {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 14px 26px;
+}
+
+/* Branches row */
+.cabt-branches-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 22px;
+}
+.cabt-branch-col {
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 20px;
+    padding: 14px;
+}
+.cabt-members.branch-members {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    justify-items: center;
+}
+
+/* Member card */
+.cabt-mc {
+    text-align: center;
+    position: relative;
+    padding: 6px 2px;
+    transition: transform 0.2s;
+    width: 100%;
+    max-width: 128px;
+}
+.cabt-mc:hover { transform: translateY(-3px); }
+.cabt-mc-avatar {
+    width: 96px;
+    height: 96px;
+    margin: 0 auto 6px;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+.cabt-mc.size-branch .cabt-mc-avatar {
+    width: 76px;
+    height: 76px;
+}
+.cabt-mc-initials {
+    width: 84%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: linear-gradient(140deg, #9a4f6e, #6B1839);
+    display: grid;
+    place-items: center;
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    color: #fff;
+    font-size: 26px;
+    box-shadow: 0 8px 14px rgba(0, 0, 0, 0.14);
+    align-self: center;
+}
+.cabt-mc.size-branch .cabt-mc-initials { font-size: 20px; }
+.cabt-mc-status {
+    position: absolute;
+    bottom: 4px;
+    right: 14px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--cabt-sage-deep);
+    border: 2.5px solid var(--cabt-surface);
+    z-index: 2;
+}
+.cabt-mc.size-mgmt .cabt-mc-status {
+    border-color: var(--cabt-bg);
+}
+.cabt-mc-name {
+    font-family: 'Fraunces', serif;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--cabt-ink);
+    letter-spacing: -0.2px;
+    line-height: 1.2;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.cabt-mc.size-branch .cabt-mc-name { font-size: 12.5px; }
+.cabt-mc-role {
+    font-size: 10.5px;
+    color: var(--cabt-ink-3);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* ====== CONTACT ====== */
@@ -492,4 +696,5 @@
     .cabt-values { grid-template-columns: 1fr; }
     .cabt-about-grid { grid-template-columns: 1fr; }
     .cabt-contact-grid { grid-template-columns: 1fr; }
+    .cabt-branches-row { grid-template-columns: 1fr; }
 }

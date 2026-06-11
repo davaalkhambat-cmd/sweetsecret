@@ -64,6 +64,49 @@ const CONTACT = [
     { icon: '💌', label: 'Үйлчилгээ', value: 'Дэлгүүр · Хүргэлт · Онлайн' },
 ];
 
+const DIRECTOR = {
+    name: 'Дина',
+    role: 'Гүйцэтгэх захирал',
+    initial: 'Д',
+};
+
+const MGMT_TEAM = {
+    label: 'Удирдлагын баг',
+    icon: '👑',
+    members: [
+        { name: 'Уранзаяа', role: 'Менежер', initial: 'У' },
+        { name: 'Одмаа', role: 'Маркетинг / Контент', initial: 'О' },
+    ],
+};
+
+const BRANCH_TEAMS = [
+    {
+        cls: 'b1', label: 'Хан-Уул салбар', meta: 'Шангри-Ла', icon: '🌷',
+        members: [{ name: 'Баби', role: 'Салбарын ахлагч', initial: 'Б' }],
+    },
+    {
+        cls: 'b2', label: 'Имарт салбар', meta: 'И-Март', icon: '🛒',
+        members: [{ name: 'Ариунаа', role: 'Салбарын ахлагч', initial: 'А' }],
+    },
+    {
+        cls: 'b3', label: 'Их дэлгүүр салбар', meta: 'УИД', icon: '🏬',
+        members: [{ name: 'Одко', role: 'Салбарын ахлагч', initial: 'О' }],
+    },
+];
+
+function MemberCard({ member, size = 'normal' }) {
+    return (
+        <div className={`cabt-mc size-${size}`}>
+            <div className="cabt-mc-avatar">
+                <span className="cabt-mc-initials">{member.initial}</span>
+                <span className="cabt-mc-status" />
+            </div>
+            <div className="cabt-mc-name">{member.name}</div>
+            <div className="cabt-mc-role">{member.role}</div>
+        </div>
+    );
+}
+
 export default function CompanyAbout() {
     return (
         <div className="cabt">
@@ -217,8 +260,8 @@ export default function CompanyAbout() {
                     </div>
                 </section>
 
-                {/* TEAM placeholder */}
-                <section className="cabt-section">
+                {/* TEAM org chart */}
+                <section className="cabt-section" id="team">
                     <div className="cabt-section-head">
                         <div>
                             <div className="cabt-section-kicker">Team Structure · Багийн бүтэц</div>
@@ -226,13 +269,54 @@ export default function CompanyAbout() {
                             <div className="cabt-section-sub">Удирдлага болон салбар бүрийн баг.</div>
                         </div>
                     </div>
-                    <div className="cabt-team-placeholder">
-                        <div className="cabt-team-ph-icon">👥</div>
-                        <div className="cabt-team-ph-title">Багийн org-чарт</div>
-                        <p className="cabt-team-ph-desc">
-                            Удирдлагын баг ба салбар бүрийн ажилтнуудын мэдээллийг энд харуулна.
-                        </p>
-                        <span className="cabt-team-ph-pill">Тун удахгүй</span>
+
+                    <div className="cabt-org">
+                        {/* Director */}
+                        <div className="cabt-director-row">
+                            <div className="cabt-director-card">
+                                <div className="cabt-director-crown">CEO</div>
+                                <div className="cabt-mc-avatar director-avatar">
+                                    <span className="cabt-mc-initials director-initials">{DIRECTOR.initial}</span>
+                                </div>
+                                <div className="cabt-director-name">{DIRECTOR.name}</div>
+                                <div className="cabt-director-role">{DIRECTOR.role}</div>
+                            </div>
+                        </div>
+
+                        {/* Connector — director → mgmt */}
+                        <div className="cabt-connector" aria-hidden="true" />
+
+                        {/* Management team */}
+                        <div className="cabt-mgmt-wrap">
+                            <div className="cabt-team-badge mgmt">
+                                <div className="cabt-badge-icon">{MGMT_TEAM.icon}</div>
+                                <span><em>Удирдлагын</em> баг</span>
+                                <span className="cabt-badge-count">{MGMT_TEAM.members.length} хүн</span>
+                            </div>
+                            <div className="cabt-members mgmt-members">
+                                {MGMT_TEAM.members.map((m) => (
+                                    <MemberCard key={m.name} member={m} size="mgmt" />
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Branches row */}
+                        <div className="cabt-branches-row">
+                            {BRANCH_TEAMS.map((branch) => (
+                                <div key={branch.cls} className="cabt-branch-col">
+                                    <div className={`cabt-team-badge compact ${branch.cls}`}>
+                                        <div className="cabt-badge-icon">{branch.icon}</div>
+                                        <span><em>{branch.label.split(' ')[0]}</em> {branch.label.split(' ').slice(1).join(' ')}</span>
+                                        <span className="cabt-badge-count">{branch.members.length} хүн</span>
+                                    </div>
+                                    <div className="cabt-members branch-members">
+                                        {branch.members.map((m) => (
+                                            <MemberCard key={m.name} member={m} size="branch" />
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 </section>
 
