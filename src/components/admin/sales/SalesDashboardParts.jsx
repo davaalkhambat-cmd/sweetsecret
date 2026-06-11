@@ -621,68 +621,108 @@ export function SalesPlan({ selectedPeriod, dateActive, kpis, months, reports, c
 }
 
 /* ============================================================
-   MONTH CALENDAR
+   MONTH CALENDAR — Period filter-аас үл хамаарна, бүх сарыг үргэлж
+   зэрэгцүүлэн харуулна. Зөвхөн channel filter-ыг дагана.
    ============================================================ */
-export function MonthCalendars({ daily, channelFilter }) {
-    const byMonth = useMemo(() => {
-        const map = new Map();
-        for (const d of daily) {
-            const ym = d.date.slice(0, 7);
-            if (!map.has(ym)) map.set(ym, []);
-            let total = 0;
-            if (channelFilter === 'all') {
-                for (const k of Object.keys(d)) {
-                    if (k !== 'date') total += d[k] || 0;
-                }
-            } else {
-                total = d[channelFilter] || 0;
+export function MonthCalendars({ months, reports, channelFilter }) {
+    const monthsToShow = useMemo(() => {
+        const out = [];
+        for (const m of months) {
+            const r = reports[m.yearMonth];
+            const items = r?.line_items || [];
+            const filtered = channelFilter === 'all' ? items : items.filter((it) => it.c === channelFilter);
+            const dayMap = new Map();
+            const receiptKeys = new Map(); // date -> Set
+            for (const it of filtered) {
+                if (!it.d) continue;
+                dayMap.set(it.d, (dayMap.get(it.d) || 0) + (it.n || 0));
+                if (!receiptKeys.has(it.d)) receiptKeys.set(it.d, new Set());
+                receiptKeys.get(it.d).add(`${it.r}@${it.c}`);
             }
-            map.get(ym).push({ date: d.date, total });
+            const [y, mo] = m.yearMonth.split('-').map(Number);
+            const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+            // For current/partial month — use last day with data; for past months — full month
+            const sortedDates = [...dayMap.keys()].sort();
+            const lastDataDay = sortedDates.length
+                ? Number(sortedDates[sortedDates.length - 1].slice(8))
+                : 0;
+            const isCurrentMonth = (() => {
+                const now = new Date();
+                return y === now.getUTCFullYear() && mo === now.getUTCMonth() + 1;
+            })();
+            const daysToRender = isCurrentMonth && lastDataDay > 0 ? lastDataDay : daysInMonth;
+
+            const monthTotal = [...dayMap.values()].reduce((s, v) => s + v, 0);
+            const recCounts = new Map();
+            for (const [d, set] of receiptKeys) recCounts.set(d, set.size);
+
+            out.push({
+                yearMonth: m.yearMonth,
+                year: y,
+                month: mo,
+                daysToRender,
+                dayMap,
+                recCounts,
+                monthTotal,
+            });
         }
-        return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-    }, [daily, channelFilter]);
+        return out;
+    }, [months, reports, channelFilter]);
 
-    if (!byMonth.length) return <div className="sd-empty">Өгөгдөл алга</div>;
+    if (!monthsToShow.length) return <div className="sd-empty">Өгөгдөл алга</div>;
 
-    const allValues = byMonth.flatMap(([, items]) => items.map((i) => i.total)).filter((v) => v > 0);
-    const max = allValues.length ? Math.max(...allValues) : 1;
+    // Global max across all months — colors comparable
+    let globalMax = 0;
+    for (const m of monthsToShow) {
+        for (const v of m.dayMap.values()) {
+            if (v > globalMax) globalMax = v;
+        }
+    }
+    const tier = (val) => {
+        if (!val || val <= 0) return 'no-sale';
+        const pct = globalMax > 0 ? val / globalMax : 0;
+        if (pct < 0.15) return 't1';
+        if (pct < 0.30) return 't2';
+        if (pct < 0.50) return 't3';
+        if (pct < 0.70) return 't4';
+        if (pct < 0.88) return 't5';
+        return 't6';
+    };
+
+    const wkLabels = ['Д', 'М', 'Л', 'П', 'Б', 'Бя', 'Н'];
 
     return (
         <div className="sd-month-cal-grid">
-            {byMonth.map(([ym, items]) => {
-                const monthTotal = items.reduce((s, i) => s + i.total, 0);
-                const [y, m] = ym.split('-').map(Number);
-                const firstDay = new Date(Date.UTC(y, m - 1, 1));
-                const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-                const firstWeekday = (firstDay.getUTCDay() + 6) % 7;
-                const byDate = new Map(items.map((i) => [i.date, i.total]));
+            {monthsToShow.map((m) => {
+                const firstDay = new Date(Date.UTC(m.year, m.month - 1, 1));
+                const firstWk = (firstDay.getUTCDay() + 6) % 7; // Mon=0..Sun=6
 
                 return (
-                    <div key={ym} className="sd-month-cal">
+                    <div key={m.yearMonth} className="sd-month-cal">
                         <div className="sd-mc-head">
-                            <div className="sd-mc-name">{formatMonthShort(ym)}</div>
-                            <div className="sd-mc-total">{fmtShort(monthTotal)}</div>
+                            <div className="sd-mc-name">{m.month}-р сар</div>
+                            <div className="sd-mc-total">{fmtShort(m.monthTotal)}</div>
                         </div>
                         <div className="sd-mc-weekdays">
-                            {['Дав', 'Мяг', 'Лха', 'Пүр', 'Баа', 'Бям', 'Ням'].map((d) => <div key={d}>{d}</div>)}
+                            {wkLabels.map((w, i) => <div key={i}>{w}</div>)}
                         </div>
                         <div className="sd-mc-days">
-                            {Array.from({ length: firstWeekday }).map((_, i) => (
+                            {Array.from({ length: firstWk }).map((_, i) => (
                                 <div key={`e-${i}`} className="sd-mc-day empty" />
                             ))}
-                            {Array.from({ length: daysInMonth }).map((_, i) => {
+                            {Array.from({ length: m.daysToRender }).map((_, i) => {
                                 const dayNum = i + 1;
-                                const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
-                                const v = byDate.get(dateStr) || 0;
-                                const tier = v === 0 ? 'no-sale' : tierFor(v, max);
+                                const dateStr = `${m.year}-${String(m.month).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                                const v = m.dayMap.get(dateStr) || 0;
+                                const recs = m.recCounts.get(dateStr) || 0;
+                                const t = tier(v);
+                                const tooltip = v > 0
+                                    ? `${dateStr} — ${fmtT(v)}${recs ? ' · ' + recs + ' чек' : ''}`
+                                    : `${dateStr}: борлуулалт алга`;
                                 return (
-                                    <div
-                                        key={dateStr}
-                                        className={`sd-mc-day ${tier}`}
-                                        title={`${dateStr}: ${fmtT(v)}`}
-                                    >
+                                    <div key={dateStr} className={`sd-mc-day ${t}`} title={tooltip}>
                                         <span className="sd-d-num">{dayNum}</span>
-                                        {v > 0 && <span className="sd-d-val">{fmtShort(v).replace('₮', '')}</span>}
+                                        <span className="sd-d-val">{v > 0 ? fmtShort(v).replace('₮', '') : '0'}</span>
                                     </div>
                                 );
                             })}
@@ -692,16 +732,6 @@ export function MonthCalendars({ daily, channelFilter }) {
             })}
         </div>
     );
-}
-
-function tierFor(v, max) {
-    const r = v / max;
-    if (r >= 0.85) return 't6';
-    if (r >= 0.65) return 't5';
-    if (r >= 0.45) return 't4';
-    if (r >= 0.3) return 't3';
-    if (r >= 0.15) return 't2';
-    return 't1';
 }
 
 /* ============================================================

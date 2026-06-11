@@ -562,7 +562,7 @@ export default function SalesDashboard() {
                             <div className="sd-desc">
                                 Өдөр бүрийн борлуулалтын дүн ({channelFilter === 'all' ? 'бүх суваг' : channelFilter}) — бүх сар зэрэгцүүлсэн · гүн өнгө = өндөр борлуулалт
                             </div>
-                            <MonthCalendars daily={filteredReport.daily} channelFilter={channelFilter} />
+                            <MonthCalendars months={months} reports={allReports} channelFilter={channelFilter} />
                         </div>
                         <div className="sd-grid-2-eq" style={{ marginTop: 16 }}>
                             <div className="sd-card">
