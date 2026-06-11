@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { Search, Bell, User } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { getRoleInfo } from '../../config/roles';
 
 const AdminLayout = () => {
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
     const navigate = useNavigate();
-    const { user, userProfile, role, roleInfo, logout } = useAuth();
+    const { user, userProfile, roleInfo, logout } = useAuth();
     const displayRoleInfo = roleInfo || { label: 'Ажилтан', color: '#6B7280', icon: '👤' };
+    const displayName = userProfile?.displayName || user?.email || 'Ажилтан';
+    const initial = (displayName?.[0] || 'U').toUpperCase();
 
     const handleLogout = async () => {
         setIsLoggingOut(true);
@@ -30,25 +31,23 @@ const AdminLayout = () => {
 
             <div className="admin-main">
                 <header className="admin-header">
-                    <div className="header-search">
-                        <Search size={18} />
-                        <input type="text" placeholder="Хайлт..." />
-                    </div>
+                    <div className="header-spacer" />
                     <div className="header-actions">
-                        <button className="header-btn"><Bell size={20} /></button>
-                        <div className="user-profile">
-                            <div className="user-info-stack">
-                                <span className="username">
-                                    {userProfile?.displayName || user?.email || 'Ажилтан'}
+                        <button className="header-btn" type="button" aria-label="Мэдэгдэл">
+                            <Bell size={18} />
+                        </button>
+                        <div
+                            className="user-pill"
+                            style={{ borderLeftColor: displayRoleInfo.color }}
+                        >
+                            <span className="user-pill-avatar" aria-hidden="true">{initial}</span>
+                            <span className="user-pill-info">
+                                <span className="user-pill-name">{displayName}</span>
+                                <span className="user-pill-role">
+                                    <span className="user-pill-role-icon">{displayRoleInfo.icon}</span>
+                                    {displayRoleInfo.label}
                                 </span>
-                                <span
-                                    className="header-role-tag"
-                                    style={{ background: displayRoleInfo.color + '18', color: displayRoleInfo.color }}
-                                >
-                                    {displayRoleInfo.icon} {displayRoleInfo.label}
-                                </span>
-                            </div>
-                            <div className="avatar"><User size={20} /></div>
+                            </span>
                         </div>
                     </div>
                 </header>
