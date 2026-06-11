@@ -891,30 +891,75 @@ export function ProductBreakdown({ months, reports, channelFilter }) {
 }
 
 /* ============================================================
-   PRODUCT ANALYSIS
+   PRODUCT ANALYSIS (with suggest dropdown + quick chips)
    ============================================================ */
+const PA_QUICK_CHIPS = ['Rainbow', 'Tea Tree', 'Intime', 'Innergarm', 'Inner', "Let's inclear", 'багц', 'Цайруулах'];
+
 export function ProductAnalysis({ months, reports, channelFilter }) {
     const [query, setQuery] = useState('');
     const [monthFilter, setMonthFilter] = useState('all');
+    const [showSuggest, setShowSuggest] = useState(false);
+    const wrapRef = useRef(null);
 
+    // Build name → total_qty index across all months (channel-filtered)
     const productIndex = useMemo(() => {
-        const set = new Set();
+        const map = new Map();
         for (const m of months) {
             const r = reports[m.yearMonth];
             if (!r) continue;
             for (const it of (r.line_items || [])) {
                 if (channelFilter !== 'all' && it.c !== channelFilter) continue;
-                if (it.pn) set.add(it.pn);
+                if (!it.pn) continue;
+                map.set(it.pn, (map.get(it.pn) || 0) + (it.q || 0));
             }
         }
-        return [...set];
+        return map;
     }, [months, reports, channelFilter]);
+
+    const productNames = useMemo(() => [...productIndex.keys()], [productIndex]);
 
     const matches = useMemo(() => {
         const q = query.trim().toLowerCase();
         if (!q) return [];
-        return productIndex.filter((p) => p.toLowerCase().includes(q));
-    }, [query, productIndex]);
+        return productNames.filter((p) => p.toLowerCase().includes(q));
+    }, [query, productNames]);
+
+    const suggestions = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        if (!q) return [];
+        return productNames
+            .filter((n) => n.toLowerCase().includes(q))
+            .sort((a, b) => (productIndex.get(b) || 0) - (productIndex.get(a) || 0))
+            .slice(0, 8);
+    }, [query, productNames, productIndex]);
+
+    // Close suggest on outside click
+    useEffect(() => {
+        if (!showSuggest) return;
+        const onDoc = (e) => {
+            if (wrapRef.current && !wrapRef.current.contains(e.target)) setShowSuggest(false);
+        };
+        document.addEventListener('mousedown', onDoc);
+        return () => document.removeEventListener('mousedown', onDoc);
+    }, [showSuggest]);
+
+    const handleQueryChange = (val) => {
+        setQuery(val);
+        setShowSuggest(!!val.trim());
+    };
+    const pickSuggestion = (name) => {
+        setQuery(name);
+        setShowSuggest(false);
+    };
+    const toggleChip = (c) => {
+        if (query.trim().toLowerCase() === c.toLowerCase()) {
+            setQuery('');
+            setShowSuggest(false);
+        } else {
+            setQuery(c);
+            setShowSuggest(false);
+        }
+    };
 
     const monthRows = useMemo(() => {
         if (!matches.length) return [];
@@ -961,17 +1006,29 @@ export function ProductAnalysis({ months, reports, channelFilter }) {
     return (
         <>
             <div className="sd-psearch-row">
-                <div className="sd-psearch-wrap">
+                <div className="sd-psearch-wrap" ref={wrapRef}>
                     <span className="sd-psearch-icon">🔍</span>
                     <input
                         type="text"
                         className="sd-psearch-input"
                         placeholder="Бүтээгдэхүүн хайх… (жш: Tea Tree, Rainbow, Intime, багц)"
                         value={query}
-                        onChange={(e) => setQuery(e.target.value)}
+                        onChange={(e) => handleQueryChange(e.target.value)}
+                        onFocus={() => { if (query.trim()) setShowSuggest(true); }}
+                        onKeyDown={(e) => { if (e.key === 'Escape' || e.key === 'Enter') setShowSuggest(false); }}
                     />
                     {query && (
-                        <button type="button" className="sd-psearch-clear" onClick={() => setQuery('')}>✕</button>
+                        <button type="button" className="sd-psearch-clear" onClick={() => { setQuery(''); setShowSuggest(false); }}>✕</button>
+                    )}
+                    {showSuggest && suggestions.length > 0 && (
+                        <div className="sd-psearch-suggest">
+                            {suggestions.map((name) => (
+                                <div key={name} className="sd-paS-item" onClick={() => pickSuggestion(name)}>
+                                    <span className="sd-paS-name">{name}</span>
+                                    <span className="sd-paS-meta">{fmt(productIndex.get(name) || 0)} ш</span>
+                                </div>
+                            ))}
+                        </div>
                     )}
                 </div>
                 <select className="sd-psearch-month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
@@ -980,6 +1037,23 @@ export function ProductAnalysis({ months, reports, channelFilter }) {
                         <option key={m.yearMonth} value={m.yearMonth}>{formatMonthShort(m.yearMonth)}</option>
                     ))}
                 </select>
+            </div>
+
+            <div className="sd-pa-chips">
+                <span className="sd-pb-sort-label" style={{ alignSelf: 'center' }}>Түргэн хайлт:</span>
+                {PA_QUICK_CHIPS.map((c) => {
+                    const active = query.trim().toLowerCase() === c.toLowerCase();
+                    return (
+                        <button
+                            key={c}
+                            type="button"
+                            className={`sd-pa-chip ${active ? 'active' : ''}`}
+                            onClick={() => toggleChip(c)}
+                        >
+                            {c}
+                        </button>
+                    );
+                })}
             </div>
 
             {!query && (
