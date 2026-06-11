@@ -13386,7 +13386,7 @@ tbody tr:last-child td {
     radial-gradient(900px 480px at 6% 4%, #F3F2E9 0%, transparent 50%),
     #F1EFE8;
   min-height: 100%;
-  padding: 34px clamp(20px, 5vw, 64px) 70px;
+  padding: 24px clamp(18px, 4vw, 48px) 56px;
   -webkit-font-smoothing: antialiased;
 }
 .ss-ov-wrap {
@@ -13403,14 +13403,14 @@ tbody tr:last-child td {
 .ss-ov-back {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: none;
   border: none;
   text-decoration: none;
   color: #9B8B86;
   font-weight: 600;
-  font-size: 15px;
-  padding: 8px 4px;
+  font-size: 13px;
+  padding: 6px 2px;
   cursor: pointer;
   transition: color 0.2s ease, gap 0.2s ease;
   font-family: inherit;
@@ -13422,9 +13422,9 @@ tbody tr:last-child td {
   gap: 13px;
 }
 .ss-ov-mk {
-  width: 42px;
-  height: 42px;
-  border-radius: 13px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   background: linear-gradient(135deg, #6B1839, #A14060 70%, #D88FA8);
   display: flex;
   align-items: center;
@@ -13433,33 +13433,33 @@ tbody tr:last-child td {
   font-family: 'Fraunces', serif;
   font-style: italic;
   font-weight: 600;
-  font-size: 21px;
+  font-size: 18px;
   box-shadow: 0 10px 22px -10px rgba(107, 24, 57, 0.6);
 }
 .ss-ov-wm {
   font-family: 'Fraunces', serif;
   font-weight: 600;
-  font-size: 21px;
+  font-size: 17px;
   color: #2C2C2A;
 }
 
 /* Hero */
 .ss-ov-hero {
   text-align: center;
-  margin: 56px 0 50px;
+  margin: 32px 0 36px;
 }
 .ss-ov-eyebrow {
   display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
   font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 3px;
+  font-size: 11px;
+  letter-spacing: 2.6px;
   color: #6B1839;
   text-transform: uppercase;
 }
 .ss-ov-ln {
-  width: 30px;
+  width: 26px;
   height: 1px;
   background: #A14060;
   opacity: 0.55;
@@ -13468,10 +13468,10 @@ tbody tr:last-child td {
 .ss-ov-h1 {
   font-family: 'Fraunces', serif;
   font-weight: 600;
-  font-size: clamp(42px, 6.4vw, 76px);
-  line-height: 1.02;
-  letter-spacing: -1px;
-  margin: 22px 0 20px;
+  font-size: clamp(30px, 4.2vw, 48px);
+  line-height: 1.04;
+  letter-spacing: -0.6px;
+  margin: 16px 0 14px;
   color: #2C2C2A;
 }
 .ss-ov-grad {
@@ -13485,9 +13485,9 @@ tbody tr:last-child td {
   padding-right: 0.08em;
 }
 .ss-ov-desc {
-  max-width: 560px;
+  max-width: 520px;
   margin: 0 auto;
-  font-size: 17px;
+  font-size: 14px;
   line-height: 1.6;
   color: #9B8B86;
 }
@@ -13496,43 +13496,45 @@ tbody tr:last-child td {
 .ss-ov-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 26px;
+  gap: 20px;
   align-items: stretch;
 }
-.ss-ov-grid.count-2 { grid-template-columns: 1fr 1fr; gap: 30px; }
-.ss-ov-grid.count-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; }
+.ss-ov-grid.count-2 { grid-template-columns: 1fr 1fr; gap: 22px; }
+.ss-ov-grid.count-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
 
-/* 4 card нь нэг мөрд багтахдаа агуулга нарийсна — padding/font бууруулна */
-.ss-ov-grid.count-4 .ss-ov-head { padding: 24px 22px 26px; }
-.ss-ov-grid.count-4 .ss-ov-body { padding: 22px 22px 22px; }
-.ss-ov-grid.count-4 .ss-ov-ttl { font-size: clamp(22px, 1.8vw, 28px); }
-.ss-ov-grid.count-4 .ss-ov-num { font-size: 19px; }
-.ss-ov-grid.count-4 .ss-ov-keyb { font-size: 10px; margin-top: 18px; letter-spacing: 1.8px; }
-.ss-ov-grid.count-4 .ss-ov-body > p { font-size: 14px; line-height: 1.55; }
-.ss-ov-grid.count-4 .ss-ov-body li { font-size: 13px; gap: 10px; }
-.ss-ov-grid.count-4 .ss-ov-body ul { gap: 9px; margin-top: 16px; }
-.ss-ov-grid.count-4 .ss-ov-foot span { font-size: 14px; }
+/* 4 card нь нэг мөрд багтахдаа агуулга нарийсна — padding/font арай бага */
+.ss-ov-grid.count-4 .ss-ov-head { padding: 18px 18px 20px; }
+.ss-ov-grid.count-4 .ss-ov-body { padding: 16px 18px 18px; }
+.ss-ov-grid.count-4 .ss-ov-ttl { font-size: clamp(18px, 1.6vw, 22px); margin-top: 8px; }
+.ss-ov-grid.count-4 .ss-ov-num { font-size: 16px; }
+.ss-ov-grid.count-4 .ss-ov-keyb { font-size: 9px; margin-top: 14px; letter-spacing: 1.6px; }
+.ss-ov-grid.count-4 .ss-ov-body > p { font-size: 12.5px; line-height: 1.55; }
+.ss-ov-grid.count-4 .ss-ov-body li { font-size: 11.5px; gap: 8px; }
+.ss-ov-grid.count-4 .ss-ov-body ul { gap: 7px; margin-top: 11px; }
+.ss-ov-grid.count-4 .ss-ov-body li::before { width: 6px; height: 6px; }
+.ss-ov-grid.count-4 .ss-ov-foot span { font-size: 12.5px; }
 .ss-ov-grid.count-4 .ss-ov-badge {
-  top: 16px;
-  right: 16px;
-  padding: 5px 10px;
-  font-size: 9.5px;
-  letter-spacing: 1.2px;
+  top: 12px;
+  right: 12px;
+  padding: 4px 8px;
+  font-size: 8.5px;
+  letter-spacing: 1px;
+  gap: 5px;
 }
 
 @media (max-width: 1280px) {
-  .ss-ov-grid.count-4 { grid-template-columns: 1fr 1fr; gap: 22px; }
-  .ss-ov-grid.count-4 .ss-ov-head { padding: 28px 30px 30px; }
-  .ss-ov-grid.count-4 .ss-ov-body { padding: 26px 30px; }
-  .ss-ov-grid.count-4 .ss-ov-ttl { font-size: clamp(26px, 2.4vw, 34px); }
-  .ss-ov-grid.count-4 .ss-ov-body > p { font-size: 15px; }
-  .ss-ov-grid.count-4 .ss-ov-body li { font-size: 14px; }
+  .ss-ov-grid.count-4 { grid-template-columns: 1fr 1fr; gap: 18px; }
+  .ss-ov-grid.count-4 .ss-ov-head { padding: 22px 26px 24px; }
+  .ss-ov-grid.count-4 .ss-ov-body { padding: 20px 26px 22px; }
+  .ss-ov-grid.count-4 .ss-ov-ttl { font-size: clamp(20px, 1.8vw, 26px); }
+  .ss-ov-grid.count-4 .ss-ov-body > p { font-size: 13.5px; }
+  .ss-ov-grid.count-4 .ss-ov-body li { font-size: 12.5px; }
 }
 @media (max-width: 980px) {
   .ss-ov-grid,
   .ss-ov-grid.count-2,
-  .ss-ov-grid.count-4 { grid-template-columns: 1fr; gap: 20px; }
-  .ss-ov-hero { margin: 40px 0 36px; }
+  .ss-ov-grid.count-4 { grid-template-columns: 1fr; gap: 16px; }
+  .ss-ov-hero { margin: 22px 0 26px; }
   .ss-ov-wm { display: none; }
 }
 
@@ -13562,7 +13564,7 @@ tbody tr:last-child td {
 }
 
 .ss-ov-head {
-  padding: 30px 32px 34px;
+  padding: 22px 26px 24px;
   position: relative;
   overflow: hidden;
   color: #fff;
@@ -13597,19 +13599,19 @@ tbody tr:last-child td {
 
 .ss-ov-badge {
   position: absolute;
-  top: 22px;
-  right: 22px;
+  top: 16px;
+  right: 16px;
   z-index: 2;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 6px 12px;
+  gap: 6px;
+  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(3px);
   font-weight: 700;
-  font-size: 10.5px;
-  letter-spacing: 1.4px;
+  font-size: 9.5px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
   color: inherit;
 }
@@ -13635,22 +13637,22 @@ tbody tr:last-child td {
   font-family: 'Fraunces', serif;
   font-style: italic;
   font-weight: 500;
-  font-size: 23px;
+  font-size: 18px;
   opacity: 0.78;
 }
 .ss-ov-keyb {
-  margin-top: 26px;
+  margin-top: 18px;
   font-weight: 700;
-  font-size: 11.5px;
-  letter-spacing: 2.2px;
+  font-size: 10px;
+  letter-spacing: 1.8px;
   text-transform: uppercase;
   opacity: 0.86;
 }
 .ss-ov-ttl {
-  margin-top: 14px;
+  margin-top: 10px;
   font-family: 'Fraunces', serif;
-  font-size: clamp(28px, 2.5vw, 36px);
-  line-height: 1.06;
+  font-size: clamp(20px, 1.8vw, 26px);
+  line-height: 1.08;
   font-weight: 600;
 }
 .ss-ov-ttl .ss-ov-it {
@@ -13665,14 +13667,14 @@ tbody tr:last-child td {
 }
 
 .ss-ov-body {
-  padding: 28px 32px;
+  padding: 20px 26px 22px;
   display: flex;
   flex-direction: column;
   flex: 1;
 }
 .ss-ov-body > p {
-  font-size: 15.5px;
-  line-height: 1.62;
+  font-size: 13.5px;
+  line-height: 1.6;
   color: #2C2C2A;
 }
 .ss-ov-card.soon-a .ss-ov-body > p,
@@ -13680,17 +13682,17 @@ tbody tr:last-child td {
 
 .ss-ov-body ul {
   list-style: none;
-  margin: 20px 0 4px;
+  margin: 14px 0 4px;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 9px;
 }
 .ss-ov-body li {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14.5px;
+  gap: 10px;
+  font-size: 12.5px;
   color: #5A4C49;
   font-weight: 500;
 }
@@ -13707,7 +13709,7 @@ tbody tr:last-child td {
 
 .ss-ov-foot {
   margin-top: auto;
-  padding-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid #EFE2DD;
   display: flex;
   align-items: center;
@@ -13715,7 +13717,7 @@ tbody tr:last-child td {
 }
 .ss-ov-foot span {
   font-weight: 700;
-  font-size: 15.5px;
+  font-size: 13.5px;
   color: #2C2C2A;
 }
 .ss-ov-card.soon-a .ss-ov-foot span,
