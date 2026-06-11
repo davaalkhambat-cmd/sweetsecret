@@ -11,6 +11,9 @@ import {
     BadgePercent,
     Settings,
     ShieldCheck,
+    Building2,
+    FileText,
+    Megaphone,
     LogOut,
     ChevronLeft,
     ChevronRight,
@@ -30,6 +33,9 @@ const ICON_MAP = {
     BadgePercent: <BadgePercent size={20} />,
     Settings: <Settings size={20} />,
     ShieldCheck: <ShieldCheck size={20} />,
+    Building: <Building2 size={20} />,
+    FileText: <FileText size={20} />,
+    Megaphone: <Megaphone size={20} />,
 };
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false }) => {
@@ -95,19 +101,32 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false })
 
             <nav className="sidebar-nav">
                 {isCollapsed
-                    ? menuItems.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            end={item.path === '/admin'}
-                            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                            title={item.title}
-                        >
-                            <span className="nav-icon">
-                                {ICON_MAP[item.iconName] || <LayoutDashboard size={20} />}
-                            </span>
-                        </NavLink>
-                    ))
+                    ? menuItems.map((item) => {
+                        const icon = ICON_MAP[item.iconName] || <LayoutDashboard size={20} />;
+                        if (item.comingSoon) {
+                            return (
+                                <span
+                                    key={item.path}
+                                    className="nav-item coming-soon"
+                                    title={`${item.title} — Тун удахгүй`}
+                                    aria-disabled="true"
+                                >
+                                    <span className="nav-icon">{icon}</span>
+                                </span>
+                            );
+                        }
+                        return (
+                            <NavLink
+                                key={item.path}
+                                to={item.path}
+                                end={item.path === '/admin'}
+                                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                                title={item.title}
+                            >
+                                <span className="nav-icon">{icon}</span>
+                            </NavLink>
+                        );
+                    })
                     : groupedMenuItems.map((section) => {
                         const isOpen = sectionState[section.key] ?? true;
 
@@ -129,20 +148,36 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false })
                                 </button>
 
                                 <div className={`sidebar-section-items ${isOpen ? 'open' : 'closed'}`}>
-                                    {section.items.map((item) => (
-                                        <NavLink
-                                            key={item.path}
-                                            to={item.path}
-                                            end={item.path === '/admin'}
-                                            className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                                            data-section={section.key}
-                                        >
-                                            <span className="nav-icon">
-                                                {ICON_MAP[item.iconName] || <LayoutDashboard size={20} />}
-                                            </span>
-                                            <span className="nav-title">{item.title}</span>
-                                        </NavLink>
-                                    ))}
+                                    {section.items.map((item) => {
+                                        const icon = ICON_MAP[item.iconName] || <LayoutDashboard size={20} />;
+                                        if (item.comingSoon) {
+                                            return (
+                                                <span
+                                                    key={item.path}
+                                                    className="nav-item coming-soon"
+                                                    data-section={section.key}
+                                                    title="Тун удахгүй — хөгжүүлэлтэд"
+                                                    aria-disabled="true"
+                                                >
+                                                    <span className="nav-icon">{icon}</span>
+                                                    <span className="nav-title">{item.title}</span>
+                                                    <span className="nav-pill">Тун удахгүй</span>
+                                                </span>
+                                            );
+                                        }
+                                        return (
+                                            <NavLink
+                                                key={item.path}
+                                                to={item.path}
+                                                end={item.path === '/admin'}
+                                                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+                                                data-section={section.key}
+                                            >
+                                                <span className="nav-icon">{icon}</span>
+                                                <span className="nav-title">{item.title}</span>
+                                            </NavLink>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         );

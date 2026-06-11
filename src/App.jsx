@@ -9,15 +9,9 @@ import Cart from './components/Cart';
 import AdminLayout from './components/admin/AdminLayout';
 import AdminHomeRedirect from './components/admin/AdminHomeRedirect';
 import RequireAdmin from './components/admin/RequireAdmin';
-import DeliveryDashboard from './pages/admin/Dashboard';
-import CommerceDashboard from './pages/admin/CommerceDashboard';
-import Inventory from './pages/admin/Inventory';
-import SalesRevenue from './pages/admin/SalesRevenue';
 import Products from './pages/admin/Products';
 import Orders from './pages/admin/Orders';
-import Users from './pages/admin/Users';
 import Promotions from './pages/admin/Promotions';
-import SocialBusinessSuite from './pages/admin/SocialBusinessSuite';
 import AdminLogin from './pages/admin/AdminLogin';
 import StaffRoles from './pages/admin/StaffRoles';
 import Profile from './pages/Profile';
@@ -135,24 +129,9 @@ function App() {
                 }
             >
                 <Route index element={<AdminHomeRedirect />} />
-                <Route path="delivery-dashboard" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_OPERATIONS}>
-                        <DeliveryDashboard />
-                    </RequireAdmin>
-                } />
                 <Route path="products" element={
                     <RequireAdmin requiredPermission={PERMISSIONS.VIEW_PRODUCTS}>
                         <Products />
-                    </RequireAdmin>
-                } />
-                <Route path="inventory" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_INVENTORY}>
-                        <Inventory />
-                    </RequireAdmin>
-                } />
-                <Route path="sales-revenue" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_FINANCE}>
-                        <SalesRevenue />
                     </RequireAdmin>
                 } />
                 <Route path="orders" element={
@@ -160,29 +139,14 @@ function App() {
                         <Orders />
                     </RequireAdmin>
                 } />
-                <Route path="users" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_CUSTOMERS}>
-                        <Users />
-                    </RequireAdmin>
-                } />
                 <Route path="promotions" element={
                     <RequireAdmin requiredPermission={PERMISSIONS.VIEW_MARKETING}>
                         <Promotions />
                     </RequireAdmin>
                 } />
-                <Route path="social-business-suite" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_MARKETING}>
-                        <SocialBusinessSuite />
-                    </RequireAdmin>
-                } />
                 <Route path="staff-roles" element={
                     <RequireAdmin requiredPermission={PERMISSIONS.VIEW_ROLES}>
                         <StaffRoles />
-                    </RequireAdmin>
-                } />
-                <Route path="settings" element={
-                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_SETTINGS}>
-                        <div className="admin-page"><h1>Тохиргоо (Тун удахгүй)</h1></div>
                     </RequireAdmin>
                 } />
             </Route>

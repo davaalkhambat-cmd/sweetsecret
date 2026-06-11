@@ -87,7 +87,7 @@ export const DEFAULT_ROLES = {
         permissions: ALL_ADMIN_PERMISSIONS,
         landingPage: '/admin',
         level: 10,
-        primarySections: ['overview', 'operations', 'commerce', 'insights', 'growth', 'people', 'system'],
+        primarySections: ['company', 'finance', 'website', 'marketing', 'settings'],
     }),
     executive_ceo: buildRole({
         key: 'executive_ceo',
@@ -108,7 +108,7 @@ export const DEFAULT_ROLES = {
         ],
         landingPage: '/admin',
         level: 20,
-        primarySections: ['overview', 'insights', 'operations'],
+        primarySections: ['company', 'finance', 'website'],
     }),
     system_admin: buildRole({
         key: 'system_admin',
@@ -129,7 +129,7 @@ export const DEFAULT_ROLES = {
         ],
         landingPage: '/admin/staff-roles',
         level: 30,
-        primarySections: ['people', 'system'],
+        primarySections: ['settings'],
     }),
     operation_admin: buildRole({
         key: 'operation_admin',
@@ -146,9 +146,9 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.MANAGE_ORDERS,
             PERMISSIONS.VIEW_BRANCHES,
         ],
-        landingPage: '/admin/delivery-dashboard',
+        landingPage: '/admin/orders',
         level: 40,
-        primarySections: ['operations', 'commerce'],
+        primarySections: ['website'],
     }),
     branch_manager: buildRole({
         key: 'branch_manager',
@@ -170,7 +170,7 @@ export const DEFAULT_ROLES = {
         landingPage: '/admin/orders',
         level: 50,
         scope: 'branch',
-        primarySections: ['commerce', 'operations'],
+        primarySections: ['website'],
     }),
     finance: buildRole({
         key: 'finance',
@@ -185,9 +185,9 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.MANAGE_FINANCE,
             PERMISSIONS.VIEW_ORDERS,
         ],
-        landingPage: '/admin/sales-revenue',
+        landingPage: '/admin',
         level: 60,
-        primarySections: ['insights', 'commerce'],
+        primarySections: ['finance', 'website'],
     }),
     inventory_warehouse: buildRole({
         key: 'inventory_warehouse',
@@ -202,9 +202,9 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.VIEW_INVENTORY,
             PERMISSIONS.MANAGE_INVENTORY,
         ],
-        landingPage: '/admin/inventory',
+        landingPage: '/admin/products',
         level: 70,
-        primarySections: ['commerce'],
+        primarySections: ['website'],
     }),
     sales_customer_service: buildRole({
         key: 'sales_customer_service',
@@ -222,7 +222,7 @@ export const DEFAULT_ROLES = {
         ],
         landingPage: '/admin/orders',
         level: 80,
-        primarySections: ['commerce', 'people'],
+        primarySections: ['website', 'settings'],
     }),
     marketing_crm: buildRole({
         key: 'marketing_crm',
@@ -240,7 +240,7 @@ export const DEFAULT_ROLES = {
         ],
         landingPage: '/admin/promotions',
         level: 90,
-        primarySections: ['growth', 'people'],
+        primarySections: ['marketing', 'website'],
     }),
     hr_people_admin: buildRole({
         key: 'hr_people_admin',
@@ -257,7 +257,7 @@ export const DEFAULT_ROLES = {
         ],
         landingPage: '/admin/staff-roles',
         level: 100,
-        primarySections: ['people'],
+        primarySections: ['settings'],
     }),
     supervisor_team_lead: buildRole({
         key: 'supervisor_team_lead',
@@ -272,10 +272,10 @@ export const DEFAULT_ROLES = {
             PERMISSIONS.VIEW_OPERATIONS,
             PERMISSIONS.VIEW_BRANCHES,
         ],
-        landingPage: '/admin/delivery-dashboard',
+        landingPage: '/admin/orders',
         level: 110,
         scope: 'team',
-        primarySections: ['operations', 'commerce'],
+        primarySections: ['website'],
     }),
     staff_operator: buildRole({
         key: 'staff_operator',
@@ -291,7 +291,7 @@ export const DEFAULT_ROLES = {
         landingPage: '/admin/orders',
         level: 120,
         scope: 'assigned',
-        primarySections: ['commerce'],
+        primarySections: ['website'],
     }),
     viewer_auditor: buildRole({
         key: 'viewer_auditor',
@@ -316,7 +316,7 @@ export const DEFAULT_ROLES = {
         ],
         landingPage: '/admin',
         level: 130,
-        primarySections: ['overview', 'insights', 'people'],
+        primarySections: ['company', 'finance', 'settings'],
     }),
     customer: buildRole({
         key: 'customer',
@@ -354,105 +354,137 @@ export const STAFF_ROLES = Object.values(DEFAULT_ROLES)
     .filter((role) => role.key !== 'customer')
     .map((role) => role.key);
 
+// Sweet Secret sitemap (2026) — 5 section, зарим item "Тун удахгүй" (comingSoon)
 export const ADMIN_MENU = [
+    // 01. Манай компани
     {
-        key: 'overview',
-        title: 'Ерөнхий самбар',
-        path: '/admin',
-        section: 'overview',
+        key: 'company-about',
+        title: 'Бидний тухай',
+        path: '/admin/company/about',
+        section: 'company',
+        requiredPermission: PERMISSIONS.VIEW_OVERVIEW,
+        iconName: 'Building',
+        comingSoon: true,
+    },
+    {
+        key: 'company-monthly',
+        title: 'Энэ сарын dashboard',
+        path: '/admin/company/monthly',
+        section: 'company',
         requiredPermission: PERMISSIONS.VIEW_OVERVIEW,
         iconName: 'LayoutDashboard',
+        comingSoon: true,
     },
+
+    // 02. Санхүү
     {
-        key: 'operations',
-        title: 'Үйл ажиллагаа',
-        path: '/admin/delivery-dashboard',
-        section: 'operations',
-        requiredPermission: PERMISSIONS.VIEW_OPERATIONS,
-        iconName: 'Truck',
-    },
-    {
-        key: 'orders',
-        title: 'Захиалга',
-        path: '/admin/orders',
-        section: 'commerce',
-        requiredPermission: PERMISSIONS.VIEW_ORDERS,
-        iconName: 'ShoppingBag',
-    },
-    {
-        key: 'products',
-        title: 'Бараа бүтээгдэхүүн',
-        path: '/admin/products',
-        section: 'commerce',
-        requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
-        iconName: 'Package',
-    },
-    {
-        key: 'inventory',
-        title: 'Нөөц / агуулах',
-        path: '/admin/inventory',
-        section: 'commerce',
-        requiredPermission: PERMISSIONS.VIEW_INVENTORY,
-        iconName: 'Boxes',
-    },
-    {
-        key: 'sales-revenue',
-        title: 'Санхүү / орлого',
-        path: '/admin/sales-revenue',
-        section: 'insights',
+        key: 'sales-dashboard',
+        title: 'Борлуулалтын дашбоард',
+        path: '/admin',
+        section: 'finance',
         requiredPermission: PERMISSIONS.VIEW_FINANCE,
         iconName: 'BarChart3',
     },
     {
-        key: 'users',
-        title: 'Хэрэглэгч / CRM',
-        path: '/admin/users',
-        section: 'people',
-        requiredPermission: PERMISSIONS.VIEW_CUSTOMERS,
-        iconName: 'Users',
+        key: 'finance-balance',
+        title: 'Үлдэгдэл',
+        path: '/admin/finance/balance',
+        section: 'finance',
+        requiredPermission: PERMISSIONS.VIEW_FINANCE,
+        iconName: 'Boxes',
+        comingSoon: true,
+    },
+    {
+        key: 'finance-reports',
+        title: 'Тайлан',
+        path: '/admin/finance/reports',
+        section: 'finance',
+        requiredPermission: PERMISSIONS.VIEW_FINANCE,
+        iconName: 'FileText',
+        comingSoon: true,
+    },
+
+    // 03. Сайтын удирдлага
+    {
+        key: 'orders',
+        title: 'Хүргэлт · захиалга',
+        path: '/admin/orders',
+        section: 'website',
+        requiredPermission: PERMISSIONS.VIEW_ORDERS,
+        iconName: 'Truck',
     },
     {
         key: 'promotions',
-        title: 'Урамшуулалын код',
+        title: 'Урамшуулал · Secret Circle',
         path: '/admin/promotions',
-        section: 'growth',
+        section: 'website',
         requiredPermission: PERMISSIONS.VIEW_MARKETING,
         iconName: 'BadgePercent',
     },
     {
-        key: 'social-business-suite',
-        title: 'Social Business Suite',
-        path: '/admin/social-business-suite',
-        section: 'growth',
-        requiredPermission: PERMISSIONS.VIEW_MARKETING,
-        iconName: 'BadgePercent',
+        key: 'customers',
+        title: 'Үйлчлүүлэгчийн менежмент',
+        path: '/admin/customers',
+        section: 'website',
+        requiredPermission: PERMISSIONS.VIEW_CUSTOMERS,
+        iconName: 'Users',
+        comingSoon: true,
     },
+    {
+        key: 'products',
+        title: 'Барааны удирдлага',
+        path: '/admin/products',
+        section: 'website',
+        requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
+        iconName: 'Package',
+    },
+
+    // 04. Маркетинг
+    {
+        key: 'marketing-social',
+        title: 'Social маркетинг',
+        path: '/admin/marketing/social',
+        section: 'marketing',
+        requiredPermission: PERMISSIONS.VIEW_MARKETING,
+        iconName: 'Megaphone',
+        comingSoon: true,
+    },
+    {
+        key: 'marketing-reports',
+        title: 'Маркетингийн тайлан',
+        path: '/admin/marketing/reports',
+        section: 'marketing',
+        requiredPermission: PERMISSIONS.VIEW_MARKETING,
+        iconName: 'BarChart3',
+        comingSoon: true,
+    },
+
+    // 05. Тохиргоо
     {
         key: 'staff-roles',
-        title: 'Хүний нөөц / эрх',
+        title: 'Хүний нөөц ба эрх',
         path: '/admin/staff-roles',
-        section: 'people',
+        section: 'settings',
         requiredPermission: PERMISSIONS.VIEW_ROLES,
         iconName: 'ShieldCheck',
     },
     {
-        key: 'settings',
-        title: 'Системийн тохиргоо',
+        key: 'settings-other',
+        title: 'Бусад тохиргоо',
         path: '/admin/settings',
-        section: 'system',
+        section: 'settings',
         requiredPermission: PERMISSIONS.VIEW_SETTINGS,
         iconName: 'Settings',
+        comingSoon: true,
     },
 ];
 
 export const ADMIN_MENU_SECTIONS = [
-    { key: 'overview', label: 'Удирдлагын төв', description: 'Нийт төлөв ба гол үзүүлэлтүүд' },
-    { key: 'operations', label: 'Ажиллагаа', description: 'Өдөр тутмын урсгал ба гүйцэтгэл' },
-    { key: 'commerce', label: 'Худалдаа', description: 'Захиалга, бараа, нөөц' },
-    { key: 'insights', label: 'Тайлан ба санхүү', description: 'Орлого, KPI, дүн шинжилгээ' },
-    { key: 'growth', label: 'Өсөлт ба маркетинг', description: 'CRM, промо, кампанит ажил' },
-    { key: 'people', label: 'Хүн ба хандалт', description: 'Хэрэглэгч, баг, эрхийн удирдлага' },
-    { key: 'system', label: 'Систем', description: 'Тохиргоо ба системийн удирдлага' },
+    { key: 'company', label: 'Манай компани', description: 'Бидний тухай, сарын dashboard' },
+    { key: 'finance', label: 'Санхүү', description: 'Борлуулалт, үлдэгдэл, тайлан' },
+    { key: 'website', label: 'Сайтын удирдлага', description: 'Захиалга, урамшуулал, бараа, харилцагч' },
+    { key: 'marketing', label: 'Маркетинг', description: 'Social контент, кампанит ажил, ROI' },
+    { key: 'settings', label: 'Тохиргоо', description: 'Хүний нөөц ба системийн тохиргоо' },
 ];
 
 export const roleHasPermission = (roleKey, permission, rolesSource = ROLES) => {
@@ -466,7 +498,10 @@ export const getMenuForRole = (roleKey, rolesSource = ROLES) => {
     const resolvedKey = resolveRoleKey(roleKey);
     const role = rolesSource[resolvedKey];
     if (!role) return [];
-    return ADMIN_MENU.filter((item) => role.permissions.includes(item.requiredPermission));
+    // Coming-soon item нь permission-аас үл хамаарч менюнд харагдана (placeholder).
+    return ADMIN_MENU.filter((item) =>
+        item.comingSoon || role.permissions.includes(item.requiredPermission)
+    );
 };
 
 export const isStaffRole = (roleKey) => {
@@ -487,7 +522,9 @@ export const getAssignableRoles = (rolesSource = ROLES) => {
 export const getDefaultAdminPath = (roleKey, rolesSource = ROLES) => {
     const menu = getMenuForRole(roleKey, rolesSource);
     const role = getRoleInfo(roleKey, rolesSource);
-    return menu[0]?.path || role.landingPage || '/admin';
+    // Эхний live (coming-soon биш) item-ийг сонгоно
+    const firstLive = menu.find((item) => !item.comingSoon);
+    return firstLive?.path || role.landingPage || '/admin';
 };
 
 export const getSectionStateForRole = (roleKey, rolesSource = ROLES) => {
