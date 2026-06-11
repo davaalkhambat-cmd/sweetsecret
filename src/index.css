@@ -13015,3 +13015,104 @@ tbody tr:last-child td {
     height: 220px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Admin Sidebar — Sweet Secret pink/wine palette override
+   (Sales Dashboard-той ижил өнгөөр)
+   ═══════════════════════════════════════════════════════════════ */
+.admin-sidebar {
+  background: linear-gradient(180deg, #6B1839 0%, #4A0F26 100%);
+  color: #fff;
+}
+
+.admin-sidebar .brand-name {
+  font-family: 'Fraunces', 'Playfair Display', serif;
+  background: linear-gradient(135deg, #FBEAF0, #F4D4DD);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.admin-sidebar .sidebar-header {
+  border-bottom: 1px solid rgba(255, 228, 234, 0.12);
+}
+
+.admin-sidebar .sidebar-toggle {
+  color: rgba(248, 215, 224, 0.78);
+}
+.admin-sidebar .sidebar-toggle:hover {
+  background-color: rgba(248, 215, 224, 0.1);
+  color: #fff;
+}
+
+.admin-sidebar .sidebar-section {
+  background: rgba(255, 248, 250, 0.045);
+  border: 1px solid rgba(255, 228, 234, 0.08);
+}
+
+/* Pink/wine accent palette for each section */
+.admin-sidebar .sidebar-section[data-section="overview"]   { --sidebar-accent: #F4D4DD; }
+.admin-sidebar .sidebar-section[data-section="operations"] { --sidebar-accent: #E8C9A0; }
+.admin-sidebar .sidebar-section[data-section="commerce"]   { --sidebar-accent: #EAB4C5; }
+.admin-sidebar .sidebar-section[data-section="insights"]   { --sidebar-accent: #C9B4D4; }
+.admin-sidebar .sidebar-section[data-section="growth"]     { --sidebar-accent: #B5BFA1; }
+.admin-sidebar .sidebar-section[data-section="people"]     { --sidebar-accent: #D88FA8; }
+.admin-sidebar .sidebar-section[data-section="system"]     { --sidebar-accent: #E5DCEB; }
+
+.admin-sidebar .sidebar-group-caption small {
+  color: rgba(255, 238, 243, 0.62);
+}
+
+.admin-sidebar .sidebar-section-toggle:hover {
+  background: rgba(248, 215, 224, 0.06);
+}
+
+.admin-sidebar .sidebar-section-count {
+  background: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 28%, transparent);
+  color: #FBEAF0;
+}
+
+.admin-sidebar .sidebar-role-badge {
+  background: rgba(248, 215, 224, 0.1);
+  color: rgba(255, 238, 243, 0.85);
+  border-left-color: var(--sidebar-accent, #D88FA8);
+}
+
+.admin-sidebar .nav-item {
+  color: rgba(255, 245, 248, 0.86);
+}
+.admin-sidebar .nav-item:hover {
+  background: rgba(248, 215, 224, 0.1);
+  border-color: rgba(248, 215, 224, 0.18);
+  color: #fff;
+}
+.admin-sidebar .nav-item.active {
+  background: linear-gradient(135deg, rgba(216, 143, 168, 0.32), rgba(244, 212, 221, 0.18));
+  border-color: rgba(244, 212, 221, 0.35);
+  box-shadow: 0 4px 14px rgba(74, 15, 38, 0.4),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.admin-sidebar .nav-icon {
+  background: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 22%, transparent);
+  color: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 78%, white);
+}
+.admin-sidebar .nav-item.active .nav-icon {
+  background: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 40%, transparent);
+  color: #fff;
+}
+
+.admin-sidebar .sidebar-footer {
+  border-top: 1px solid rgba(255, 228, 234, 0.12);
+}
+
+.admin-sidebar .logout-btn {
+  color: rgba(255, 238, 243, 0.9);
+}
+.admin-sidebar .logout-btn:hover {
+  color: #F4D4DD;
+}
+
