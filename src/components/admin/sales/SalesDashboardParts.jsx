@@ -627,7 +627,8 @@ export function SalesPlan({ selectedPeriod, dateActive, kpis, months, reports, c
 export function MonthCalendars({ months, reports, channelFilter }) {
     const monthsToShow = useMemo(() => {
         const out = [];
-        for (const m of months) {
+        const sortedMonths = [...months].sort((a, b) => a.yearMonth.localeCompare(b.yearMonth));
+        for (const m of sortedMonths) {
             const r = reports[m.yearMonth];
             const items = r?.line_items || [];
             const filtered = channelFilter === 'all' ? items : items.filter((it) => it.c === channelFilter);
