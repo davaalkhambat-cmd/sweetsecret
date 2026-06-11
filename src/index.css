@@ -13017,134 +13017,353 @@ tbody tr:last-child td {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Admin Sidebar — Sweet Secret pink/wine palette override
-   (Sales Dashboard-той ижил өнгөөр)
+   Admin Sidebar — Sweet Secret reference (sidemenu.html)
+   White card + wine brand · quote · 5 top-level sections
    ═══════════════════════════════════════════════════════════════ */
 .admin-sidebar {
-  background: linear-gradient(180deg, #6B1839 0%, #4A0F26 100%);
-  color: #fff;
-}
-
-.admin-sidebar .brand-name {
-  font-family: 'Fraunces', 'Playfair Display', serif;
-  background: linear-gradient(135deg, #FBEAF0, #F4D4DD);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  font-weight: 600;
-  letter-spacing: -0.5px;
-}
-
-.admin-sidebar .sidebar-header {
-  border-bottom: 1px solid rgba(255, 228, 234, 0.12);
-}
-
-.admin-sidebar .sidebar-toggle {
-  color: rgba(248, 215, 224, 0.78);
-}
-.admin-sidebar .sidebar-toggle:hover {
-  background-color: rgba(248, 215, 224, 0.1);
-  color: #fff;
-}
-
-.admin-sidebar .sidebar-section {
-  background: rgba(255, 248, 250, 0.045);
-  border: 1px solid rgba(255, 228, 234, 0.08);
-}
-
-/* Pink/wine accent palette for each section */
-.admin-sidebar .sidebar-section[data-section="overview"]   { --sidebar-accent: #F4D4DD; }
-.admin-sidebar .sidebar-section[data-section="operations"] { --sidebar-accent: #E8C9A0; }
-.admin-sidebar .sidebar-section[data-section="commerce"]   { --sidebar-accent: #EAB4C5; }
-.admin-sidebar .sidebar-section[data-section="insights"]   { --sidebar-accent: #C9B4D4; }
-.admin-sidebar .sidebar-section[data-section="growth"]     { --sidebar-accent: #B5BFA1; }
-.admin-sidebar .sidebar-section[data-section="people"]     { --sidebar-accent: #D88FA8; }
-.admin-sidebar .sidebar-section[data-section="system"]     { --sidebar-accent: #E5DCEB; }
-
-.admin-sidebar .sidebar-group-caption small {
-  color: rgba(255, 238, 243, 0.62);
-}
-
-.admin-sidebar .sidebar-section-toggle:hover {
-  background: rgba(248, 215, 224, 0.06);
-}
-
-.admin-sidebar .sidebar-section-count {
-  background: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 28%, transparent);
-  color: #FBEAF0;
-}
-
-.admin-sidebar .sidebar-role-badge {
-  background: rgba(248, 215, 224, 0.1);
-  color: rgba(255, 238, 243, 0.85);
-  border-left-color: var(--sidebar-accent, #D88FA8);
-}
-
-.admin-sidebar .nav-item {
-  color: rgba(255, 245, 248, 0.86);
-}
-.admin-sidebar .nav-item:hover {
-  background: rgba(248, 215, 224, 0.1);
-  border-color: rgba(248, 215, 224, 0.18);
-  color: #fff;
-}
-.admin-sidebar .nav-item.active {
-  background: linear-gradient(135deg, rgba(216, 143, 168, 0.32), rgba(244, 212, 221, 0.18));
-  border-color: rgba(244, 212, 221, 0.35);
-  box-shadow: 0 4px 14px rgba(74, 15, 38, 0.4),
-              inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-  color: #fff;
-}
-
-.admin-sidebar .nav-icon {
-  background: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 22%, transparent);
-  color: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 78%, white);
-}
-.admin-sidebar .nav-item.active .nav-icon {
-  background: color-mix(in srgb, var(--sidebar-accent, #F4D4DD) 40%, transparent);
-  color: #fff;
-}
-
-.admin-sidebar .sidebar-footer {
-  border-top: 1px solid rgba(255, 228, 234, 0.12);
-}
-
-.admin-sidebar .logout-btn {
-  color: rgba(255, 238, 243, 0.9);
-}
-.admin-sidebar .logout-btn:hover {
-  color: #F4D4DD;
-}
-
-/* "Тун удахгүй" — disabled item */
-.admin-sidebar .nav-item.coming-soon {
-  cursor: not-allowed;
-  opacity: 0.62;
+  width: 280px;
   background: transparent;
+  padding: 18px 14px 18px 18px;
+  flex-shrink: 0;
+  transition: width 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Manrope', sans-serif;
 }
-.admin-sidebar .nav-item.coming-soon:hover {
+.admin-sidebar.collapsed { width: 112px; padding: 18px 12px; }
+
+.admin-sidebar .ss-menu {
+  height: 100%;
+  background: #FFFFFF;
+  border: 1px solid #F0E4E0;
+  border-radius: 26px;
+  padding: 18px 16px 22px;
+  box-shadow: 0 30px 70px -34px rgba(107, 24, 57, 0.30),
+              0 6px 20px -12px rgba(107, 24, 57, 0.12);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: #2C2C2A;
+}
+
+/* Brand card */
+.admin-sidebar .ss-brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 22px 20px;
+  border-radius: 20px;
+  color: #FFFFFF;
+  background: linear-gradient(135deg, #6B1839 0%, #8E2B4C 42%, #A14060 70%, #D88FA8 105%);
+  box-shadow: 0 18px 34px -16px rgba(107, 24, 57, 0.55),
+              inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.admin-sidebar .ss-brand::after {
+  content: "";
+  position: absolute;
+  right: -40px;
+  top: -60px;
+  width: 180px;
+  height: 180px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 70%);
+  pointer-events: none;
+}
+.admin-sidebar .ss-mono {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 36px;
+  letter-spacing: 1px;
+  line-height: 1;
+  flex: 0 0 auto;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+}
+.admin-sidebar .ss-rule {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.32);
+  flex: 0 0 auto;
+}
+.admin-sidebar .ss-titles { min-width: 0; }
+.admin-sidebar .ss-name {
+  font-family: 'Fraunces', serif;
+  font-weight: 600;
+  font-size: 19px;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+.admin-sidebar .ss-sub {
+  font-family: 'Manrope', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.82);
+  margin-top: 7px;
+  text-transform: uppercase;
+}
+.admin-sidebar .ss-collapse {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  border: none;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.20);
+  color: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease, transform 0.42s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(2px);
+}
+.admin-sidebar .ss-collapse:hover { background: rgba(255, 255, 255, 0.34); }
+
+/* Quote */
+.admin-sidebar .ss-quote {
+  position: relative;
+  margin: 22px 6px 6px;
+  padding: 4px 8px 4px 18px;
+  border-left: 3px solid #D88FA8;
+}
+.admin-sidebar .ss-quote p {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 1.5;
+  color: #6B1839;
+  margin: 0;
+}
+.admin-sidebar .ss-qm {
+  font-style: normal;
+  font-weight: 600;
+  color: #D88FA8;
+  font-size: 18px;
+}
+
+/* Role badge */
+.admin-sidebar .ss-role-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 8px 4px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #FBF4F1;
+  border-left: 3px solid #D88FA8;
+  font-size: 12px;
+  color: #5B504C;
+}
+.admin-sidebar .ss-role-icon { font-size: 14px; line-height: 1; }
+.admin-sidebar .ss-role-label {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Eyebrow */
+.admin-sidebar .ss-eyebrow {
+  margin: 22px 8px 10px;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 4px;
+  color: #9B8B86;
+}
+
+/* Nav */
+.admin-sidebar .ss-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.admin-sidebar .ss-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  color: #2C2C2A;
+  text-decoration: none;
+  transition: background 0.22s ease, border-color 0.22s ease, transform 0.18s ease;
+  font-family: 'Manrope', sans-serif;
+}
+.admin-sidebar .ss-item:hover {
+  background: #FBF4F1;
+  transform: translateX(2px);
+}
+.admin-sidebar .ss-item:focus-visible {
+  outline: 2px solid #6B1839;
+  outline-offset: 2px;
+}
+
+.admin-sidebar .ss-ic {
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  border: 1px solid #F0E4E0;
+  background: #FFFFFF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6B1839;
+  transition: background 0.24s ease, color 0.24s ease, border-color 0.24s ease, box-shadow 0.24s ease;
+}
+.admin-sidebar .ss-ic svg { width: 22px; height: 22px; }
+
+.admin-sidebar .ss-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.admin-sidebar .ss-row1 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.admin-sidebar .ss-num {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 500;
+  font-size: 14px;
+  color: #9B8B86;
+}
+.admin-sidebar .ss-mn {
+  font-weight: 700;
+  font-size: 14.5px;
+  color: #2C2C2A;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.admin-sidebar .ss-en {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-weight: 400;
+  font-size: 12px;
+  color: #9B8B86;
+}
+
+/* Active flower dot */
+.admin-sidebar .ss-dot {
+  margin-left: auto;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  color: #6B1839;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transform: scale(0.4) rotate(-25deg);
+  transition: opacity 0.26s ease, transform 0.26s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.admin-sidebar .ss-dot svg { width: 22px; height: 22px; }
+
+/* Active state */
+.admin-sidebar .ss-item.active {
+  background: linear-gradient(100deg, #FCEFF4 0%, #FBEAF0 100%);
+  border-color: #F3D6E0;
+}
+.admin-sidebar .ss-item.active .ss-ic {
+  background: linear-gradient(135deg, #6B1839, #A14060 70%, #D88FA8);
+  color: #FFFFFF;
+  border-color: transparent;
+  box-shadow: 0 10px 20px -8px rgba(107, 24, 57, 0.55);
+}
+.admin-sidebar .ss-item.active .ss-num,
+.admin-sidebar .ss-item.active .ss-mn { color: #6B1839; }
+.admin-sidebar .ss-item.active .ss-dot {
+  opacity: 1;
+  transform: scale(1) rotate(0);
+}
+
+/* Coming soon */
+.admin-sidebar .ss-item.coming-soon {
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+.admin-sidebar .ss-item.coming-soon:hover {
   background: transparent;
   transform: none;
-  border-color: transparent;
 }
-.admin-sidebar .nav-item.coming-soon .nav-icon {
-  background: rgba(248, 215, 224, 0.08);
-  color: rgba(248, 215, 224, 0.55);
+.admin-sidebar .ss-item.coming-soon .ss-ic {
+  background: #FBF4F1;
+  color: #B89AA0;
+  border-color: #F4E3E8;
 }
-.admin-sidebar .nav-item.coming-soon .nav-title {
-  color: rgba(255, 245, 248, 0.6);
-}
-.admin-sidebar .nav-pill {
+.admin-sidebar .ss-item.coming-soon .ss-mn { color: #6E5E5A; }
+.admin-sidebar .ss-pill {
   margin-left: auto;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  background: rgba(244, 212, 221, 0.15);
-  color: #F4D4DD;
+  background: #FBEAF0;
+  color: #6B1839;
   white-space: nowrap;
   flex-shrink: 0;
+  border: 1px solid #F3D6E0;
 }
+
+/* Footer */
+.admin-sidebar .ss-footer {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #F0E4E0;
+}
+.admin-sidebar .ss-logout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: #6B1839;
+  font-family: 'Manrope', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.admin-sidebar .ss-logout:hover { background: #FBF4F1; }
+.admin-sidebar .ss-logout:disabled { opacity: 0.6; cursor: wait; }
+
+/* Collapsed state */
+.admin-sidebar.collapsed .ss-menu { padding: 18px 10px; }
+.admin-sidebar.collapsed .ss-brand {
+  padding: 18px 0;
+  justify-content: center;
+  gap: 0;
+}
+.admin-sidebar.collapsed .ss-collapse {
+  position: static;
+  margin-left: 8px;
+}
+.admin-sidebar.collapsed .ss-eyebrow {
+  text-align: center;
+  margin: 18px 0 8px;
+  letter-spacing: 2px;
+}
+.admin-sidebar.collapsed .ss-item {
+  justify-content: center;
+  padding: 11px 0;
+}
+.admin-sidebar.collapsed .ss-logout { justify-content: center; }
 

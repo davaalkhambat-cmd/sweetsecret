@@ -480,11 +480,11 @@ export const ADMIN_MENU = [
 ];
 
 export const ADMIN_MENU_SECTIONS = [
-    { key: 'company', label: 'Манай компани', description: 'Бидний тухай, сарын dashboard' },
-    { key: 'finance', label: 'Санхүү', description: 'Борлуулалт, үлдэгдэл, тайлан' },
-    { key: 'website', label: 'Сайтын удирдлага', description: 'Захиалга, урамшуулал, бараа, харилцагч' },
-    { key: 'marketing', label: 'Маркетинг', description: 'Social контент, кампанит ажил, ROI' },
-    { key: 'settings', label: 'Тохиргоо', description: 'Хүний нөөц ба системийн тохиргоо' },
+    { key: 'company',  number: '01', label: 'Манай компани',    englishLabel: 'About us',  iconName: 'Building',   description: 'Бидний тухай, сарын dashboard' },
+    { key: 'finance',  number: '02', label: 'Санхүү',           englishLabel: 'Finance',   iconName: 'Wallet',     description: 'Борлуулалт, үлдэгдэл, тайлан' },
+    { key: 'website',  number: '03', label: 'Сайтын удирдлага', englishLabel: 'Website',   iconName: 'Globe',      description: 'Захиалга, урамшуулал, бараа, харилцагч' },
+    { key: 'marketing',number: '04', label: 'Маркетинг',        englishLabel: 'Marketing', iconName: 'Megaphone',  description: 'Social контент, кампанит ажил, ROI' },
+    { key: 'settings', number: '05', label: 'Тохиргоо',         englishLabel: 'Settings',  iconName: 'Settings',   description: 'Хүний нөөц ба системийн тохиргоо' },
 ];
 
 export const roleHasPermission = (roleKey, permission, rolesSource = ROLES) => {

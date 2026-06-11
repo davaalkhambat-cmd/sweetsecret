@@ -2,193 +2,193 @@ import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard,
-    Package,
-    Boxes,
-    BarChart3,
-    Truck,
-    ShoppingBag,
-    Users,
-    BadgePercent,
-    Settings,
-    ShieldCheck,
     Building2,
-    FileText,
+    Wallet,
+    Globe,
     Megaphone,
+    Settings,
     LogOut,
     ChevronLeft,
     ChevronRight,
-    ChevronDown,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { ADMIN_MENU_SECTIONS, getMenuForRole, getSectionStateForRole } from '../../config/roles';
+import { ADMIN_MENU, ADMIN_MENU_SECTIONS, getMenuForRole } from '../../config/roles';
 
-const ICON_MAP = {
-    LayoutDashboard: <LayoutDashboard size={20} />,
-    Package: <Package size={20} />,
-    Boxes: <Boxes size={20} />,
-    BarChart3: <BarChart3 size={20} />,
-    Truck: <Truck size={20} />,
-    ShoppingBag: <ShoppingBag size={20} />,
-    Users: <Users size={20} />,
-    BadgePercent: <BadgePercent size={20} />,
-    Settings: <Settings size={20} />,
-    ShieldCheck: <ShieldCheck size={20} />,
-    Building: <Building2 size={20} />,
-    FileText: <FileText size={20} />,
-    Megaphone: <Megaphone size={20} />,
+const SECTION_ICON_MAP = {
+    Building: <Building2 strokeWidth={1.7} />,
+    Wallet: <Wallet strokeWidth={1.7} />,
+    Globe: <Globe strokeWidth={1.7} />,
+    Megaphone: <Megaphone strokeWidth={1.7} />,
+    Settings: <Settings strokeWidth={1.7} />,
 };
+
+/** Flower-shape "active" dot from the reference HTML */
+const FlowerDot = () => (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <g fill="currentColor">
+            <ellipse cx="12" cy="6.4" rx="2.7" ry="3.2" />
+            <ellipse cx="17.3" cy="10.2" rx="2.7" ry="3.2" transform="rotate(72 17.3 10.2)" />
+            <ellipse cx="15.3" cy="16.6" rx="2.7" ry="3.2" transform="rotate(144 15.3 16.6)" />
+            <ellipse cx="8.7" cy="16.6" rx="2.7" ry="3.2" transform="rotate(216 8.7 16.6)" />
+            <ellipse cx="6.7" cy="10.2" rx="2.7" ry="3.2" transform="rotate(288 6.7 10.2)" />
+        </g>
+        <circle cx="12" cy="11.8" r="2.5" fill="#FBEAF0" />
+    </svg>
+);
 
 const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false }) => {
     const { role, roles, roleInfo } = useAuth();
     const location = useLocation();
 
-    const menuItems = React.useMemo(() => {
-        return getMenuForRole(role, roles);
-    }, [role, roles]);
+    const menuItems = React.useMemo(() => getMenuForRole(role, roles), [role, roles]);
+    const liveByPath = React.useMemo(
+        () => Object.fromEntries(ADMIN_MENU.filter((i) => !i.comingSoon).map((i) => [i.path, i])),
+        []
+    );
 
-    const groupedMenuItems = React.useMemo(() => {
-        return ADMIN_MENU_SECTIONS
-            .map((section) => ({
+    // 5 top-level section items
+    const sectionItems = React.useMemo(() => {
+        return ADMIN_MENU_SECTIONS.map((section) => {
+            const items = menuItems.filter((it) => it.section === section.key);
+            const liveItems = items.filter((it) => !it.comingSoon);
+            const firstLive = liveItems[0];
+            return {
                 ...section,
-                items: menuItems.filter((item) => item.section === section.key),
-            }))
-            .filter((section) => section.items.length > 0);
+                items,
+                liveCount: liveItems.length,
+                target: firstLive?.path || null,
+                comingSoon: liveItems.length === 0,
+            };
+        }).filter((s) => s.items.length > 0);
     }, [menuItems]);
 
-    const [sectionState, setSectionState] = React.useState(() => getSectionStateForRole(role, roles));
-
-    React.useEffect(() => {
-        setSectionState(getSectionStateForRole(role, roles));
-    }, [role, roles]);
-
-    React.useEffect(() => {
-        const activeItem = menuItems.find((item) =>
-            item.path === '/admin'
-                ? location.pathname === '/admin'
-                : location.pathname.startsWith(item.path)
-        );
-        if (!activeItem) return;
-
-        setSectionState((current) => ({
-            ...current,
-            [activeItem.section]: true,
-        }));
-    }, [location.pathname, menuItems]);
-
-    const toggleSection = (sectionKey) => {
-        setSectionState((current) => ({
-            ...current,
-            [sectionKey]: !current[sectionKey],
-        }));
-    };
+    const isSectionActive = React.useCallback(
+        (section) => {
+            return section.items.some((item) =>
+                item.path === '/admin'
+                    ? location.pathname === '/admin'
+                    : location.pathname === item.path || location.pathname.startsWith(item.path + '/')
+            );
+        },
+        [location.pathname]
+    );
 
     const displayRoleInfo = roleInfo || roles.customer;
+
     return (
         <aside className={`admin-sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-            <div className="sidebar-header">
-                {!isCollapsed && <h2 className="brand-name">Beauty Admin</h2>}
-                <button className="sidebar-toggle" onClick={toggleSidebar}>
-                    {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-                </button>
-            </div>
-
-            {!isCollapsed && (
-                <div className="sidebar-role-badge" style={{ borderLeftColor: displayRoleInfo.color }}>
-                    <span className="sidebar-role-icon">{displayRoleInfo.icon}</span>
-                    <span className="sidebar-role-label">{displayRoleInfo.label}</span>
+            <div className="ss-menu">
+                {/* Brand card */}
+                <div className="ss-brand">
+                    <span className="ss-mono">SS</span>
+                    {!isCollapsed && (
+                        <>
+                            <span className="ss-rule" />
+                            <div className="ss-titles">
+                                <div className="ss-name">Sweet&nbsp;Secret</div>
+                                <div className="ss-sub">Intimate&nbsp;Wellness<br />System</div>
+                            </div>
+                        </>
+                    )}
+                    <button
+                        type="button"
+                        className="ss-collapse"
+                        onClick={toggleSidebar}
+                        aria-label={isCollapsed ? 'Цэс дэлгэх' : 'Цэс хураах'}
+                    >
+                        {isCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+                    </button>
                 </div>
-            )}
 
-            <nav className="sidebar-nav">
-                {isCollapsed
-                    ? menuItems.map((item) => {
-                        const icon = ICON_MAP[item.iconName] || <LayoutDashboard size={20} />;
-                        if (item.comingSoon) {
+                {/* Quote */}
+                {!isCollapsed && (
+                    <div className="ss-quote">
+                        <p>
+                            <span className="ss-qm">"</span>
+                            Санаанд багтвал заяанд багтана.
+                            <span className="ss-qm">"</span>
+                        </p>
+                    </div>
+                )}
+
+                {/* Role badge */}
+                {!isCollapsed && (
+                    <div className="ss-role-badge" style={{ borderLeftColor: displayRoleInfo.color }}>
+                        <span className="ss-role-icon">{displayRoleInfo.icon}</span>
+                        <span className="ss-role-label">{displayRoleInfo.label}</span>
+                    </div>
+                )}
+
+                {/* Eyebrow */}
+                <div className="ss-eyebrow">ЦЭС</div>
+
+                {/* Top-level nav (5 sections) */}
+                <nav className="ss-nav">
+                    {sectionItems.map((section) => {
+                        const active = isSectionActive(section);
+                        const icon = SECTION_ICON_MAP[section.iconName] || <LayoutDashboard />;
+                        const cls = `ss-item ${active ? 'active' : ''} ${section.comingSoon ? 'coming-soon' : ''}`;
+
+                        if (section.comingSoon || !section.target) {
                             return (
                                 <span
-                                    key={item.path}
-                                    className="nav-item coming-soon"
-                                    title={`${item.title} — Тун удахгүй`}
+                                    key={section.key}
+                                    className={cls}
+                                    title={`${section.label} — Тун удахгүй`}
                                     aria-disabled="true"
                                 >
-                                    <span className="nav-icon">{icon}</span>
+                                    <span className="ss-ic">{icon}</span>
+                                    {!isCollapsed && (
+                                        <>
+                                            <div className="ss-labels">
+                                                <div className="ss-row1">
+                                                    <span className="ss-num">{section.number}</span>
+                                                    <span className="ss-mn">{section.label}</span>
+                                                </div>
+                                                <div className="ss-en">{section.englishLabel}</div>
+                                            </div>
+                                            <span className="ss-pill">Тун удахгүй</span>
+                                        </>
+                                    )}
                                 </span>
                             );
                         }
+
                         return (
                             <NavLink
-                                key={item.path}
-                                to={item.path}
-                                end={item.path === '/admin'}
-                                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                                title={item.title}
+                                key={section.key}
+                                to={section.target}
+                                end={section.target === '/admin'}
+                                className={cls}
+                                title={section.label}
                             >
-                                <span className="nav-icon">{icon}</span>
+                                <span className="ss-ic">{icon}</span>
+                                {!isCollapsed && (
+                                    <>
+                                        <div className="ss-labels">
+                                            <div className="ss-row1">
+                                                <span className="ss-num">{section.number}</span>
+                                                <span className="ss-mn">{section.label}</span>
+                                            </div>
+                                            <div className="ss-en">{section.englishLabel}</div>
+                                        </div>
+                                        <span className="ss-dot">
+                                            <FlowerDot />
+                                        </span>
+                                    </>
+                                )}
                             </NavLink>
                         );
-                    })
-                    : groupedMenuItems.map((section) => {
-                        const isOpen = sectionState[section.key] ?? true;
-
-                        return (
-                            <div key={section.key} className={`sidebar-section ${isOpen ? 'open' : 'closed'}`} data-section={section.key}>
-                                <button
-                                    type="button"
-                                    className="sidebar-section-toggle"
-                                    onClick={() => toggleSection(section.key)}
-                                >
-                                    <div className="sidebar-group-caption">
-                                        <span>{section.label}</span>
-                                        <small>{section.description}</small>
-                                    </div>
-                                    <div className="sidebar-section-meta">
-                                        <span className="sidebar-section-count">{section.items.length}</span>
-                                        <ChevronDown size={16} className={`sidebar-section-chevron ${isOpen ? 'open' : ''}`} />
-                                    </div>
-                                </button>
-
-                                <div className={`sidebar-section-items ${isOpen ? 'open' : 'closed'}`}>
-                                    {section.items.map((item) => {
-                                        const icon = ICON_MAP[item.iconName] || <LayoutDashboard size={20} />;
-                                        if (item.comingSoon) {
-                                            return (
-                                                <span
-                                                    key={item.path}
-                                                    className="nav-item coming-soon"
-                                                    data-section={section.key}
-                                                    title="Тун удахгүй — хөгжүүлэлтэд"
-                                                    aria-disabled="true"
-                                                >
-                                                    <span className="nav-icon">{icon}</span>
-                                                    <span className="nav-title">{item.title}</span>
-                                                    <span className="nav-pill">Тун удахгүй</span>
-                                                </span>
-                                            );
-                                        }
-                                        return (
-                                            <NavLink
-                                                key={item.path}
-                                                to={item.path}
-                                                end={item.path === '/admin'}
-                                                className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
-                                                data-section={section.key}
-                                            >
-                                                <span className="nav-icon">{icon}</span>
-                                                <span className="nav-title">{item.title}</span>
-                                            </NavLink>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        );
                     })}
-            </nav>
+                </nav>
 
-            <div className="sidebar-footer">
-                <button className="logout-btn" type="button" onClick={onLogout} disabled={isLoggingOut}>
-                    <LogOut size={20} />
-                    {!isCollapsed && <span>{isLoggingOut ? 'Гарч байна...' : 'Гарах'}</span>}
-                </button>
+                {/* Footer */}
+                <div className="ss-footer">
+                    <button className="ss-logout" type="button" onClick={onLogout} disabled={isLoggingOut}>
+                        <LogOut size={20} />
+                        {!isCollapsed && <span>{isLoggingOut ? 'Гарч байна...' : 'Гарах'}</span>}
+                    </button>
+                </div>
             </div>
         </aside>
     );
