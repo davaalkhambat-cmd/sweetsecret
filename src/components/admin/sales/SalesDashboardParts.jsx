@@ -1,19 +1,40 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { CHANNEL_COLORS, fmt, fmtT, fmtShort } from './SalesCharts';
 
-const WEEKDAY_MN = ['Ням', 'Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба'];
+const WEEKDAY_MN_SHORT = ['Ня', 'Да', 'Мя', 'Лх', 'Пү', 'Ба', 'Бя'];
 const WEEKDAY_BUSINESS = ['Даваа', 'Мягмар', 'Лхагва', 'Пүрэв', 'Баасан', 'Бямба', 'Ням'];
-
-function formatMongolianDate(yyyyMmDd) {
-    if (!yyyyMmDd) return '';
-    const [y, m, d] = yyyyMmDd.split('-');
-    return `${y}-${m}-${d}`;
-}
 
 function formatMonthShort(yearMonth) {
     if (!yearMonth) return '';
     const [, m] = yearMonth.split('-');
     return `${Number(m)}-р сар`;
+}
+
+function fmtDateLabel(dateStr) {
+    const dt = new Date(dateStr + 'T00:00:00');
+    const wd = WEEKDAY_MN_SHORT[dt.getDay()];
+    const md = (dt.getMonth() + 1) + '/' + dt.getDate();
+    return `${md} ${wd}`;
+}
+
+function shortName(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+/** Calendar days in month for plan (last month = days through latest data) */
+function getMonthDays(yearMonth, latestDateInMonth) {
+    if (!yearMonth) return 30;
+    const [y, m] = yearMonth.split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    if (latestDateInMonth) {
+        const latest = new Date(latestDateInMonth + 'T00:00:00Z');
+        const today = new Date();
+        // If the month is the latest (data still flowing in this calendar month) — use latest data day as proxy for "active days"
+        // Otherwise use full days in month
+        const isCurrentMonth = latest.getUTCFullYear() === today.getUTCFullYear() && latest.getUTCMonth() + 1 === Number(m);
+        if (isCurrentMonth) {
+            return latest.getUTCDate();
+        }
+    }
+    return daysInMonth;
 }
 
 /* ============================================================
@@ -35,10 +56,8 @@ export function DateFilter({ value, onChange, minDate, maxDate }) {
     const mode = value.mode || 'off';
     const isActive = mode !== 'off';
     const triggerLabel = useMemo(() => {
-        if (mode === 'single' && value.start) return formatMongolianDate(value.start);
-        if (mode === 'range' && value.start && value.end) {
-            return `${formatMongolianDate(value.start)} → ${formatMongolianDate(value.end)}`;
-        }
+        if (mode === 'single' && value.start) return value.start;
+        if (mode === 'range' && value.start && value.end) return `${value.start} → ${value.end}`;
         return 'Огнооны шүүлт';
     }, [mode, value]);
 
@@ -58,8 +77,7 @@ export function DateFilter({ value, onChange, minDate, maxDate }) {
         if (!maxDate) return;
         const max = new Date(maxDate + 'T00:00:00Z');
         if (key === 'today') {
-            const d = maxDate;
-            onChange({ mode: 'single', start: d, end: d });
+            onChange({ mode: 'single', start: maxDate, end: maxDate });
         } else if (key === '7d') {
             const s = new Date(max);
             s.setUTCDate(s.getUTCDate() - 6);
@@ -78,11 +96,7 @@ export function DateFilter({ value, onChange, minDate, maxDate }) {
 
     return (
         <div className={`sd-date-wrap ${open ? 'open' : ''}`} ref={ref}>
-            <button
-                type="button"
-                className={`sd-date-trigger ${isActive ? 'active' : ''}`}
-                onClick={() => setOpen((v) => !v)}
-            >
+            <button type="button" className={`sd-date-trigger ${isActive ? 'active' : ''}`} onClick={() => setOpen((v) => !v)}>
                 <span>📅</span>
                 <span>{triggerLabel}</span>
                 <span className="sd-caret">▼</span>
@@ -149,7 +163,7 @@ export function DateFilter({ value, onChange, minDate, maxDate }) {
 }
 
 /* ============================================================
-   DAY HIGHLIGHT (best/worst sales day)
+   DAY HIGHLIGHT (best/worst sales day, HTML-style)
    ============================================================ */
 export function DayHighlight({ lineItems }) {
     const { best, worst } = useMemo(() => {
@@ -173,54 +187,60 @@ export function DayHighlight({ lineItems }) {
         return { best: arr[0], worst: arr[arr.length - 1] };
     }, [lineItems]);
 
-    if (!best || !worst) return null;
-    const bestWeekday = WEEKDAY_MN[new Date(best.date + 'T00:00:00Z').getUTCDay()];
-    const worstWeekday = WEEKDAY_MN[new Date(worst.date + 'T00:00:00Z').getUTCDay()];
+    if (!best || !worst) {
+        return <div className="sd-empty" style={{ padding: '24px 16px' }}>Энэ хугацаанд өгөгдөл алга</div>;
+    }
 
     return (
         <div className="sd-day-highlight">
             <div className="sd-day-card best">
-                <div className="sd-day-pill">🏆 Хамгийн идэвхтэй</div>
-                <div className="sd-day-label">Хамгийн өндөр борлуулалт</div>
+                <div className="sd-day-pill">🏆 Онц өдөр</div>
+                <div className="sd-day-label">Хамгийн өндөр борлуулалттай өдөр</div>
                 <div className="sd-day-value">{fmtT(best.sales)}</div>
-                <div className="sd-day-date">📅 <b>{formatMongolianDate(best.date)}</b> · {bestWeekday}</div>
-                <div className="sd-day-meta">{best.receipts} чек · {best.qty} ширхэг</div>
+                <div className="sd-day-date">📅 <b>{fmtDateLabel(best.date)}</b> · {best.date}</div>
+                <div className="sd-day-meta">
+                    {best.receipts} чек · {best.qty} ш бараа · дундаж чек {fmtT(Math.round(best.sales / Math.max(best.receipts, 1)))}
+                </div>
             </div>
             <div className="sd-day-card worst">
-                <div className="sd-day-pill">📉 Хамгийн нам</div>
-                <div className="sd-day-label">Хамгийн бага борлуулалт</div>
+                <div className="sd-day-pill">⚠ Сул өдөр</div>
+                <div className="sd-day-label">Хамгийн бага борлуулалттай өдөр</div>
                 <div className="sd-day-value">{fmtT(worst.sales)}</div>
-                <div className="sd-day-date">📅 <b>{formatMongolianDate(worst.date)}</b> · {worstWeekday}</div>
-                <div className="sd-day-meta">{worst.receipts} чек · {worst.qty} ширхэг</div>
+                <div className="sd-day-date">📅 <b>{fmtDateLabel(worst.date)}</b> · {worst.date}</div>
+                <div className="sd-day-meta">
+                    {worst.receipts} чек · {worst.qty} ш бараа · дундаж чек {fmtT(Math.round(worst.sales / Math.max(worst.receipts, 1)))}
+                </div>
             </div>
         </div>
     );
 }
 
 /* ============================================================
-   TOP FAMILY HERO (top 3 families)
+   TOP FAMILY HERO (medal labels)
    ============================================================ */
 export function TopFamilyHero({ families, totalSales }) {
-    const top3 = families.slice(0, 3);
-    if (!top3.length) return null;
+    const top3 = (families || []).filter((f) => f.revenue > 0).slice(0, 3);
+    if (!top3.length) {
+        return <div className="sd-empty" style={{ padding: '24px 16px' }}>Энэ хугацаанд ангилалын өгөгдөл алга</div>;
+    }
+    const labels = ['🥇 Тэргүүлэгч', '🥈 Хоёрдугаарт', '🥉 Гуравт'];
     return (
         <div className="sd-top-fam-grid">
             {top3.map((f, i) => {
-                const pct = totalSales ? (f.revenue / totalSales) * 100 : 0;
+                const share = totalSales ? ((f.revenue / totalSales) * 100).toFixed(1) : '0.0';
                 const cls = ['f1', 'f2', 'f3'][i];
-                const rankLabel = ['№1 ТЭРГҮҮЛЭГЧ', '№2 ДЭД', '№3 ГУРАВ'][i];
                 return (
                     <div key={f.family} className={`sd-fam-card ${cls}`}>
                         <div>
-                            <div className="sd-fam-pill">{rankLabel}</div>
+                            <div className="sd-fam-pill">{labels[i]} ангилал</div>
                             <div className="sd-fam-name">{f.family}</div>
                         </div>
                         <div>
                             <div className="sd-fam-value">
                                 {fmtT(f.revenue)}
-                                <span className="sd-fam-share">{pct.toFixed(1)}%</span>
+                                <span className="sd-fam-share">{share}%</span>
                             </div>
-                            <div className="sd-fam-meta"><b>{fmt(f.qty)}</b> ширхэг борлуулсан</div>
+                            <div className="sd-fam-meta">{fmt(f.qty)} ш зарагдсан · нийт борлуулалтын <b>{share}%</b></div>
                         </div>
                     </div>
                 );
@@ -230,26 +250,252 @@ export function TopFamilyHero({ families, totalSales }) {
 }
 
 /* ============================================================
-   SALES PLAN (target + progress + stats)
+   SEASONAL RECOMMENDATIONS (Mongolian calendar)
    ============================================================ */
-export function SalesPlan({ planKey, totalSales, nDays }) {
-    const storageKey = `sd-plan:${planKey}`;
-    const [targetStr, setTargetStr] = useState(() => {
-        if (typeof window === 'undefined') return '';
-        return localStorage.getItem(storageKey) || '';
-    });
+const SEASONAL = {
+    1: { events: 'Шинэ жилийн дараах үе — баярын дараах сэргээлт, хүйтний оргил.', mindset: 'Өөрийгөө сэргээх, тайвшрах, цэвэрлэгээ хийх хандлага.', demand: 'mid',
+        focus: ['Цайруулах багц — баярын дараах арьс арчилгаа', 'Эмэгтэйн угаалгын фоам (Tea Tree, innergarm)', 'Rainbow Refresh цуврал', 'Чийгшүүлэгч / лубрикант (хүйтэн улирал)'],
+        bundle: '«Сэргээлт / Detox» багц — угаалга + чийгшүүлэгч + цайруулах.', cta: 'Баярын дараах тайвшрал, өөрийгөө хайрлах сэдвээр контент гаргаж, угаалга-чийгшүүлэгчийн багцыг түлхэх.' },
+    2: { events: 'Сар шинэ (Цагаан сар) ба Гэгээн Валентины баяр (2/14) — бэлэг өгөх оргил.', mindset: 'Бэлэг авах, романтик, гэр бүл/хосдоо анхаарал.', demand: 'peak',
+        focus: ['Романтик багц / Тооёхон багц', 'Лубрикант, Intimate дотуур бүтээгдэхүүн', 'Бэлгийн ангилал (Intimate Toys)', 'Premium бэлгийн иж бүрдэл'],
+        bundle: '«Хайрын багц» — лубрикант + intimate + гоёмсог баглаа.', cta: 'Валентин болон Сар шинийн бэлгийн багцыг урьдчилан бэлдэж, хосуудад зориулсан кампанит ажил явуулах.' },
+    3: { events: 'Олон улсын эмэгтэйчүүдийн баяр (3/8) — эмэгтэйчүүдэд бэлэг өгөх хамгийн том өдөр.', mindset: 'Эгч/ээж/найзууддаа бэлэг, өөрийгөө эрхлүүлэх.', demand: 'peak',
+        focus: ['Self-love / бэлгийн багц', 'Premium эмэгтэйн арчилгаа', 'Цайруулах багц', 'Гоёмсог баглаатай иж бүрдэл'],
+        bundle: '«Эгчдээ бэлэг / Self-love» багц — арчилгаа + цайруулах + романтик.', cta: '3/8-ны өмнө 1-2 долоо хоногт бэлгийн багцыг онцолж, «эмэгтэйдээ хайраа илэрхийл» мессежтэй кампанит ажил хийх.' },
+    4: { events: 'Хавар, шинэ эхлэл — цэвэрлэгээ, эрүүл мэндийн refresh.', mindset: 'Шинэчлэл, эрүүл ахуй, сэргэг байх.', demand: 'mid',
+        focus: ['Эмэгтэйн угаалга/фоам', 'Нэг удаагийн цэвэрлэгээний gel (Inner disposable)', 'Rainbow цуврал', 'Хувийн ариун цэврийн бүтээгдэхүүн'],
+        bundle: '«Хаврын цэвэрлэгээ» багц — угаалга + нэг удаагийн арчилгаа.', cta: 'Хавар = эрүүл ахуйн шинэчлэл сэдвээр өдөр тутмын арчилгааны багцыг түлхэх.' },
+    5: { events: 'Хавар дуусч, дулаарал — идэвх, гадаа гарах эхлэл.', mindset: 'Идэвхтэй, сэргэг, аялалын өмнөх бэлтгэл.', demand: 'mid',
+        focus: ['Fresh цэвэрлэгээний нойтон салфетка', 'Нэг удаагийн угаалга', 'Чийгшүүлэгч', 'Travel-size бүтээгдэхүүн'],
+        bundle: '«Fresh & Active» багц — нойтон салфетка + нэг удаагийн gel.', cta: 'Дулаарч буй улиралд сэргэг, явдал-найрсаг бүтээгдэхүүнээ онцлох.' },
+    6: { events: 'Хүүхдийн баяр (6/1), зуны амралт эхэлж, Наадам ойртоно.', mindset: 'Аялал, гадаа байх, эрүүл ахуйг замдаа авч явах.', demand: 'high',
+        focus: ['Нэг удаагийн эмэгтэйн цэвэрлэгээ (аяллын)', 'Цэвэрлэгээний нойтон салфетка', 'Travel-size угаалга', 'Лубрикант (аялал) ба Trial Kit'],
+        bundle: '«Аяллын / Travel» багц — нэг удаагийн gel + салфетка + жижиг хэмжээний угаалга.', cta: '«Хөдөө явахдаа бэлэн бай» сэдвээр аяллын жижиг хэмжээт багцыг идэвхтэй шахах — энэ улиралд эрэлт өндөр.' },
+    7: { events: 'Наадам (7/11-13), зуслан, аялал жуулчлалын оргил.', mindset: 'Баяр наадам, аялал, гадаа.', demand: 'high',
+        focus: ['Нэг удаагийн цэвэрлэгээ', 'Refresh салфетка', 'Travel kit', 'Хувийн эрүүл ахуйн жижиг хэрэгсэл'],
+        bundle: '«Наадмын аяллын» багц — авсаархан эрүүл ахуйн иж бүрдэл.', cta: 'Наадмын өмнө аяллын багцыг онлайнаар урьдчилан захиалгаар түлхэх.' },
+    8: { events: 'Зуны төгсгөл, амралтын улирал.', mindset: 'Амралт, сэргэлэн, чийгшил.', demand: 'mid',
+        focus: ['Чийгшүүлэгч', 'Угаалга/фоам', 'Refresh цуврал'],
+        bundle: '«Зуны сэргэлэн» багц.', cta: 'Зуны эцэст чийгшил, сэргэг байдлыг онцлох.' },
+    9: { events: 'Намар, сургууль/ажлын шинэ улирал — дэглэмд эргэн орох.', mindset: 'Шинэ дэглэм, эрүүл зуршил, тогтвортой байх.', demand: 'mid',
+        focus: ['Өдөр тутмын угаалга/фоам', 'Эмэгтэйн арчилгааны routine', 'Багцалсан үнэ'],
+        bundle: '«Намрын routine» багц — сар бүрийн арчилгааны иж бүрдэл.', cta: '«Эрүүл зуршлаа шинэчил» сэдвээр захиалгат/subscription санааг таниулах.' },
+    10: { events: 'Намар, хүйтрэлт эхэлнэ.', mindset: 'Дулаан, чийгшил, арчилгаа.', demand: 'mid',
+        focus: ['Чийгшүүлэгч / Warming Rainbow', 'Угаалга', 'Лубрикант (хүйтэн улирал)'],
+        bundle: '«Дулаан арчилгаа» багц.', cta: 'Хүйтрэлттэй уялдуулан чийгшил, дулаан мэдрэмжийн бүтээгдэхүүнийг онцлох.' },
+    11: { events: 'Худалдааны улирал (Black Friday / 11.11) — хямдралын кампанит ажил.', mindset: 'Хямдрал хайх, урьдчилж бэлэг авах.', demand: 'high',
+        focus: ['Багц бүтээгдэхүүн (хямдралтай)', 'Бэлгийн иж бүрдэл (Шинэ жилд бэлдэх)', 'Premium-ийг урамшуулалтай'],
+        bundle: '«Black Friday / урамшуулал» багц — хосолсон үнэтэй иж бүрдэл.', cta: '11 сард томоохон урамшуулал зарлаж, Шинэ жилийн бэлгийн эрэлтийг урьдчилж барих.' },
+    12: { events: 'Шинэ жилийн бэлгийн оргил, баярын улирал.', mindset: 'Бэлэг өгөх, баярын онцгой иж бүрдэл.', demand: 'peak',
+        focus: ['Шинэ жилийн бэлгийн багц', 'Романтик / premium иж бүрдэл', 'Гоёмсог баглаа боодол'],
+        bundle: '«Шинэ жилийн бэлэг» багц — premium + романтик.', cta: '12 сард бэлгийн багцыг онцолж, баглаа боодол, хүргэлтийн саадгүй байдлыг сурталчлах.' },
+};
+const DEMAND_LABEL = { peak: ['Онцгой өндөр', 'peak'], high: ['Өндөр', 'high'], mid: ['Дунд', 'mid'] };
+
+function SeasonalBlock({ yearMonth }) {
+    if (!yearMonth) return null;
+    const mNum = parseInt(yearMonth.split('-')[1], 10);
+    const s = SEASONAL[mNum];
+    if (!s) return null;
+    const nextNum = mNum === 12 ? 1 : mNum + 1;
+    const sNext = SEASONAL[nextNum];
+    const dem = DEMAND_LABEL[s.demand] || ['Дунд', 'mid'];
+    return (
+        <div className="sd-plan-block season">
+            <h4>🗓️ {mNum}-р сар — улирлын зөвлөмж</h4>
+            <div className="sd-season-line"><b>📌 Үйл явдал:</b> {s.events}</div>
+            <div className="sd-season-line"><b>🧠 Хэрэглэгчийн сэтгэлзүй:</b> {s.mindset}</div>
+            <div className="sd-season-line">
+                <b>📈 Худалдан авах эрэлт:</b> <span className={`sd-season-demand ${dem[1]}`}>{dem[0]}</span>
+            </div>
+            <div className="sd-season-line"><b>🎯 Илүү шахах бүтээгдэхүүн:</b></div>
+            <ul className="sd-pl-list">
+                {s.focus.map((f, i) => <li key={i}><span className="sd-pl-name">{f}</span></li>)}
+            </ul>
+            <div className="sd-season-cta">
+                💡 <b>Багцын санаа:</b> {s.bundle}<br />
+                📣 <b>Уриалга:</b> {s.cta}
+            </div>
+            {sNext && (
+                <div className="sd-season-next">
+                    <b>Дараагийн сар ({nextNum}-р сар):</b> {sNext.events} → {sNext.bundle}
+                </div>
+            )}
+        </div>
+    );
+}
+
+/* ============================================================
+   PLAN ANALYSIS (missing / top / weekday / seasonal)
+   ============================================================ */
+function PlanAnalysis({ selectedPeriod, months, reports, currentReport }) {
+    // Selected month products
+    const selProds = useMemo(() => {
+        const r = reports[selectedPeriod];
+        if (!r) return [];
+        const map = new Map();
+        for (const it of (r.line_items || [])) {
+            const key = (it.pn || '').trim();
+            if (!key) continue;
+            if (!map.has(key)) map.set(key, { name: key, qty: 0, revenue: 0 });
+            const p = map.get(key);
+            p.qty += it.q || 0;
+            p.revenue += it.n || 0;
+        }
+        return [...map.values()];
+    }, [selectedPeriod, reports]);
+
+    // Previous months (chronologically before selectedPeriod)
+    const prevMonths = useMemo(() => {
+        return months.map((m) => m.yearMonth).filter((ym) => ym < selectedPeriod).sort();
+    }, [months, selectedPeriod]);
+
+    // Previous months aggregate: name -> { c (months count), q, r }
+    const prevAgg = useMemo(() => {
+        const agg = {};
+        for (const ym of prevMonths) {
+            const r = reports[ym];
+            if (!r) continue;
+            const monthMap = new Map();
+            for (const it of (r.line_items || [])) {
+                const key = (it.pn || '').trim();
+                if (!key) continue;
+                if (!monthMap.has(key)) monthMap.set(key, { qty: 0, revenue: 0 });
+                const p = monthMap.get(key);
+                p.qty += it.q || 0;
+                p.revenue += it.n || 0;
+            }
+            for (const [name, p] of monthMap) {
+                const e = agg[name] || (agg[name] = { c: 0, q: 0, r: 0 });
+                e.c += 1;
+                e.q += p.qty;
+                e.r += p.revenue;
+            }
+        }
+        return agg;
+    }, [prevMonths, reports]);
+
+    const selMap = useMemo(() => Object.fromEntries(selProds.map((p) => [p.name, p])), [selProds]);
+
+    // A) Missing strong products
+    const missing = useMemo(() => {
+        if (!prevMonths.length) return [];
+        const threshold = Math.max(1, Math.ceil(prevMonths.length * 0.5));
+        const out = [];
+        for (const [name, e] of Object.entries(prevAgg)) {
+            if (e.c >= threshold && !selMap[name]) {
+                out.push({
+                    name,
+                    avgQty: e.q / e.c,
+                    avgRev: e.r / e.c,
+                    unit: e.q > 0 ? e.r / e.q : 0,
+                });
+            }
+        }
+        out.sort((a, b) => b.avgRev - a.avgRev);
+        return out.slice(0, 5);
+    }, [prevAgg, prevMonths, selMap]);
+    const missingPotential = missing.reduce((s, m) => s + m.avgRev, 0);
+
+    // B) Top 5 this month with growth indicators
+    const topThis = useMemo(() => {
+        const prevAvgQ = {};
+        for (const [n, e] of Object.entries(prevAgg)) prevAvgQ[n] = e.q / e.c;
+        return [...selProds].sort((a, b) => b.revenue - a.revenue).slice(0, 5).map((p) => {
+            const pa = prevAvgQ[p.name];
+            let badge = null;
+            if (pa === undefined && prevMonths.length > 0) badge = { cls: 'new', text: '✨ ШИНЭ' };
+            else if (pa && pa > 0) {
+                const mult = p.qty / pa;
+                if (mult >= 1.3) badge = { cls: 'rocket', text: `🚀 ${mult.toFixed(1)}×` };
+                else if (mult <= 0.7) badge = { cls: 'down', text: `↓ ${mult.toFixed(1)}×` };
+                else badge = { cls: 'flat', text: '→ тогтвортой' };
+            }
+            return { ...p, badge };
+        });
+    }, [selProds, prevAgg, prevMonths]);
+
+    // C) Best weekday (from current report)
+    const weekdayInsight = useMemo(() => {
+        const wk = currentReport?.weekday || [];
+        if (!wk.length) return null;
+        const totalWk = wk.reduce((s, w) => s + w.sales, 0);
+        const byAvg = [...wk].sort((a, b) => b.avg_sales_per_day - a.avg_sales_per_day);
+        const best = byAvg[0];
+        const worst = byAvg[byAvg.length - 1];
+        const share = totalWk > 0 ? (best.sales / totalWk) * 100 : 0;
+        const prevWdIdx = ((best.weekday_num) + 6) % 7;
+        const prevWd = WEEKDAY_BUSINESS[prevWdIdx];
+        return { best, worst, share, prevWd };
+    }, [currentReport]);
+
+    return (
+        <>
+            {missing.length > 0 && (
+                <div className="sd-plan-block warn">
+                    <h4>🔍 Алга байгаа хүчтэй бүтээгдэхүүн</h4>
+                    <div className="sd-pb-intro">
+                        Эдгээр нь өмнөх саруудад тогтмол зарагдаж байсан ч <b>{formatMonthShort(selectedPeriod)}-д хараахан гараагүй</b> байна.
+                        Сэргээж чадвал дунджаар <b>{fmtT(missingPotential)}</b> нэмэлт орлого боломжтой.
+                    </div>
+                    <ul className="sd-pl-list">
+                        {missing.map((m) => (
+                            <li key={m.name}>
+                                <span className="sd-pl-name">{shortName(m.name, 42)}</span>
+                                <span className="sd-pl-meta">— өмнө дунджаар <b>{m.avgQty.toFixed(1)} ш</b> · <b>{fmtT(m.avgRev)}</b></span>
+                                <span className="sd-pl-unit">(нэгж {fmtT(Math.round(m.unit))})</span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {topThis.length > 0 && (
+                <div className="sd-plan-block good">
+                    <h4>🚀 Энэ сард сайн явж буй бүтээгдэхүүн</h4>
+                    <div className="sd-pb-intro">
+                        Орлогоор тэргүүлэгч топ 5{prevMonths.length ? ' — өсөлтийн илтгэлцүүр (өмнөх саруудтай харьцуулсан) ба ШИНЭ нэрсийн хамт' : ''}.
+                    </div>
+                    <ul className="sd-pl-list">
+                        {topThis.map((p) => (
+                            <li key={p.name}>
+                                {p.badge && <span className={`sd-pl-badge ${p.badge.cls}`}>{p.badge.text}</span>}
+                                <span className="sd-pl-name">{shortName(p.name, 40)}</span>
+                                <span className="sd-pl-meta">— <b>{p.qty} ш</b> · <b>{fmtT(p.revenue)}</b></span>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+
+            {weekdayInsight && (
+                <div className="sd-plan-block info">
+                    <h4>📅 Хамгийн их орлоготой өдөр</h4>
+                    <div className="sd-pb-intro">
+                        Түүхэн дунджаар <b>{weekdayInsight.best.weekday_mn}</b> хамгийн өндөр (нийт орлогын <b>{weekdayInsight.share.toFixed(0)}%</b>),
+                        {' '}<b>{weekdayInsight.worst.weekday_mn}</b> хамгийн бага. Маркетинг, SMS сануулга, акцийг
+                        {' '}<b>{weekdayInsight.best.weekday_mn}</b> болон өмнөх өдөр (<b>{weekdayInsight.prevWd}</b>) идэвхжүүлэхийг зөвлөж байна.
+                    </div>
+                </div>
+            )}
+
+            <SeasonalBlock yearMonth={selectedPeriod} />
+        </>
+    );
+}
+
+/* ============================================================
+   SALES PLAN (per-month target, progress, deep analysis)
+   ============================================================ */
+export function SalesPlan({ selectedPeriod, dateActive, kpis, months, reports, currentReport, latestDate }) {
+    const isPerMonth = selectedPeriod && selectedPeriod !== 'all' && !dateActive;
+    const storageKey = `sweetsecret_target_${selectedPeriod}`;
+    const [targetStr, setTargetStr] = useState('');
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
         setTargetStr(localStorage.getItem(storageKey) || '');
     }, [storageKey]);
-
-    const target = Number(targetStr.replace(/[^0-9]/g, '')) || 0;
-    const pct = target > 0 ? (totalSales / target) * 100 : 0;
-    const cappedPct = Math.min(pct, 100);
-    const remaining = Math.max(target - totalSales, 0);
-    const dailyAvg = nDays ? totalSales / nDays : 0;
-    const dailyNeeded = remaining > 0 && nDays ? remaining / Math.max(1, nDays) : 0;
 
     const handleChange = (e) => {
         const raw = e.target.value.replace(/[^0-9]/g, '');
@@ -257,24 +503,56 @@ export function SalesPlan({ planKey, totalSales, nDays }) {
         if (typeof window !== 'undefined') localStorage.setItem(storageKey, raw);
     };
 
+    if (dateActive) {
+        return (
+            <div className="sd-plan-card">
+                <div className="sd-plan-hint">
+                    📅 Огнооны шүүлт идэвхтэй байна. Зорилт <b>сар тус бүрд</b> тавигдана —
+                    дээрх "Хугацаа" мөрнөөс <b>1-р сар / 2-р сар / 3-р сар / 4-р сар</b> аль нэгийг сонгоно уу.
+                </div>
+            </div>
+        );
+    }
+
+    if (!isPerMonth) {
+        return (
+            <div className="sd-plan-card">
+                <div className="sd-plan-hint">
+                    🎯 Зорилт <b>сар тус бүрд</b> хадгалагдана. Дээрх "Хугацаа" мөрнөөс тодорхой сараа сонгоно уу.
+                </div>
+            </div>
+        );
+    }
+
+    const target = Number(targetStr.replace(/[^0-9]/g, '')) || 0;
+    const actual = kpis.total_sales;
+    const totalDays = getMonthDays(selectedPeriod, latestDate);
+    const activeDays = kpis.n_days;
+    const remainingDays = Math.max(0, totalDays - activeDays);
+    const completion = target > 0 ? (actual / target) * 100 : 0;
+    const shortage = Math.max(0, target - actual);
+    const needed = remainingDays > 0 ? shortage / remainingDays : 0;
+    const avgDaily = kpis.avg_daily_sales;
+    const isOver = completion >= 100;
+    const progressPct = Math.min(100, completion);
+    const statClass = isOver ? 'success' : (completion >= 70 ? '' : (completion >= 40 ? 'warning' : 'danger'));
+
     return (
         <div className="sd-plan-card">
             <div className="sd-plan-top">
                 <div>
-                    <h3>Зорилт ба гүйцэтгэл</h3>
-                    <p>
-                        Энэ хугацаанд хүрэх зорилтоо тогтоогоод гүйцэтгэлийн прогрессыг шалгаарай.
-                        <b> {fmt(nDays)}</b> өдрийн өгөгдөл харуулж байна.
-                    </p>
+                    <h3>{formatMonthShort(selectedPeriod)} — зорилт &amp; биелэлт</h3>
+                    <p>Дээрх <b>"Хугацаа"</b> мөрөнд сар сонгоод зорилтоо доорх <b>оруулна</b>. Зорилт сар тус бүрд тусдаа хадгалагдана.</p>
                 </div>
                 <div className="sd-plan-input-wrap">
-                    <div className="sd-pl-label">Зорилт (₮)</div>
+                    <div className="sd-pl-label">{formatMonthShort(selectedPeriod)} зорилт (₮)</div>
                     <input
                         type="text"
                         className="sd-plan-input"
                         placeholder="0"
                         value={targetStr ? new Intl.NumberFormat('mn-MN').format(target) : ''}
                         onChange={handleChange}
+                        inputMode="numeric"
                     />
                 </div>
             </div>
@@ -282,50 +560,68 @@ export function SalesPlan({ planKey, totalSales, nDays }) {
             {target > 0 ? (
                 <>
                     <div className="sd-progress-wrap">
-                        <div
-                            className={`sd-progress-bar ${pct >= 100 ? 'over' : ''}`}
-                            style={{ width: `${cappedPct}%` }}
-                        >
-                            {pct >= 8 && `${pct.toFixed(1)}%`}
+                        <div className={`sd-progress-bar ${isOver ? 'over' : ''}`} style={{ width: `${progressPct}%` }}>
+                            {progressPct >= 8 && `${completion.toFixed(1)}%`}
                         </div>
                     </div>
                     <div className="sd-progress-text">
-                        <span><b>{fmtT(totalSales)}</b> биелсэн</span>
+                        <span><b>{fmtT(actual)}</b> бодит дүн</span>
                         <span><b>{fmtT(target)}</b> зорилт</span>
                     </div>
-
                     <div className="sd-plan-stats">
-                        <PlanStat cls={pct >= 100 ? 'success' : pct >= 70 ? 'warning' : 'danger'}
-                            label="Биелэлт" value={`${pct.toFixed(1)}%`}
-                            sub={pct >= 100 ? '✓ Зорилт давсан' : pct >= 70 ? '⚠️ Зорилгад ойртож байна' : '⚠ Хоцорч байна'} />
-                        <PlanStat cls={remaining === 0 ? 'success' : ''}
-                            label="Үлдсэн дүн" value={fmtT(remaining)}
-                            sub={remaining > 0 ? 'Зорилт хүртэлх' : '✓ Биелсэн'} />
-                        <PlanStat label="Өдрийн дундаж" value={fmtT(dailyAvg)} sub={`${fmt(nDays)} өдөр`} />
-                        <PlanStat label="Өдөрт хэрэгтэй" value={dailyNeeded > 0 ? fmtT(dailyNeeded) : '—'} sub="үлдсэнд хүрэхэд" />
+                        <div className={`sd-plan-stat ${statClass}`}>
+                            <div className="sd-ps-label">Биелэлт</div>
+                            <div className="sd-ps-value">{completion.toFixed(1)}%</div>
+                            <div className="sd-ps-sub">{fmtT(actual)} / {fmtT(target)}</div>
+                        </div>
+                        <div className="sd-plan-stat">
+                            <div className="sd-ps-label">{isOver ? 'Илүү биелэгдсэн' : 'Дутах'}</div>
+                            <div className="sd-ps-value">{fmtT(isOver ? actual - target : shortage)}</div>
+                            <div className="sd-ps-sub">{remainingDays === 0 ? 'Хугацаа дууссан' : `${remainingDays} хоног үлдсэн`}</div>
+                        </div>
+                        <div className="sd-plan-stat">
+                            <div className="sd-ps-label">Өдрийн дундаж</div>
+                            <div className="sd-ps-value">{fmtT(avgDaily)}</div>
+                            <div className="sd-ps-sub">{activeDays} идэвхтэй өдөр</div>
+                        </div>
+                        <div className="sd-plan-stat">
+                            <div className="sd-ps-label">Шаардлагатай</div>
+                            <div className="sd-ps-value">{remainingDays > 0 && !isOver ? fmtT(needed) : '—'}</div>
+                            <div className="sd-ps-sub">{remainingDays > 0 && !isOver ? 'өдөрт хүртэх дүн' : (isOver ? 'зорилт биелсэн' : 'хугацаа дууссан')}</div>
+                        </div>
+                    </div>
+                    <div className="sd-plan-status">
+                        {isOver ? (
+                            <>{formatMonthShort(selectedPeriod)}-ын зорилт <b>{completion.toFixed(1)}%</b> биелсэн 🎉 — зорилтоос <b>{fmtT(actual - target)}</b> илүү.</>
+                        ) : (
+                            <>
+                                {formatMonthShort(selectedPeriod)}-ын зорилт <b>{completion.toFixed(1)}%</b> биелсэн. Дутуу: <b>{fmtT(shortage)}</b>.
+                                {remainingDays > 0
+                                    ? <> Үлдсэн <b>{remainingDays}</b> хоногт өдөрт <b>{fmtT(needed)}</b> зарвал зорилтод хүрнэ.</>
+                                    : <> Хугацаа дууссан.</>
+                                }
+                            </>
+                        )}
                     </div>
                 </>
             ) : (
-                <div className="sd-empty" style={{ padding: '24px 16px' }}>
-                    <p>💡 Зорилгоо оруулаад прогрессоо хянаарай.</p>
+                <div className="sd-plan-hint">
+                    💡 <b>{formatMonthShort(selectedPeriod)}-ын зорилтыг</b> дээрх талбарт оруулаад Enter дарна уу — биелэлтийн график &amp; дэлгэрэнгүй гарч ирнэ.
                 </div>
             )}
-        </div>
-    );
-}
 
-function PlanStat({ cls = '', label, value, sub }) {
-    return (
-        <div className={`sd-plan-stat ${cls}`}>
-            <div className="sd-ps-label">{label}</div>
-            <div className="sd-ps-value">{value}</div>
-            {sub && <div className="sd-ps-sub">{sub}</div>}
+            <PlanAnalysis
+                selectedPeriod={selectedPeriod}
+                months={months}
+                reports={reports}
+                currentReport={currentReport}
+            />
         </div>
     );
 }
 
 /* ============================================================
-   MONTH CALENDAR (per-day heatmap by month)
+   MONTH CALENDAR
    ============================================================ */
 export function MonthCalendars({ daily, channelFilter }) {
     const byMonth = useMemo(() => {
@@ -358,7 +654,7 @@ export function MonthCalendars({ daily, channelFilter }) {
                 const [y, m] = ym.split('-').map(Number);
                 const firstDay = new Date(Date.UTC(y, m - 1, 1));
                 const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
-                const firstWeekday = (firstDay.getUTCDay() + 6) % 7; // Mon=0
+                const firstWeekday = (firstDay.getUTCDay() + 6) % 7;
                 const byDate = new Map(items.map((i) => [i.date, i.total]));
 
                 return (
@@ -409,7 +705,7 @@ function tierFor(v, max) {
 }
 
 /* ============================================================
-   WEEKDAY BARS (horizontal)
+   WEEKDAY BARS
    ============================================================ */
 export function WeekdayBars({ weekday }) {
     if (!weekday?.length) return <div className="sd-empty">Өгөгдөл алга</div>;
@@ -445,11 +741,11 @@ export function WeekdayBars({ weekday }) {
 }
 
 /* ============================================================
-   PRODUCT BREAKDOWN (collapsible months → top products)
+   PRODUCT BREAKDOWN (collapsible months)
    ============================================================ */
 export function ProductBreakdown({ months, reports, channelFilter }) {
     const [openMonth, setOpenMonth] = useState(null);
-    const [sort, setSort] = useState('revenue'); // 'revenue' | 'qty'
+    const [sort, setSort] = useState('revenue');
 
     const monthRows = useMemo(() => {
         return months.map((m) => {
@@ -492,10 +788,7 @@ export function ProductBreakdown({ months, reports, channelFilter }) {
                 const maxVal = top[0] ? (sort === 'revenue' ? top[0].revenue : top[0].qty) : 1;
                 return (
                     <div key={row.yearMonth} className={`sd-pb-month ${open ? 'open' : ''}`}>
-                        <div
-                            className="sd-pb-month-head"
-                            onClick={() => setOpenMonth(open ? null : row.yearMonth)}
-                        >
+                        <div className="sd-pb-month-head" onClick={() => setOpenMonth(open ? null : row.yearMonth)}>
                             <div className="sd-pb-mo-name">{formatMonthShort(row.yearMonth)}</div>
                             <div className="sd-pb-mo-metrics">
                                 <div className="sd-pb-m"><b>{fmtT(row.total)}</b><span>Орлого</span></div>
@@ -544,14 +837,13 @@ export function ProductBreakdown({ months, reports, channelFilter }) {
 }
 
 /* ============================================================
-   PRODUCT ANALYSIS (search + monthly bars)
+   PRODUCT ANALYSIS
    ============================================================ */
 export function ProductAnalysis({ months, reports, channelFilter }) {
     const [query, setQuery] = useState('');
     const [monthFilter, setMonthFilter] = useState('all');
 
     const productIndex = useMemo(() => {
-        // unique product names across all months (filtered by channel)
         const set = new Set();
         for (const m of months) {
             const r = reports[m.yearMonth];
@@ -628,11 +920,7 @@ export function ProductAnalysis({ months, reports, channelFilter }) {
                         <button type="button" className="sd-psearch-clear" onClick={() => setQuery('')}>✕</button>
                     )}
                 </div>
-                <select
-                    className="sd-psearch-month"
-                    value={monthFilter}
-                    onChange={(e) => setMonthFilter(e.target.value)}
-                >
+                <select className="sd-psearch-month" value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)}>
                     <option value="all">Бүх сар</option>
                     {months.map((m) => (
                         <option key={m.yearMonth} value={m.yearMonth}>{formatMonthShort(m.yearMonth)}</option>
@@ -709,7 +997,7 @@ export function ProductAnalysis({ months, reports, channelFilter }) {
 }
 
 /* ============================================================
-   MONTHLY COMPARE — derived data for monthly bar / channel chart
+   MONTHLY COMPARE helpers
    ============================================================ */
 export function buildMonthly(months, reports, channelFilter) {
     return months.map((m) => {
@@ -763,7 +1051,7 @@ export function MonthlySummaryTable({ monthly }) {
 }
 
 /* ============================================================
-   DISCOUNT BOX (redesigned for light theme)
+   DISCOUNT BOX (champagne)
    ============================================================ */
 export function DiscountBox({ kpis }) {
     if (!kpis) return null;
@@ -778,13 +1066,184 @@ export function DiscountBox({ kpis }) {
                 <div className="sd-disc-bar-fill" style={{ width: `${Math.min(kpis.discount_rate, 100)}%` }} />
             </div>
             <div className="sd-disc-hint">
-                Хямдралын хувь: <b>{kpis.discount_rate}%</b> бохир орлогоос
+                Хувь: <b>{kpis.discount_rate}%</b> бохир орлогоос
             </div>
             <div className="sd-disc-summary">
-                <div>• Бохир борлуулалт: <b>{fmtT(gross)}</b></div>
+                <div>• Бохир: <b>{fmtT(gross)}</b></div>
                 <div>• Хөнгөлсөн: <b>{fmtT(kpis.total_discount)}</b></div>
-                <div>• Цэвэр орлого: <b className="net">{fmtT(kpis.total_sales)}</b></div>
+                <div>• Цэвэр: <b className="net">{fmtT(kpis.total_sales)}</b></div>
             </div>
         </div>
     );
+}
+
+/* ============================================================
+   INSIGHTS BOX (7 strategy blocks)
+   ============================================================ */
+export function InsightsBox({ report, monthly, channelFilter, selectedPeriod }) {
+    if (!report) return null;
+    const k = report.kpis;
+    const channels = report.channels || [];
+    const products = report.products || [];
+    const families = report.families || [];
+    const bkpis = report.bundle_kpis || {};
+    const totalSales = k.total_sales || 0;
+    const channelLabel = channelFilter === 'all' ? 'Бүх суваг' : channelFilter;
+    const periodLabel = selectedPeriod === 'all' ? 'Бүх сар' : formatMonthShort(selectedPeriod);
+
+    const blocks = [];
+
+    // 1) Performance overview
+    blocks.push(
+        <div key="overview" className="sd-plan-block neutral">
+            <h4>📊 Гүйцэтгэлийн тойм</h4>
+            <div className="sd-pb-intro">
+                Хамрах хүрээ: <b>{channelLabel}</b> · <b>{periodLabel}</b> · <b>{k.n_days}</b> идэвхтэй хоног.
+            </div>
+            <div className="sd-ins-metrics">
+                <div className="sd-ins-metric"><div className="sd-im-v">{fmtT(totalSales)}</div><div className="sd-im-l">Нийт орлого</div></div>
+                <div className="sd-ins-metric"><div className="sd-im-v">{fmt(k.total_receipts)}</div><div className="sd-im-l">Чек</div></div>
+                <div className="sd-ins-metric"><div className="sd-im-v">{fmt(k.total_qty)}</div><div className="sd-im-l">Бараа (ш)</div></div>
+                <div className="sd-ins-metric"><div className="sd-im-v">{fmtT(k.avg_basket)}</div><div className="sd-im-l">Дундаж чек</div></div>
+                <div className="sd-ins-metric"><div className="sd-im-v">{fmtT(k.avg_daily_sales)}</div><div className="sd-im-l">Өдрийн дундаж</div></div>
+                <div className="sd-ins-metric"><div className="sd-im-v">{k.avg_items || 0}</div><div className="sd-im-l">Бараа/чек</div></div>
+            </div>
+        </div>
+    );
+
+    // 2) Channel concentration (only when all)
+    if (channelFilter === 'all' && channels.length > 0) {
+        const total = channels.reduce((s, c) => s + c.sales, 0) || 1;
+        const sorted = [...channels].sort((a, b) => b.sales - a.sales);
+        const top1 = sorted[0];
+        const top1share = (top1.sales / total) * 100;
+        const top2share = sorted.slice(0, 2).reduce((s, c) => s + c.sales, 0) / total * 100;
+        const premium = [...channels].sort((a, b) => b.avg_basket - a.avg_basket)[0];
+        const concRisk = top2share >= 60;
+        blocks.push(
+            <div key="channels" className="sd-plan-block info">
+                <h4>📡 Сувгийн төвлөрөл ба үр ашиг</h4>
+                <div className="sd-pb-intro">
+                    <b>{top1.channel}</b> тэргүүлэгч суваг — нийт орлогын <b>{top1share.toFixed(1)}%</b>.
+                    Эхний 2 суваг хамтдаа <b>{top2share.toFixed(0)}%</b>
+                    {concRisk ? <> — <b>төвлөрлийн эрсдэл өндөр</b>, сувгаа төрөлжүүлэх нь зүйтэй.</> : <> — харьцангуй тэнцвэртэй.</>}
+                </div>
+                {premium && (
+                    <div className="sd-pb-intro">
+                        Хамгийн өндөр дундаж чектэй (premium) суваг: <b>{premium.channel}</b> — {fmtT(premium.avg_basket)}.
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // 3) Product & family concentration (Pareto)
+    if (products.length > 0) {
+        const top5 = products.slice(0, 5);
+        const top5rev = top5.reduce((s, p) => s + p.revenue, 0);
+        const top5share = totalSales > 0 ? (top5rev / totalSales) * 100 : 0;
+        const topP = products[0];
+        let famNode = null;
+        if (families.length > 0) {
+            const f = families[0];
+            const fshare = totalSales > 0 ? (f.revenue / totalSales) * 100 : 0;
+            famNode = <> Тэргүүлэх ангилал: <b>{f.family}</b> ({fshare.toFixed(1)}%).</>;
+        }
+        blocks.push(
+            <div key="pareto" className="sd-plan-block good">
+                <h4>🧴 Бүтээгдэхүүн ба ангиллын төвлөрөл</h4>
+                <div className="sd-pb-intro">
+                    Топ 5 бүтээгдэхүүн нийт орлогын <b>{top5share.toFixed(0)}%</b>-ийг бүрдүүлэв (Парето хамаарал).
+                    Топ бараа: <b>{shortName(topP.product_name, 40)}</b> — {fmtT(topP.revenue)}.{famNode}
+                </div>
+                <div className="sd-pb-intro">
+                    {top5share >= 50
+                        ? 'Орлого цөөн бүтээгдэхүүнд төвлөрсөн — эдгээрийн нөөц тасрахаас сэргийлж, дагалдах (cross-sell) санал бэлдэх.'
+                        : 'Орлого харьцангуй тархсан — тогтвортой бүтэц.'}
+                </div>
+            </div>
+        );
+    }
+
+    // 4) Price, basket, discount
+    {
+        const discRate = k.discount_rate || 0;
+        const discHealth = discRate < 10 ? 'эрүүл түвшин ✅' : (discRate < 15 ? 'зохистой' : 'өндөр — ашигт ажиллагаандаа анхаар ⚠');
+        const items = k.avg_items || 0;
+        blocks.push(
+            <div key="basket" className="sd-plan-block neutral">
+                <h4>💳 Үнэ, сагс ба хөнгөлөлт</h4>
+                <div className="sd-pb-intro">
+                    Дундаж чек <b>{fmtT(k.avg_basket)}</b> (нэг чекд {items} бараа). Хөнгөлөлтийн хувь <b>{discRate}%</b> — {discHealth}.
+                </div>
+                <div className="sd-pb-intro">
+                    {items < 2
+                        ? 'Нэг чекд дунджаар 2-оос бага бараа — багц/нэмэлт саналаар сагсны хэмжээг өсгөх боломж.'
+                        : 'Сагсны хэмжээ эрүүл — багцаар цаашид өсгөх боломжтой.'}
+                </div>
+            </div>
+        );
+    }
+
+    // 5) Bundle penetration
+    if (bkpis.total_bundles_revenue !== undefined) {
+        const bshare = bkpis.bundle_share_pct || 0;
+        const lowBundle = bshare < 20;
+        blocks.push(
+            <div key="bundle" className={`sd-plan-block ${lowBundle ? 'warn' : 'good'}`}>
+                <h4>🎁 Багцын нэвтрэлт</h4>
+                <div className="sd-pb-intro">
+                    Багц нийт орлогын <b>{bshare}%</b>-ийг бүрдүүлэв (
+                    {((bkpis.total_bundles_revenue || 0) / 1_000_000).toFixed(1)}М · {bkpis.unique_bundles || 0} төрөл).
+                    {' '}{lowBundle
+                        ? 'Багцын эзлэх хувь бага — багцлалт, иж бүрдлийн саналыг идэвхжүүлбэл дундаж чек өснө.'
+                        : 'Багц сайн ажиллаж байна — улирлын шинэ багцаар өргөтгөх.'}
+                </div>
+            </div>
+        );
+    }
+
+    // 6) Trend (only when all period & 2+ months)
+    if (selectedPeriod === 'all' && Array.isArray(monthly) && monthly.length >= 2) {
+        const arr = monthly.filter((m) => m.total > 0);
+        if (arr.length >= 2) {
+            const g = arr[0].total > 0 ? (arr[arr.length - 1].total / arr[0].total - 1) * 100 : 0;
+            const best = arr.reduce((a, b) => (b.avgDaily > a.avgDaily ? b : a));
+            blocks.push(
+                <div key="trend" className="sd-plan-block info">
+                    <h4>📈 Чиг хандлага</h4>
+                    <div className="sd-pb-intro">
+                        {arr[0].label}-аас {arr[arr.length - 1].label} хүртэл орлого
+                        {' '}<b>{Math.abs(g).toFixed(0)}%</b> {g >= 0 ? 'өссөн' : 'буурсан'}.
+                        Өдрийн дунджаар хамгийн хүчтэй сар: <b>{best.label}</b> ({fmtT(best.avgDaily)}/өдөр).
+                    </div>
+                </div>
+            );
+        }
+    }
+
+    // 7) Strategy recommendations
+    const recs = [];
+    if (channelFilter === 'all' && channels.length > 1) {
+        const total = channels.reduce((s, c) => s + c.sales, 0) || 1;
+        const sorted = [...channels].sort((a, b) => b.sales - a.sales);
+        if (sorted.slice(0, 2).reduce((s, c) => s + c.sales, 0) / total >= 0.6) {
+            recs.push('Сул сувгуудыг (Оффис, Pop-up/Expo) идэвхжүүлж, орлогын төвлөрлийг бууруулах.');
+        }
+    }
+    if ((bkpis.bundle_share_pct || 0) < 25) recs.push('Багц/иж бүрдлийн саналыг нэмэгдүүлж дундаж чекийг өсгөх.');
+    if ((k.avg_items || 0) < 2) recs.push('Кассын үед дагалдах бараа санал болгож (cross-sell) нэг чекний барааг өсгөх.');
+    if ((k.discount_rate || 0) >= 12) recs.push('Хөнгөлөлтийн бодлогоо хянаж, ашгийн маржаа хамгаалах.');
+    recs.push('Онлайн сувгийн эзлэх хувийг өсгөх (хүргэлт + олон нийтийн контент, vlog).');
+    recs.push('Топ бүтээгдэхүүний нөөцийг тогтмол хангаж, борлуулалтын тасралтаас сэргийлэх.');
+    blocks.push(
+        <div key="strategy" className="sd-plan-block season">
+            <h4>🚀 Стратегийн зөвлөмж</h4>
+            <ul className="sd-pl-list">
+                {recs.slice(0, 5).map((r, i) => <li key={i}><span className="sd-pl-name">{r}</span></li>)}
+            </ul>
+        </div>
+    );
+
+    return <>{blocks}</>;
 }

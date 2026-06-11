@@ -35,6 +35,7 @@ import {
     buildMonthly,
     MonthlySummaryTable,
     DiscountBox,
+    InsightsBox,
 } from '../../components/admin/sales/SalesDashboardParts';
 import './SalesDashboard.css';
 
@@ -251,11 +252,8 @@ export default function SalesDashboard() {
 
     const k = filteredReport?.kpis;
     const bk = filteredReport?.bundle_kpis;
-    const totalFromChannels = filteredReport?.channels?.reduce((s, c) => s + c.sales, 0) || 0;
-    const topChannel = filteredReport?.channels?.[0];
-    const topProduct = filteredReport?.products?.[0];
-    const promoFamily = filteredReport?.families?.find((f) => f.family?.includes('Урамшуулал'));
-    const planKey = `${selectedPeriod}:${channelFilter}:${dateRange.mode}:${dateRange.start || ''}:${dateRange.end || ''}`;
+    const dateActive = dateRange.mode && dateRange.mode !== 'off' && !!dateRange.start;
+    const showMonthlyCompare = selectedPeriod === 'all' && !dateActive && monthlyData && monthlyData.length >= 2;
 
     return (
         <div className="sales-dashboard">
@@ -321,7 +319,7 @@ export default function SalesDashboard() {
                 {!loadingMonths && months.length > 0 && (
                     <>
                         {/* Period switcher */}
-                        <div className="sd-period-switcher">
+                        <div className={`sd-period-switcher ${dateActive ? 'disabled' : ''}`}>
                             <span className="sd-period-label">📆 Хугацаа</span>
                             <button
                                 type="button"
@@ -425,32 +423,42 @@ export default function SalesDashboard() {
                         {/* KPIs */}
                         <div className="sd-kpi-grid sd-fade-in">
                             <Kpi cls="k1" label="Нийт цэвэр борлуулалт" value={fmtT(k.total_sales)} sub={`${k.n_days} хоногийн дүн`} />
-                            <Kpi cls="k2" label="Үйлчлүүлсэн хүн" value={fmt(k.total_receipts)} sub="чек/баримт" />
+                            <Kpi cls="k2" label="Үйлчлүүлсэн хүний тоо" value={fmt(k.total_receipts)} sub="чек/баримт" />
                             <Kpi cls="k3" label="Борлуулсан бараа" value={`${fmt(k.total_qty)} ш`} sub="нийт тоо ширхэг" />
                             <Kpi cls="k4" label="Дундаж чек" value={fmtT(k.avg_basket)} sub={`${k.avg_items} бараа/чек`} />
-                            <Kpi cls="k5" label="Өдрийн дундаж" value={fmtT(k.avg_daily_sales)} sub={`${k.avg_daily_receipts} чек/өдөр`} />
+                            <Kpi cls="k5" label="Өдрийн дундаж орлого" value={fmtT(k.avg_daily_sales)} sub={`${k.avg_daily_receipts} чек/өдөр`} />
                         </div>
 
                         {/* Best/worst day */}
                         <div className="sd-section-title">
                             <span className="sd-emoji">🏆</span> Эрэлттэй өдрүүд
-                            <span className="sd-period-chip">{getPeriodLabel(selectedPeriod)}</span>
+                            <span className="sd-period-chip">{getChannelLabel(channelFilter)} · {getPeriodLabel(selectedPeriod)}</span>
                         </div>
                         <DayHighlight lineItems={dateFilteredItems} />
 
                         {/* Top family hero */}
                         <div className="sd-section-title">
                             <span className="sd-emoji">✨</span> Тэргүүлэх ангилал
-                            <span className="sd-period-chip">{getPeriodLabel(selectedPeriod)}</span>
+                            <span className="sd-period-chip">{getChannelLabel(channelFilter)} · {getPeriodLabel(selectedPeriod)}</span>
                         </div>
                         <TopFamilyHero families={filteredReport.families || []} totalSales={k.total_sales} />
 
-                        {/* Sales plan */}
+                        {/* Sales plan — per-month with deep analysis */}
                         <div className="sd-section-title">
                             <span className="sd-emoji">🎯</span> Борлуулалтын төлөвлөгөө
-                            <span className="sd-period-chip">{getPeriodLabel(selectedPeriod)}</span>
+                            <span className="sd-period-chip">
+                                {dateActive ? 'Огнооны шүүлт идэвхтэй' : getPeriodLabel(selectedPeriod)}
+                            </span>
                         </div>
-                        <SalesPlan planKey={planKey} totalSales={k.total_sales} nDays={k.n_days} />
+                        <SalesPlan
+                            selectedPeriod={selectedPeriod}
+                            dateActive={dateActive}
+                            kpis={k}
+                            months={months}
+                            reports={allReports}
+                            currentReport={filteredReport}
+                            latestDate={dateBounds.max}
+                        />
 
                         {/* Dynamics */}
                         <div className="sd-section-title">
@@ -474,8 +482,8 @@ export default function SalesDashboard() {
                             </div>
                         </div>
 
-                        {/* Monthly compare (only when all) */}
-                        {monthlyData && monthlyData.length >= 2 && (
+                        {/* Monthly compare (only when all period & no date filter) */}
+                        {showMonthlyCompare && (
                             <>
                                 <div className="sd-section-title">
                                     <span className="sd-emoji">📅</span> Сарын харьцуулалт
@@ -603,32 +611,16 @@ export default function SalesDashboard() {
                             </div>
                         </div>
 
-                        {/* Strategy insights */}
+                        {/* Strategy insights — 7 blocks */}
                         <div className="sd-section-title">
                             <span className="sd-emoji">💡</span> Дүгнэлт &amp; Стратеги
                         </div>
-                        <div className="sd-card">
-                            {topChannel && (
-                                <div className="sd-insight">
-                                    <b>{topChannel.channel}</b> тэргүүлж байна — нийт орлогын{' '}
-                                    <span className="sd-highlight">{((topChannel.sales / (totalFromChannels || 1)) * 100).toFixed(1)}%</span>.
-                                </div>
-                            )}
-                            {topProduct && (
-                                <div className="sd-insight">
-                                    Топ бараа: <b>{topProduct.product_name.slice(0, 40)}{topProduct.product_name.length > 40 ? '…' : ''}</b> — {fmtT(topProduct.revenue)} ({topProduct.qty} ш).
-                                </div>
-                            )}
-                            {promoFamily && (
-                                <div className="sd-insight pink">
-                                    <b>Урамшууллын багц</b> орлогын{' '}
-                                    <span className="sd-highlight">{((promoFamily.revenue / (k.total_sales || 1)) * 100).toFixed(1)}%</span> бүрдүүлж байна.
-                                </div>
-                            )}
-                            <div className="sd-insight">
-                                Дундаж чек {fmtT(k.avg_basket)} — <span className="sd-highlight">cross-sell</span> сайн ({k.avg_items} бараа/чек).
-                            </div>
-                        </div>
+                        <InsightsBox
+                            report={filteredReport}
+                            monthly={monthlyData}
+                            channelFilter={channelFilter}
+                            selectedPeriod={selectedPeriod}
+                        />
 
                         <div className="sd-footer">
                             Sweet Secret · Wettrust · Борлуулалтын дашбоард
