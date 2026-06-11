@@ -14,6 +14,7 @@ import Orders from './pages/admin/Orders';
 import Promotions from './pages/admin/Promotions';
 import AdminLogin from './pages/admin/AdminLogin';
 import StaffRoles from './pages/admin/StaffRoles';
+import SectionOverview from './pages/admin/SectionOverview';
 import Profile from './pages/Profile';
 import StaffWorkspace from './pages/staff/StaffWorkspace';
 import { PERMISSIONS } from './config/roles';
@@ -149,6 +150,13 @@ function App() {
                         <StaffRoles />
                     </RequireAdmin>
                 } />
+
+                {/* Section overview pages */}
+                <Route path="company" element={<SectionOverview sectionKey="company" />} />
+                <Route path="finance" element={<SectionOverview sectionKey="finance" />} />
+                <Route path="website" element={<SectionOverview sectionKey="website" />} />
+                <Route path="marketing" element={<SectionOverview sectionKey="marketing" />} />
+                <Route path="settings" element={<SectionOverview sectionKey="settings" />} />
             </Route>
         </Routes>
     );

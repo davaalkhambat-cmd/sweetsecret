@@ -365,6 +365,15 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_OVERVIEW,
         iconName: 'Building',
         comingSoon: true,
+        keyb: 'About us · Бидний тухай',
+        cardTitle: { it: 'Бидний', rg: 'тухай' },
+        cardDesc: 'Sweet Secret-ийн алсын хараа, үнэт зүйл, түүх, баг бүрийн профайл. Компанийн үндсэн дотоод мэдээллийн сан.',
+        bullets: [
+            'Алсын хараа, эрхэм зорилго, үнэт зүйл',
+            'Манай баг (org chart)',
+            'Компанийн түүх, амжилт — 2016 оноос',
+            'Салбарууд · Холбоо барих',
+        ],
     },
     {
         key: 'company-monthly',
@@ -374,6 +383,15 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_OVERVIEW,
         iconName: 'LayoutDashboard',
         comingSoon: true,
+        keyb: 'Monthly pulse · Сарын хэмнэл',
+        cardTitle: { it: 'Энэ сарын', rg: 'dashboard' },
+        cardDesc: 'Live мэдээлэл, KPI. Энэ сарын төрсөн өдөр, ажлын ой, онцлох үйл явдал, сургалтын хуваарь.',
+        bullets: [
+            'Live KPI (4 метрик)',
+            'Төрсөн өдөр, ажлын ой',
+            'Онцлох үйл явдал',
+            'Сургалтын хуваарь',
+        ],
     },
 
     // 02. Санхүү
@@ -384,6 +402,15 @@ export const ADMIN_MENU = [
         section: 'finance',
         requiredPermission: PERMISSIONS.VIEW_FINANCE,
         iconName: 'BarChart3',
+        keyb: 'Sales · Борлуулалт',
+        cardTitle: { it: 'Борлуулалтын', rg: 'дашбоард' },
+        cardDesc: 'Бүх сувгийн live борлуулалтын аналитик. KPI, чиг хандлага, огнооны шүүлтүүр.',
+        bullets: [
+            'Суваг бүрээр — И-Март, Шангри-Ла, УИД, Хүргэлт',
+            'Огноо / хугацааны шүүлтүүр',
+            'KPI, чиг хандлага, heatmap',
+            'Авто insights',
+        ],
     },
     {
         key: 'finance-balance',
@@ -393,6 +420,14 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_FINANCE,
         iconName: 'Boxes',
         comingSoon: true,
+        keyb: 'Inventory · Нөөц',
+        cardTitle: { it: 'Агуулахын', rg: 'үлдэгдэл' },
+        cardDesc: 'Салбар болон төв агуулахын бараа материалын үлдэгдэл, хөдөлгөөн, дуусч буй SKU-ийн хяналт.',
+        bullets: [
+            'Салбар тус бүрийн үлдэгдэл',
+            'Дуусч буй / 0 үлдэгдэлтэй SKU',
+            'Ангиллаар үнэлгээ',
+        ],
     },
     {
         key: 'finance-reports',
@@ -402,6 +437,14 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_FINANCE,
         iconName: 'FileText',
         comingSoon: true,
+        keyb: 'Reports · Тайлан',
+        cardTitle: { it: 'Борлуулалтын', rg: 'тайлан' },
+        cardDesc: 'Сар, улирлын санхүүгийн нэгдсэн тайлан — орлого, ашиг, төлбөр тооцоо, экспорт.',
+        bullets: [
+            'Сар / улирлын тайлан',
+            'Орлого, ашгийн задаргаа',
+            'PDF / Excel экспорт',
+        ],
     },
 
     // 03. Сайтын удирдлага
@@ -412,6 +455,15 @@ export const ADMIN_MENU = [
         section: 'website',
         requiredPermission: PERMISSIONS.VIEW_ORDERS,
         iconName: 'Truck',
+        keyb: 'Delivery · Хүргэлт',
+        cardTitle: { it: 'Хүргэлт', rg: 'захиалга' },
+        cardDesc: 'Захиалгын төлөв, хүргэлтийн бүс, хугацаа болон төлбөрийн нэгдсэн хяналт.',
+        bullets: [
+            'Захиалгын төлөв хяналт',
+            'Хүргэлтийн бүс, төлбөр',
+            'Хүргэгч, маршрут',
+            'Нууцлалтай сав баглаа',
+        ],
     },
     {
         key: 'promotions',
@@ -420,6 +472,15 @@ export const ADMIN_MENU = [
         section: 'website',
         requiredPermission: PERMISSIONS.VIEW_MARKETING,
         iconName: 'BadgePercent',
+        keyb: 'Rewards · Урамшуулал',
+        cardTitle: { it: 'Урамшуулал', rg: 'Secret Circle' },
+        cardDesc: 'Secret Circle лоялти — Petal · Bloom · Rose түвшин, оноо, купон, кампанит ажил.',
+        bullets: [
+            'Secret Circle түвшин',
+            'Оноо ба купон',
+            'Урамшууллын кампанит ажил',
+            'Subscription box хөнгөлөлт',
+        ],
     },
     {
         key: 'customers',
@@ -429,6 +490,15 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_CUSTOMERS,
         iconName: 'Users',
         comingSoon: true,
+        keyb: 'Customers · Үйлчлүүлэгч',
+        cardTitle: { it: 'Үйлчлүүлэгчийн', rg: 'менежмент' },
+        cardDesc: 'Хэрэглэгчийн профайл, захиалгын түүх, сегментчлэл болон харилцааны бүртгэл.',
+        bullets: [
+            'Хэрэглэгчийн профайл, түүх',
+            'Сегментчлэл',
+            'Захиалгын түүх',
+            'CRM, харилцаа',
+        ],
     },
     {
         key: 'products',
@@ -437,6 +507,15 @@ export const ADMIN_MENU = [
         section: 'website',
         requiredPermission: PERMISSIONS.VIEW_PRODUCTS,
         iconName: 'Package',
+        keyb: 'Catalog · Бараа',
+        cardTitle: { it: 'Барааны', rg: 'удирдлага' },
+        cardDesc: 'Бүтээгдэхүүний каталог, ангилал, үнэ, контент болон нөөцтэй холбоо.',
+        bullets: [
+            'Бараа нэмэх / засах',
+            'Ангилал, үнэ',
+            'Зураг, тайлбар, контент',
+            'Нөөцтэй холбоо',
+        ],
     },
 
     // 04. Маркетинг
@@ -448,6 +527,15 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_MARKETING,
         iconName: 'Megaphone',
         comingSoon: true,
+        keyb: 'Social · Сошиал',
+        cardTitle: { it: 'Social', rg: 'маркетинг' },
+        cardDesc: 'Instagram, Facebook, TikTok сувгийн контент төлөвлөлт, кампанит ажил, influencer хамтрал.',
+        bullets: [
+            'Контент календарь',
+            'Кампанит ажлын төлөвлөлт',
+            'Influencer хамтрал',
+            'Пост / сторис хуваарь',
+        ],
     },
     {
         key: 'marketing-reports',
@@ -457,6 +545,15 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_MARKETING,
         iconName: 'BarChart3',
         comingSoon: true,
+        keyb: 'Analytics · Тайлан',
+        cardTitle: { it: 'Маркетингийн', rg: 'тайлан' },
+        cardDesc: 'Сувгийн гүйцэтгэл, хүрэлцээ, оролцоо болон кампанит ажлын ROI-ийн нэгдсэн тайлан.',
+        bullets: [
+            'Сувгийн гүйцэтгэл',
+            'Хүрэлцээ, оролцоо',
+            'Кампанит ажлын ROI',
+            'Хөрвүүлэлтийн тайлан',
+        ],
     },
 
     // 05. Тохиргоо
@@ -467,6 +564,15 @@ export const ADMIN_MENU = [
         section: 'settings',
         requiredPermission: PERMISSIONS.VIEW_ROLES,
         iconName: 'ShieldCheck',
+        keyb: 'Team & Access · Хүний нөөц',
+        cardTitle: { it: 'Хүний нөөц', rg: 'ба эрх' },
+        cardDesc: 'Ажилтны бүртгэл, үүрэг, салбараар хандах эрх болон нэвтрэлтийн удирдлага.',
+        bullets: [
+            'Ажилтны бүртгэл, профайл',
+            'Үүрэг ба эрхийн түвшин',
+            'Салбараар хандалт',
+            'Нэвтрэлт, аюулгүй байдал',
+        ],
     },
     {
         key: 'settings-other',
@@ -476,15 +582,54 @@ export const ADMIN_MENU = [
         requiredPermission: PERMISSIONS.VIEW_SETTINGS,
         iconName: 'Settings',
         comingSoon: true,
+        keyb: 'General · Бусад',
+        cardTitle: { it: 'Бусад', rg: 'тохиргоо' },
+        cardDesc: 'Системийн ерөнхий тохиргоо, брэнд, мэдэгдэл болон гадаад холболтууд.',
+        bullets: [
+            'Ерөнхий тохиргоо',
+            'Брэнд, лого, өнгө',
+            'Мэдэгдэл',
+            'Гадаад холболт (integration)',
+        ],
     },
 ];
 
 export const ADMIN_MENU_SECTIONS = [
-    { key: 'company',  number: '01', label: 'Манай компани',    englishLabel: 'About us',  iconName: 'Building',   description: 'Бидний тухай, сарын dashboard' },
-    { key: 'finance',  number: '02', label: 'Санхүү',           englishLabel: 'Finance',   iconName: 'Wallet',     description: 'Борлуулалт, үлдэгдэл, тайлан' },
-    { key: 'website',  number: '03', label: 'Сайтын удирдлага', englishLabel: 'Website',   iconName: 'Globe',      description: 'Захиалга, урамшуулал, бараа, харилцагч' },
-    { key: 'marketing',number: '04', label: 'Маркетинг',        englishLabel: 'Marketing', iconName: 'Megaphone',  description: 'Social контент, кампанит ажил, ROI' },
-    { key: 'settings', number: '05', label: 'Тохиргоо',         englishLabel: 'Settings',  iconName: 'Settings',   description: 'Хүний нөөц ба системийн тохиргоо' },
+    {
+        key: 'company', number: '01', label: 'Манай компани', englishLabel: 'About us',
+        iconName: 'Building', description: 'Бидний тухай, сарын dashboard',
+        overviewPath: '/admin/company',
+        heroDesc: 'Sweet Secret-ийн дотоод мэдээлэл, баг, алсын хараа болон өдрийн амьдрал.',
+        gradTitle: 'Манай', plainTitle: 'компани',
+    },
+    {
+        key: 'finance', number: '02', label: 'Санхүү', englishLabel: 'Finance',
+        iconName: 'Wallet', description: 'Борлуулалт, үлдэгдэл, тайлан',
+        overviewPath: '/admin/finance',
+        heroDesc: 'Борлуулалт, үлдэгдэл, санхүүгийн тайлангийн нэгдсэн төв.',
+        gradTitle: 'Санхүү', plainTitle: '',
+    },
+    {
+        key: 'website', number: '03', label: 'Сайтын удирдлага', englishLabel: 'Website',
+        iconName: 'Globe', description: 'Захиалга, урамшуулал, бараа, харилцагч',
+        overviewPath: '/admin/website',
+        heroDesc: 'Захиалга, урамшуулал, үйлчлүүлэгч болон барааны нэгдсэн удирдлага.',
+        gradTitle: 'Сайтын', plainTitle: 'удирдлага',
+    },
+    {
+        key: 'marketing', number: '04', label: 'Маркетинг', englishLabel: 'Marketing',
+        iconName: 'Megaphone', description: 'Social контент, кампанит ажил, ROI',
+        overviewPath: '/admin/marketing',
+        heroDesc: 'Сошиал контент, кампанит ажил болон гүйцэтгэлийн тайлангийн төв.',
+        gradTitle: 'Маркетинг', plainTitle: '',
+    },
+    {
+        key: 'settings', number: '05', label: 'Тохиргоо', englishLabel: 'Settings',
+        iconName: 'Settings', description: 'Хүний нөөц ба системийн тохиргоо',
+        overviewPath: '/admin/settings',
+        heroDesc: 'Хүний нөөц, хандах эрх болон системийн ерөнхий тохиргоо.',
+        gradTitle: 'Тохиргоо', plainTitle: '',
+    },
 ];
 
 export const roleHasPermission = (roleKey, permission, rolesSource = ROLES) => {
@@ -520,11 +665,8 @@ export const getAssignableRoles = (rolesSource = ROLES) => {
 };
 
 export const getDefaultAdminPath = (roleKey, rolesSource = ROLES) => {
-    const menu = getMenuForRole(roleKey, rolesSource);
     const role = getRoleInfo(roleKey, rolesSource);
-    // Эхний live (coming-soon биш) item-ийг сонгоно
-    const firstLive = menu.find((item) => !item.comingSoon);
-    return firstLive?.path || role.landingPage || '/admin';
+    return role.landingPage || '/admin';
 };
 
 export const getSectionStateForRole = (roleKey, rolesSource = ROLES) => {

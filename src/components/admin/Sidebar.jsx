@@ -12,7 +12,7 @@ import {
     ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { ADMIN_MENU, ADMIN_MENU_SECTIONS, getMenuForRole } from '../../config/roles';
+import { ADMIN_MENU_SECTIONS, getMenuForRole } from '../../config/roles';
 
 const SECTION_ICON_MAP = {
     Building: <Building2 strokeWidth={1.7} />,
@@ -41,29 +41,24 @@ const Sidebar = ({ isCollapsed, toggleSidebar, onLogout, isLoggingOut = false })
     const location = useLocation();
 
     const menuItems = React.useMemo(() => getMenuForRole(role, roles), [role, roles]);
-    const liveByPath = React.useMemo(
-        () => Object.fromEntries(ADMIN_MENU.filter((i) => !i.comingSoon).map((i) => [i.path, i])),
-        []
-    );
 
-    // 5 top-level section items
+    // 5 top-level section items — section overview хуудас руу заана
     const sectionItems = React.useMemo(() => {
         return ADMIN_MENU_SECTIONS.map((section) => {
             const items = menuItems.filter((it) => it.section === section.key);
-            const liveItems = items.filter((it) => !it.comingSoon);
-            const firstLive = liveItems[0];
             return {
                 ...section,
                 items,
-                liveCount: liveItems.length,
-                target: firstLive?.path || null,
-                comingSoon: liveItems.length === 0,
+                target: section.overviewPath || `/admin/${section.key}`,
+                comingSoon: false, // section overview өөрөө байгаа учир үргэлж navigable
             };
         }).filter((s) => s.items.length > 0);
     }, [menuItems]);
 
     const isSectionActive = React.useCallback(
         (section) => {
+            // Section overview path-той тохирох эсвэл доторх ямар нэг item-ын path-той тохирох
+            if (location.pathname === section.overviewPath) return true;
             return section.items.some((item) =>
                 item.path === '/admin'
                     ? location.pathname === '/admin'
