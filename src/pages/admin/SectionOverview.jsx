@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
+import { ArrowRight, Clock } from 'lucide-react';
 import { ADMIN_MENU, ADMIN_MENU_SECTIONS, getMenuForRole } from '../../config/roles';
 import { useAuth } from '../../context/AuthContext';
 
@@ -25,22 +25,6 @@ export default function SectionOverview({ sectionKey }) {
     return (
         <div className="ss-overview">
             <div className="ss-ov-wrap">
-                {/* Topbar */}
-                <div className="ss-ov-topbar">
-                    <button
-                        type="button"
-                        className="ss-ov-back"
-                        onClick={() => navigate('/admin')}
-                    >
-                        <ArrowLeft size={18} strokeWidth={2.2} />
-                        <span>Үндсэн цэс</span>
-                    </button>
-                    <div className="ss-ov-logo">
-                        <span className="ss-ov-mk">SS</span>
-                        <span className="ss-ov-wm">Sweet Secret</span>
-                    </div>
-                </div>
-
                 {/* Hero */}
                 <div className="ss-ov-hero">
                     <div className="ss-ov-eyebrow">
