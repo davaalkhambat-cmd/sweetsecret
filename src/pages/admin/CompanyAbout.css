@@ -1,0 +1,495 @@
+/* ============================================================
+   Бидний тухай — Company About page
+   ============================================================ */
+.cabt {
+    --cabt-bg: #F1EFE8;
+    --cabt-surface: #FFFFFF;
+    --cabt-surface-warm: #FCF4F7;
+    --cabt-ink: #2C2C2A;
+    --cabt-ink-2: #5b544f;
+    --cabt-ink-3: #938b83;
+    --cabt-ink-4: #c6bfb5;
+    --cabt-line: #e3ddd1;
+    --cabt-line-2: #ece7dc;
+    --cabt-wine: #6B1839;
+    --cabt-wine-soft: #FBEAF0;
+    --cabt-wine-rgb: 107, 24, 57;
+    --cabt-sage: #B5BFA1;
+    --cabt-sage-deep: #7f8c68;
+    --cabt-gold: #b58a5a;
+    --cabt-gold-deep: #9a7038;
+    --cabt-grad-hero: linear-gradient(135deg, #8a2350 0%, #6B1839 52%, #4d1029 100%);
+    --cabt-grad-cta: linear-gradient(135deg, #6B1839 0%, #8a2350 100%);
+
+    font-family: 'Manrope', system-ui, sans-serif;
+    color: var(--cabt-ink);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+.cabt-wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 4px 24px 80px;
+}
+
+/* ====== HERO ====== */
+.cabt-hero {
+    position: relative;
+    border-radius: 26px;
+    padding: 40px 40px;
+    margin: 12px 0 0;
+    background: var(--cabt-grad-hero);
+    overflow: hidden;
+    color: #fff;
+}
+.cabt-hero::before {
+    content: '';
+    position: absolute;
+    top: -90px;
+    right: -70px;
+    width: 320px;
+    height: 320px;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.16), transparent 70%);
+    pointer-events: none;
+}
+.cabt-hero::after {
+    content: '';
+    position: absolute;
+    bottom: -70px;
+    left: -50px;
+    width: 220px;
+    height: 220px;
+    background: radial-gradient(circle, rgba(181, 191, 161, 0.22), transparent 70%);
+    pointer-events: none;
+}
+.cabt-hero-kicker {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    opacity: 0.9;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    z-index: 1;
+}
+.cabt-hero-kicker::before {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.6);
+}
+.cabt-hero-title {
+    font-family: 'Fraunces', serif;
+    font-size: 40px;
+    font-weight: 500;
+    letter-spacing: -1px;
+    line-height: 1.04;
+    margin: 0 0 14px;
+    position: relative;
+    z-index: 1;
+}
+.cabt-hero-title em { font-style: italic; font-weight: 600; }
+.cabt-hero-sub {
+    font-size: 14px;
+    opacity: 0.92;
+    max-width: 560px;
+    line-height: 1.65;
+    font-weight: 400;
+    position: relative;
+    z-index: 1;
+}
+.cabt-hero-stats {
+    display: flex;
+    gap: 32px;
+    margin-top: 26px;
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+}
+.cabt-hero-stat-num {
+    font-family: 'Fraunces', serif;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.4px;
+    line-height: 1;
+}
+.cabt-hero-stat-suffix { font-size: 15px; }
+.cabt-hero-stat-label {
+    font-size: 10.5px;
+    opacity: 0.82;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 7px;
+}
+
+/* ====== SECTION ====== */
+.cabt-section { margin-top: 40px; }
+.cabt-section-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+.cabt-section-kicker {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--cabt-wine);
+    margin-bottom: 6px;
+}
+.cabt-section-title {
+    font-family: 'Fraunces', serif;
+    font-size: 24px;
+    font-weight: 500;
+    letter-spacing: -0.5px;
+    color: var(--cabt-ink);
+    line-height: 1.1;
+    margin: 0;
+}
+.cabt-section-title em { font-style: italic; font-weight: 600; color: var(--cabt-wine); }
+.cabt-section-sub {
+    font-size: 13px;
+    color: var(--cabt-ink-2);
+    margin-top: 8px;
+    max-width: 560px;
+    line-height: 1.55;
+}
+
+/* ====== VISION ====== */
+.cabt-vision-card {
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 22px;
+    padding: 32px 36px;
+    position: relative;
+    overflow: hidden;
+}
+.cabt-vision-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: var(--cabt-grad-cta);
+}
+.cabt-vision-quote {
+    font-family: 'Fraunces', serif;
+    font-size: 21px;
+    font-weight: 500;
+    font-style: italic;
+    letter-spacing: -0.3px;
+    line-height: 1.45;
+    color: var(--cabt-ink);
+    margin: 0;
+}
+.cabt-vision-quote em { color: var(--cabt-wine); font-weight: 600; }
+.cabt-vision-author {
+    font-size: 12px;
+    color: var(--cabt-ink-3);
+    margin-top: 16px;
+    letter-spacing: 0.04em;
+}
+
+/* ====== MISSION ====== */
+.cabt-mission-card {
+    background: var(--cabt-wine-soft);
+    border: 1px solid #f1d8e1;
+    border-radius: 22px;
+    padding: 26px 30px;
+    display: flex;
+    gap: 22px;
+    align-items: flex-start;
+}
+.cabt-mission-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 15px;
+    background: var(--cabt-grad-cta);
+    display: grid;
+    place-items: center;
+    font-size: 22px;
+    flex-shrink: 0;
+    box-shadow: 0 8px 20px rgba(var(--cabt-wine-rgb), 0.22);
+}
+.cabt-mission-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cabt-wine);
+    margin-bottom: 6px;
+}
+.cabt-mission-text {
+    font-size: 14px;
+    color: var(--cabt-ink);
+    line-height: 1.6;
+    font-weight: 500;
+    margin: 0;
+}
+
+/* ====== VALUES ====== */
+.cabt-values {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+}
+.cabt-value-card {
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 20px;
+    padding: 22px 22px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+.cabt-value-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 18px 40px rgba(var(--cabt-wine-rgb), 0.1);
+    border-color: transparent;
+}
+.cabt-value-num {
+    font-family: 'Fraunces', serif;
+    font-size: 12px;
+    font-style: italic;
+    color: var(--cabt-ink-4);
+    position: absolute;
+    top: 18px;
+    right: 22px;
+}
+.cabt-value-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    display: grid;
+    place-items: center;
+    font-size: 20px;
+    margin-bottom: 14px;
+    color: #fff;
+}
+.cabt-value-icon.v1 { background: linear-gradient(135deg, #8a2350, #6B1839); }
+.cabt-value-icon.v2 { background: linear-gradient(135deg, #c2caaf, var(--cabt-sage-deep)); }
+.cabt-value-icon.v3 { background: linear-gradient(135deg, #e7a5bc, #c44d87); }
+.cabt-value-icon.v4 { background: linear-gradient(135deg, #d6ab73, var(--cabt-gold-deep)); }
+.cabt-value-title {
+    font-family: 'Fraunces', serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    color: var(--cabt-ink);
+    margin-bottom: 6px;
+    line-height: 1.2;
+}
+.cabt-value-desc {
+    font-size: 12.5px;
+    color: var(--cabt-ink-2);
+    line-height: 1.6;
+}
+
+/* ====== ABOUT + BRANCHES ====== */
+.cabt-about-grid {
+    display: grid;
+    grid-template-columns: 1.3fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+.cabt-about-text {
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 22px;
+    padding: 28px 30px;
+}
+.cabt-about-text p {
+    font-size: 13.5px;
+    color: var(--cabt-ink-2);
+    line-height: 1.7;
+    margin: 0 0 12px;
+}
+.cabt-about-text p:last-child { margin-bottom: 0; }
+.cabt-about-text strong { color: var(--cabt-ink); font-weight: 700; }
+
+.cabt-branch-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.cabt-branch-item {
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 18px;
+    padding: 16px 18px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    transition: border-color 0.2s, transform 0.2s;
+}
+.cabt-branch-item:hover {
+    border-color: var(--cabt-wine);
+    transform: translateX(3px);
+}
+.cabt-branch-dot {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    display: grid;
+    place-items: center;
+    font-size: 17px;
+    flex-shrink: 0;
+    color: #fff;
+}
+.cabt-branch-dot.b1 { background: linear-gradient(135deg, #e7a5bc, #c44d87); }
+.cabt-branch-dot.b2 { background: linear-gradient(135deg, #c2caaf, var(--cabt-sage-deep)); }
+.cabt-branch-dot.b3 { background: linear-gradient(135deg, #d6ab73, var(--cabt-gold-deep)); }
+.cabt-branch-name {
+    font-family: 'Fraunces', serif;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--cabt-ink);
+    letter-spacing: -0.2px;
+}
+.cabt-branch-meta {
+    font-size: 11.5px;
+    color: var(--cabt-ink-3);
+    margin-top: 2px;
+}
+
+/* ====== TIMELINE ====== */
+.cabt-timeline {
+    position: relative;
+    padding-left: 30px;
+    border-left: 2px solid var(--cabt-line);
+    margin-top: 8px;
+}
+.cabt-timeline-item {
+    position: relative;
+    padding-bottom: 26px;
+}
+.cabt-timeline-item:last-child { padding-bottom: 0; }
+.cabt-timeline-dot {
+    position: absolute;
+    left: -37px;
+    top: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--cabt-wine);
+    border: 3px solid var(--cabt-bg);
+    box-shadow: 0 0 0 2px var(--cabt-wine-soft);
+}
+.cabt-timeline-year {
+    font-family: 'Fraunces', serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--cabt-wine);
+    letter-spacing: -0.3px;
+    margin-bottom: 4px;
+}
+.cabt-timeline-title {
+    font-family: 'Fraunces', serif;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--cabt-ink);
+    line-height: 1.3;
+    margin-bottom: 4px;
+    letter-spacing: -0.2px;
+}
+.cabt-timeline-desc {
+    font-size: 12.5px;
+    color: var(--cabt-ink-2);
+    line-height: 1.6;
+    max-width: 560px;
+}
+
+/* ====== TEAM PLACEHOLDER ====== */
+.cabt-team-placeholder {
+    background: var(--cabt-surface);
+    border: 1.5px dashed var(--cabt-line);
+    border-radius: 22px;
+    padding: 40px 30px;
+    text-align: center;
+}
+.cabt-team-ph-icon { font-size: 40px; margin-bottom: 10px; }
+.cabt-team-ph-title {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--cabt-ink);
+    margin-bottom: 8px;
+}
+.cabt-team-ph-desc {
+    font-size: 13px;
+    color: var(--cabt-ink-2);
+    line-height: 1.55;
+    max-width: 440px;
+    margin: 0 auto 14px;
+}
+.cabt-team-ph-pill {
+    display: inline-block;
+    padding: 5px 14px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    background: var(--cabt-wine-soft);
+    color: var(--cabt-wine);
+    border: 1px solid #f3d6e0;
+}
+
+/* ====== CONTACT ====== */
+.cabt-contact-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+}
+.cabt-contact-card {
+    background: var(--cabt-surface);
+    border: 1px solid var(--cabt-line);
+    border-radius: 18px;
+    padding: 20px 20px;
+}
+.cabt-contact-icon { font-size: 20px; margin-bottom: 10px; }
+.cabt-contact-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--cabt-ink-3);
+    margin-bottom: 5px;
+}
+.cabt-contact-value {
+    font-size: 13.5px;
+    color: var(--cabt-ink);
+    font-weight: 600;
+}
+
+/* ====== FOOTER ====== */
+.cabt-footer {
+    margin-top: 50px;
+    text-align: center;
+    color: var(--cabt-ink-3);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+}
+.cabt-fb {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    color: var(--cabt-wine);
+    font-size: 14px;
+}
+.cabt-copy { margin-top: 6px; }
+
+/* ====== RESPONSIVE ====== */
+@media (max-width: 760px) {
+    .cabt-hero { padding: 30px 24px; }
+    .cabt-hero-title { font-size: 30px; }
+    .cabt-values { grid-template-columns: 1fr; }
+    .cabt-about-grid { grid-template-columns: 1fr; }
+    .cabt-contact-grid { grid-template-columns: 1fr; }
+}

@@ -15,6 +15,7 @@ import Promotions from './pages/admin/Promotions';
 import AdminLogin from './pages/admin/AdminLogin';
 import StaffRoles from './pages/admin/StaffRoles';
 import SectionOverview from './pages/admin/SectionOverview';
+import CompanyAbout from './pages/admin/CompanyAbout';
 import Profile from './pages/Profile';
 import StaffWorkspace from './pages/staff/StaffWorkspace';
 import { PERMISSIONS } from './config/roles';
@@ -157,6 +158,13 @@ function App() {
                 <Route path="website" element={<SectionOverview sectionKey="website" />} />
                 <Route path="marketing" element={<SectionOverview sectionKey="marketing" />} />
                 <Route path="settings" element={<SectionOverview sectionKey="settings" />} />
+
+                {/* Company sub-pages */}
+                <Route path="company/about" element={
+                    <RequireAdmin requiredPermission={PERMISSIONS.VIEW_OVERVIEW}>
+                        <CompanyAbout />
+                    </RequireAdmin>
+                } />
             </Route>
         </Routes>
     );

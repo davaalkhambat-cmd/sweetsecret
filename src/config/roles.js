@@ -364,7 +364,6 @@ export const ADMIN_MENU = [
         section: 'company',
         requiredPermission: PERMISSIONS.VIEW_OVERVIEW,
         iconName: 'Building',
-        comingSoon: true,
         variant: 'warm',
         foot: 'Харах',
         hideBadge: true,
